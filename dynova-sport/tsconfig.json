@@ -1,10 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,                  /* Cho phép dự án chạy các tệp .js và .jsx */
-    "skipLibCheck": true,             /* Bỏ qua kiểm tra lỗi kiểu dữ liệu trong thư viện node_modules */
-    "strict": false,                  /* Tắt kiểm tra nghiêm ngặt để viết mã .jsx không bị bắt lỗi Type */
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true, /* Cho phép dự án chạy các tệp .js và .jsx */
+    "skipLibCheck": true, /* Bỏ qua kiểm tra lỗi kiểu dữ liệu trong thư viện node_modules */
+    "strict": false, /* Tắt kiểm tra nghiêm ngặt để viết mã .jsx không bị bắt lỗi Type */
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -19,18 +23,23 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]                  /* Cấu hình đường dẫn import tắt bằng dấu @ */
+      "@/*": [
+        "./*"
+      ] /* Cấu hình đường dẫn import tắt bằng dấu @ */
     }
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
-    "**/*.tsx",                       /* Tự động nhận diện toàn bộ file TypeScript */
+    "**/*.tsx", /* Tự động nhận diện toàn bộ file TypeScript */
     "**/*.js",
-    "**/*.jsx",                       /* Tự động nhận diện toàn bộ file JavaScript/JSX mới thêm */
+    "**/*.jsx", /* Tự động nhận diện toàn bộ file JavaScript/JSX mới thêm */
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
-, "next.config.mjs"  ],
-  "exclude": ["node_modules"]         /* Không quét qua thư mục node_modules để tránh làm chậm máy */
+    "**/*.mts",
+    "next.config.mjs"
+  ],
+  "exclude": [
+    "node_modules"
+  ] /* Không quét qua thư mục node_modules để tránh làm chậm máy */
 }
