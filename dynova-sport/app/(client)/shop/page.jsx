@@ -1,8 +1,9 @@
 'use client';
 import React, { useState } from 'react';
-import { SlidersHorizontal, ChevronDown, Grid, List, Eye, ShoppingBag, Heart } from 'lucide-react';
+import Link from 'next/link';
+import { SlidersHorizontal, ChevronDown, Eye, ShoppingBag, Heart } from 'lucide-react';
 
-// 1. Mock Data danh sách sản phẩm Dynova Sport
+// Mảng dữ liệu dùng chung (Đồng bộ với trang chi tiết)
 const DUMMY_PRODUCTS = [
   { id: 1, name: 'Áo Thun Thể Thao Dynova Pro Dry', category: 'Áo', price: 350000, oldPrice: 450000, image: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=500&q=80', isNew: true },
   { id: 2, name: 'Quần Short Tập Gym Ultra-Light', category: 'Quần', price: 280000, image: 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?w=500&q=80', tag: '-15%' },
@@ -52,11 +53,10 @@ export default function ShopPage() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-all ${
-                    selectedCategory === cat 
-                      ? 'bg-orange-500 text-white font-medium' 
+                  className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-all ${selectedCategory === cat
+                      ? 'bg-orange-500 text-white font-medium'
                       : 'text-gray-600 hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   {cat}
                 </button>
@@ -67,10 +67,10 @@ export default function ShopPage() {
           {/* Lọc theo giá */}
           <div className="mb-6">
             <h3 className="font-semibold text-gray-700 mb-3">Khoảng giá (VND)</h3>
-            <input 
-              type="range" 
-              min="100000" 
-              max="2000000" 
+            <input
+              type="range"
+              min="100000"
+              max="2000000"
               step="50000"
               value={priceRange}
               onChange={(e) => setPriceRange(Number(e.target.value))}
@@ -90,12 +90,12 @@ export default function ShopPage() {
             <p className="text-sm text-gray-600 font-medium">
               Hiển thị <span className="text-orange-500 font-bold">{filteredProducts.length}</span> sản phẩm
             </p>
-            
+
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <span>Sắp xếp:</span>
                 <div className="relative">
-                  <select 
+                  <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
                     className="appearance-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 pr-8 font-medium text-gray-700 focus:outline-none focus:border-orange-500 cursor-pointer text-sm"
@@ -118,32 +118,32 @@ export default function ShopPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
               {filteredProducts.map((product) => (
-                <div 
-                  key={product.id} 
+                <div
+                  key={product.id}
                   className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-xl transition-all duration-300 group relative flex flex-col justify-between"
                 >
-                  {/* Ảnh sản phẩm + Tags */}
-                  <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                    <img 
-                      src={product.image} 
+                  {/* Ảnh sản phẩm + Liên kết sang trang chi tiết bằng ID */}
+                  <Link href={`/shop/product/${product.id}`} className="relative aspect-square bg-gray-100 overflow-hidden block">
+                    <img
+                      src={product.image}
                       alt={product.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    
-                    {/* Badge trạng thái */}
+
+                    {/* Badges */}
                     {product.isNew && (
-                      <span className="absolute top-3 left-3 bg-green-500 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                      <span className="absolute top-3 left-3 bg-green-500 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm z-10">
                         New
                       </span>
                     )}
                     {product.tag && (
-                      <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                      <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm z-10">
                         {product.tag}
                       </span>
                     )}
 
-                    {/* Hộp chức năng khi hover (Quick view / Add to cart) */}
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
+                    {/* Lớp phủ chức năng khi hover */}
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 z-20">
                       <button className="p-3 bg-white hover:bg-orange-500 hover:text-white text-gray-700 rounded-full shadow-lg transition-colors duration-200" title="Xem nhanh">
                         <Eye className="w-5 h-5" />
                       </button>
@@ -154,15 +154,17 @@ export default function ShopPage() {
                         <Heart className="w-5 h-5" />
                       </button>
                     </div>
-                  </div>
+                  </Link>
 
                   {/* Thông tin sản phẩm */}
                   <div className="p-5 flex-1 flex flex-col justify-between">
                     <div>
                       <p className="text-xs text-orange-500 uppercase font-semibold tracking-wider mb-1">{product.category}</p>
-                      <h3 className="font-semibold text-gray-800 group-hover:text-orange-500 transition-colors line-clamp-2 text-sm md:text-base min-h-[3rem]">
-                        {product.name}
-                      </h3>
+                      <Link href={`/shop/product/${product.id}`}>
+                        <h3 className="font-semibold text-gray-800 group-hover:text-orange-500 transition-colors line-clamp-2 text-sm md:text-base min-h-[3rem] cursor-pointer">
+                          {product.name}
+                        </h3>
+                      </Link>
                     </div>
 
                     {/* Giá tiền */}
