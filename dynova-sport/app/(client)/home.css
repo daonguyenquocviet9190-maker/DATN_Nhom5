@@ -1,0 +1,166 @@
+/* ==========================================================================
+   A. SCROLL REVEAL ANIMATIONS (HIỆU ỨNG LƯỚT TỚI ĐÂU HIỆN TỚI ĐÓ)
+   ========================================================================== */
+
+/* Trạng thái ban đầu khi chưa lướt tới (Ẩn mờ và đẩy nhẹ xuống dưới 40px) */
+.reveal-hidden {
+  opacity: 0;
+  transform: translateY(40px);
+  filter: blur(4px); /* Thêm chút mờ mờ ảo ảo chuẩn Luxury */
+  transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity, filter;
+}
+
+/* Trạng thái kích hoạt khi vừa lướt trúng tầm mắt */
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+/* Thêm hiệu ứng xuất hiện trễ (Delay) cho các thẻ nằm ngang để hiện lần lượt từng cái */
+.delay-100 { transition-delay: 100ms; }
+.delay-200 { transition-delay: 200ms; }
+.delay-300 { transition-delay: 300ms; }
+.delay-400 { transition-delay: 400ms; }
+
+/* ==========================================================================
+   1. GLOBAL CONTAINER & HERO BANNER EFFECTS
+   ========================================================================== */
+.home-wrapper {
+  background: radial-gradient(circle at 80% 20%, rgba(249, 115, 22, 0.015) 0%, transparent 40%),
+              radial-gradient(circle at 10% 70%, rgba(29, 36, 56, 0.015) 0%, transparent 50%),
+              #fdfdfd;
+}
+
+.btn-hero-premium {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-hero-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  z-index: -1;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-hero-premium:hover::before {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.btn-hero-premium:hover {
+  color: #f97316 !important;
+  box-shadow: 0 10px 30px rgba(249, 115, 22, 0.35);
+  transform: translateY(-2px);
+}
+
+/* ==========================================================================
+   2. DANH MỤC SẢN PHẨM (MINIMALIST HOVER)
+   ========================================================================== */
+.category-card-premium {
+  background: #ffffff;
+  border: 1px solid rgba(229, 231, 235, 0.5);
+  box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.01), 0 10px 30px -10px rgba(29, 36, 56, 0.02);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.category-card-premium:hover {
+  border-color: #f97316;
+  box-shadow: 0 10px 30px -5px rgba(249, 115, 22, 0.12);
+  transform: translateY(-4px);
+}
+
+/* ==========================================================================
+   3. BỘ SƯU TẬP (PREMIUM GLASSMORPHISM & DEPTH)
+   ========================================================================== */
+.collection-card-premium {
+  border: 1px solid rgba(229, 231, 235, 0.6);
+  box-shadow: 0 10px 30px -10px rgba(29, 36, 56, 0.03);
+  scroll-snap-align: start;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.collection-card-premium:hover {
+  background: #ffffff;
+  border-color: rgba(249, 115, 22, 0.3);
+  box-shadow: 0 20px 40px -15px rgba(249, 115, 22, 0.08), 
+              0 30px 60px -20px rgba(29, 36, 56, 0.04);
+}
+
+.btn-nav-glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-nav-glass:hover {
+  background: #ffffff;
+  color: #f97316;
+  border-color: #f97316;
+  box-shadow: 0 10px 25px rgba(249, 115, 22, 0.2);
+}
+
+/* ==========================================================================
+   4. THẺ SẢN PHẨM & TIN TỨC (LUXURY INTERACTION)
+   ========================================================================== */
+.product-card-premium, .news-card-premium {
+  background: #ffffff;
+  border: 1px solid rgba(230, 233, 238, 0.6);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 0 15px 40px -10px rgba(29, 36, 56, 0.02);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.product-card-premium:hover, .news-card-premium:hover {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 0 25px 50px -12px rgba(29, 36, 56, 0.06);
+  transform: translateY(-5px);
+}
+
+.tab-btn-premium {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-view-all-premium {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-view-all-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #f97316;
+  z-index: -1;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-view-all-premium:hover::before {
+  transform: scaleY(1);
+  transform-origin: top;
+}
+
+.btn-view-all-premium:hover {
+  color: #ffffff !important;
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.2);
+}

@@ -1,0 +1,109 @@
+/* ==========================================================================
+   HIỆU ỨNG NỀN VÀ KHUNG ĐĂNG KÝ (GLASSMORPHISM & LUXURY)
+   ========================================================================== */
+
+/* Background động mượt mà tạo chiều sâu cho trang */
+.register-container {
+  background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.03), transparent 40%),
+              radial-gradient(circle at bottom left, rgba(29, 36, 56, 0.03), transparent 40%),
+              #f9fafb;
+}
+
+/* Card đăng ký với viền mờ tinh tế */
+.register-card {
+  background: #ffffff;
+  border: 1px solid rgba(229, 231, 235, 0.6);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.02),
+              0 25px 60px -15px rgba(29, 36, 56, 0.04);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.register-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.03),
+              0 30px 70px -10px rgba(249, 115, 22, 0.05);
+}
+
+/* ==========================================================================
+   INPUT FIELDS (HIỆU ỨNG FOCUS SIÊU MỊN)
+   ========================================================================== */
+
+.register-input {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hiệu ứng khi nhấn vào ô nhập liệu: Đổi màu viền và đổ bóng nhẹ */
+.register-input:focus {
+  border-color: #f97316 !important; /* Cam thương hiệu */
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
+}
+
+/* Tạo chuyển động cho icon nằm bên trong input khi được focus */
+.input-wrapper-premium {
+  position: relative;
+}
+
+.input-wrapper-premium span {
+  transition: color 0.3s ease;
+}
+
+.input-wrapper-premium:focus-within span {
+  color: #f97316 !important;
+}
+
+/* ==========================================================================
+   NÚT BẤM PREMIUM (BUTTON STYLING)
+   ========================================================================== */
+
+.btn-register-premium {
+  background-size: 200% auto;
+  background-image: linear-gradient(to right, #1d2438 0%, #171d2e 50%, #f97316 100%);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Khi hover: Nút bấm dịch chuyển dải màu từ xanh đen sang cam cực mượt */
+.btn-register-premium:hover:not(:disabled) {
+  background-position: right center;
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-register-premium:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+/* ==========================================================================
+   LOGO & TEXT ANCHOR ANIMATION
+   ========================================================================== */
+
+/* Hiệu ứng mờ kính cho logo thương hiệu */
+.logo-dynova-premium {
+  background: linear-gradient(135deg, #1d2438, #f97316);
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+}
+
+/* Link chuyển hướng đăng nhập */
+.login-link-premium {
+  position: relative;
+  transition: color 0.3s ease;
+}
+
+.login-link-premium::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  transform: scaleX(0);
+  height: 1.5px;
+  bottom: -2px;
+  left: 0;
+  background-color: #f97316;
+  transform-origin: bottom right;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-link-premium:hover::after {
+  transform: scaleX(1);
+  transform-origin: bottom left;
+}
