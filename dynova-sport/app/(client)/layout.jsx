@@ -18,6 +18,7 @@ export default function ClientLayout({ children }) {
     { name: 'Giới thiệu', href: '/about' },
     { name: 'Sản phẩm', href: '/shop' },
     { name: 'Tin tức', href: '/news' },
+    { name: 'Bộ sưu tập', href: '/collections' },
     { name: 'Liên hệ', href: '/contact' },
   ];
 
