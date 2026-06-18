@@ -1,0 +1,106 @@
+/* ==========================================================================
+   CONTAINER & PROFILE CARD (LUXURY GRAPHICS)
+   ========================================================================== */
+
+/* Nền chuyển màu dynamic siêu nhẹ tạo chiều sâu không gian */
+.profile-container {
+  background: radial-gradient(circle at 10% 20%, rgba(249, 115, 22, 0.02) 0%, transparent 50%),
+              radial-gradient(circle at 90% 80%, rgba(29, 36, 56, 0.02) 0%, transparent 50%),
+              #fafafa;
+}
+
+/* Thẻ hồ sơ phong cách tối giản cao cấp */
+.profile-card-premium {
+  background: #ffffff;
+  border: 1px solid rgba(229, 231, 235, 0.6);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 
+              0 20px 50px -10px rgba(29, 36, 56, 0.03);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.profile-card-premium:hover {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 
+              0 25px 60px -10px rgba(249, 115, 22, 0.04);
+}
+
+/* ==========================================================================
+   INPUT FIELDS & ICON EFFECTS (ANALOGOUS TO SHOP/REGISTER)
+   ========================================================================== */
+
+.profile-input-premium {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hiệu ứng trơn tru khi focus vào ô điền thông tin */
+.profile-input-premium:focus {
+  border-color: #f97316 !important; /* Đổi sang cam thương hiệu */
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.08);
+}
+
+/* Bọc bao ngoài input để quản lý chuyển động của icon */
+.profile-input-wrapper {
+  position: relative;
+}
+
+.profile-input-wrapper span {
+  transition: color 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Icon khẽ nhúc nhích nhẹ và đổi màu khi focus */
+.profile-input-wrapper:focus-within span {
+  color: #f97316 !important;
+  transform: translateY(-50%) scale(1.05);
+}
+
+/* ==========================================================================
+   NÚT LƯU THAY ĐỔI (PREMIUM GLASS & ACCENT)
+   ========================================================================== */
+
+.btn-save-premium {
+  background: #1d2438; /* Màu xanh đen luxury nguyên bản */
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hiệu ứng phủ tràn màu cam thương hiệu mượt mà khi hover */
+.btn-save-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #f97316;
+  z-index: -1;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-save-premium:hover::before {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.btn-save-premium:hover {
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.25);
+  transform: translateY(-2px);
+}
+
+.btn-save-premium:active {
+  transform: scale(0.98) translateY(0);
+}
+
+/* ==========================================================================
+   AVATAR PLACEHOLDER (DECORATION)
+   ========================================================================== */
+
+.avatar-badge-premium {
+  background: linear-gradient(135deg, rgba(29, 36, 56, 0.02), rgba(249, 115, 22, 0.05));
+  border: 1px dashed rgba(249, 115, 22, 0.2);
+}
