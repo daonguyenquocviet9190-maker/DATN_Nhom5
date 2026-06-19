@@ -3,41 +3,42 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Eye, Phone, Mail, MapPin, ArrowRight, User, LogOut, Settings, ClipboardList } from 'lucide-react';
-import "../globals.css"; 
+import "../globals.css";
 
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const dropdownRef = useRef(null);
 
-  const [isLoggedIn, setIsLoggedIn] = useState(false); 
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [displayName, setDisplayName] = useState('Khách hàng'); 
+  const [displayName, setDisplayName] = useState('Khách hàng');
 
   const menuItems = [
     { name: 'Trang chủ', href: '/' },
     { name: 'Giới thiệu', href: '/about' },
     { name: 'Sản phẩm', href: '/shop' },
     { name: 'Tin tức', href: '/news' },
+    { name: 'Bộ sưu tập', href: '/collections' },
     { name: 'Liên hệ', href: '/contact' },
   ];
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('isLoggedIn');
     const savedName = localStorage.getItem('userDisplayName');
-    
+
     if (savedStatus === 'true') {
       setIsLoggedIn(true);
       if (savedName) {
-        setDisplayName(savedName); 
+        setDisplayName(savedName);
       }
     }
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('isLoggedIn'); 
+    localStorage.removeItem('isLoggedIn');
     setIsLoggedIn(false);
     setShowUserMenu(false);
-    window.location.reload(); 
+    window.location.reload();
   };
 
   useEffect(() => {
@@ -68,11 +69,10 @@ export default function ClientLayout({ children }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`transition-all pb-1 uppercase tracking-wider text-xs ${
-                  isActive
+                className={`transition-all pb-1 uppercase tracking-wider text-xs ${isActive
                     ? 'text-orange-500 border-b-2 border-orange-500 font-bold scale-105'
                     : 'text-gray-600 hover:text-orange-500 font-medium'
-                }`}
+                  }`}
               >
                 {item.name}
               </Link>
@@ -83,20 +83,23 @@ export default function ClientLayout({ children }) {
         {/* Icons Controls */}
         <div className="flex items-center gap-5 text-gray-600">
           <button className="hover:text-orange-500 transition-colors"><Eye size={20} /></button>
-          <button className="hover:text-orange-500 transition-colors relative">
+
+          {/* ICON GIỎ HÀNG: Đã chuyển đổi thành thẻ Link dẫn đến trang /cart */}
+          <Link href="/cart" className="hover:text-orange-500 transition-colors relative block">
             <ShoppingBag size={20} />
-            <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
-          </button>
+            <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              2
+            </span>
+          </Link>
 
           {/* KHỐI DROPDOWN USER */}
           <div className="relative" ref={dropdownRef}>
-            <button 
+            <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className={`transition-colors p-1 rounded-full border ${
-                isLoggedIn 
-                  ? 'text-orange-500 border-orange-200 bg-orange-50' 
+              className={`transition-colors p-1 rounded-full border ${isLoggedIn
+                  ? 'text-orange-500 border-orange-200 bg-orange-50'
                   : 'text-gray-600 border-gray-200 hover:text-orange-500 hover:border-orange-500'
-              }`}
+                }`}
             >
               <User size={20} />
             </button>
@@ -106,15 +109,15 @@ export default function ClientLayout({ children }) {
                 {!isLoggedIn ? (
                   <div className="px-2 space-y-1">
                     <p className="text-[11px] font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Tài khoản Dynova</p>
-                    <Link 
-                      href="/login" 
+                    <Link
+                      href="/login"
                       onClick={() => setShowUserMenu(false)}
                       className="w-full text-xs font-bold uppercase tracking-wide bg-orange-500 hover:bg-orange-600 text-white px-3 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-center block"
                     >
                       Đăng nhập
                     </Link>
-                    <Link 
-                      href="/register" 
+                    <Link
+                      href="/register"
                       onClick={() => setShowUserMenu(false)}
                       className="w-full text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 px-3 py-2.5 rounded-lg transition-colors text-center border border-gray-100 mt-1 block"
                     >
@@ -128,22 +131,22 @@ export default function ClientLayout({ children }) {
                       <p className="text-sm font-black text-blue-950 truncate">{displayName}</p>
                     </div>
                     <div className="px-1.5 space-y-0.5">
-                      <Link 
-                        href="/profile" 
+                      <Link
+                        href="/profile"
                         onClick={() => setShowUserMenu(false)}
                         className="flex items-center gap-2.5 text-xs text-gray-700 font-semibold hover:bg-gray-50 px-3 py-2.5 rounded-lg transition-colors"
                       >
                         <Settings size={15} className="text-gray-400" /> Hồ sơ cá nhân
                       </Link>
-                      <Link 
-                        href="#/orders" 
+                      <Link
+                        href="#/orders"
                         onClick={() => setShowUserMenu(false)}
                         className="flex items-center gap-2.5 text-xs text-gray-700 font-semibold hover:bg-gray-50 px-3 py-2.5 rounded-lg transition-colors"
                       >
                         <ClipboardList size={15} className="text-gray-400" /> Quản lý đơn hàng
                       </Link>
                       <div className="border-t border-gray-100 my-1" />
-                      <button 
+                      <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2.5 text-xs text-rose-600 font-bold hover:bg-rose-50 px-3 py-2.5 rounded-lg transition-colors"
                       >

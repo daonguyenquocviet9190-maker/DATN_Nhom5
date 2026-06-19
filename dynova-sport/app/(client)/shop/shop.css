@@ -1,0 +1,142 @@
+/* ==========================================================================
+   A. SCROLL REVEAL ANIMATIONS (HIỆU ỨNG LƯỚT TỚI ĐÂU HIỆN TỚI ĐÓ)
+   ========================================================================== */
+
+/* Trạng thái ban đầu ẩn mờ, đẩy nhẹ xuống 35px và làm nhòe ảo nhẹ */
+.reveal-hidden {
+  opacity: 0;
+  transform: translateY(35px);
+  filter: blur(4px);
+  transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity, filter;
+}
+
+/* Kích hoạt hiển thị khi lọt vào tầm mắt */
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+/* ==========================================================================
+   1. GLOBAL SHOP LAYOUT
+   ========================================================================== */
+.shop-wrapper {
+  background: radial-gradient(circle at 90% 10%, rgba(249, 115, 22, 0.015) 0%, transparent 45%),
+              radial-gradient(circle at 10% 80%, rgba(29, 36, 56, 0.012) 0%, transparent 50%),
+              #fdfdfd;
+}
+
+/* ==========================================================================
+   2. BỘ LỌC BÊN TRÁI (PREMIUM SIDEBAR & SLIDER)
+   ========================================================================== */
+.filter-sidebar-premium {
+  background: #ffffff;
+  border: 1px solid rgba(230, 233, 238, 0.7);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 0 15px 40px -10px rgba(29, 36, 56, 0.02);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.filter-sidebar-premium:hover {
+  border-color: rgba(249, 115, 22, 0.15);
+  box-shadow: 0 20px 45px -15px rgba(29, 36, 56, 0.04);
+}
+
+/* Nút chọn danh mục Premium */
+.category-btn-premium {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.category-btn-premium:not(.bg-orange-500):hover {
+  background-color: rgba(243, 244, 246, 0.7);
+  color: #f97316;
+  padding-left: 1.25rem; /* Hiệu ứng nhích nhẹ sang phải khi di chuột */
+}
+
+/* Thanh kéo giá Custom dạng dải màu mượt */
+.custom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 5px;
+  border-radius: 9999px;
+  outline: none;
+}
+
+.custom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f97316;
+  border: 3px solid #ffffff;
+  box-shadow: 0 3px 8px rgba(249, 115, 22, 0.4);
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.custom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* ==========================================================================
+   3. THANH ĐIỀU HƯỚNG TRÊN (GLASSMORPHISM TOPBAR)
+   ========================================================================== */
+.shop-topbar-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(229, 231, 235, 0.7);
+  box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.01), 0 10px 30px -10px rgba(29, 36, 56, 0.02);
+}
+
+/* ==========================================================================
+   4. THẺ SẢN PHẨM CỬA HÀNG (LUXURY INTERACTION)
+   ========================================================================== */
+.product-card-premium {
+  background: #ffffff;
+  border: 1px solid rgba(230, 233, 238, 0.6);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 0 15px 40px -10px rgba(29, 36, 56, 0.02);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.product-card-premium:hover {
+  border-color: rgba(249, 115, 22, 0.2);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 
+              0 25px 50px -12px rgba(29, 36, 56, 0.05),
+              0 15px 30px -10px rgba(249, 115, 22, 0.02);
+  transform: translateY(-6px);
+}
+
+/* Nút chức năng phủ gương mờ (Glassmorphism Quick Actions) */
+.action-button-premium {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(229, 231, 235, 0.6);
+  color: #1f2937;
+  opacity: 0;
+  transform: translateY(15px);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hover thẻ thì các nút tương tác trồi lên mềm mại */
+.product-card-premium:hover .action-button-premium {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Tạo độ trễ hiệu ứng xuất hiện cho từng nút hành động */
+.product-card-premium .action-button-premium:nth-child(1) { transition-delay: 0ms; }
+.product-card-premium .action-button-premium:nth-child(2) { transition-delay: 50ms; }
+.product-card-premium .action-button-premium:nth-child(3) { transition-delay: 100ms; }
+
+.action-button-premium:hover {
+  background: #f97316;
+  color: #ffffff;
+  border-color: #f97316;
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.25);
+  transform: scale(1.05) !important;
+}
