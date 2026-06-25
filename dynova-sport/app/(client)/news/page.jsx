@@ -1,6 +1,7 @@
 'use client';
 import React, { useState } from 'react';
-import { Calendar, User, ArrowRight, Search, Clock } from 'lucide-react';
+import Link from 'next/link'; // Import Link từ next/link để chuyển trang hiệu quả
+import { Calendar, ArrowRight, Search, Clock } from 'lucide-react';
 
 // Mock Data danh sách tin tức Dynova Sport
 const ALL_NEWS = [
@@ -79,14 +80,14 @@ export default function NewsPage() {
   // Lọc bài viết theo danh mục & ô tìm kiếm
   const filteredNews = ALL_NEWS.filter(post => {
     const matchesTab = activeTab === 'Tất cả' || post.category === activeTab;
-    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          post.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch && !post.featured; // loại bài viết tiêu điểm ra khỏi lưới ở dưới nếu muốn tránh trùng
+    const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesTab && matchesSearch && !post.featured;
   });
 
   return (
     <div className="bg-gray-50 min-h-screen py-10 px-4 md:px-12">
-      
+
       {/* HEADER TRANG TIN TỨC */}
       <div className="max-w-7xl mx-auto mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
         <div>
@@ -96,9 +97,9 @@ export default function NewsPage() {
 
         {/* Ô tìm kiếm bài viết */}
         <div className="relative w-full md:w-80">
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm bài viết..." 
+          <input
+            type="text"
+            placeholder="Tìm kiếm bài viết..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm"
@@ -113,11 +114,10 @@ export default function NewsPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`whitespace-nowrap px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider border transition-all ${
-              activeTab === tab 
-                ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/20' 
+            className={`whitespace-nowrap px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider border transition-all ${activeTab === tab
+                ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/20'
                 : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-            }`}
+              }`}
           >
             {tab}
           </button>
@@ -125,21 +125,24 @@ export default function NewsPage() {
       </div>
 
       <div className="max-w-7xl mx-auto space-y-16">
-        
-        {/* 2. BÀI VIẾT TIÊU ĐIỂM TO (FEATURED POST) - Chỉ hiện khi ở tab "Tất cả" hoặc đúng danh mục */}
+
+        {/* 2. BÀI VIẾT TIÊU ĐIỂM TO (FEATURED POST) */}
         {featuredPost && (activeTab === 'Tất cả' || featuredPost.category === activeTab) && searchQuery === '' && (
-          <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 grid grid-cols-1 lg:grid-cols-12 group cursor-pointer">
+          <Link
+            href={`/news/${featuredPost.id}`}
+            className="block bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 grid grid-cols-1 lg:grid-cols-12 group cursor-pointer"
+          >
             <div className="lg:col-span-7 h-[300px] md:h-[450px] overflow-hidden bg-gray-100 relative">
-              <img 
-                src={featuredPost.image} 
-                alt={featuredPost.title} 
+              <img
+                src={featuredPost.image}
+                alt={featuredPost.title}
                 className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700"
               />
               <span className="absolute top-4 left-4 bg-orange-500 text-white font-extrabold text-[10px] uppercase tracking-widest px-3 py-1 rounded-sm">
                 Bài viết nổi bật
               </span>
             </div>
-            
+
             <div className="lg:col-span-5 p-8 md:p-12 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
                 <span className="text-xs font-bold uppercase text-orange-500 tracking-wider bg-orange-50 px-2.5 py-1 rounded-md">{featuredPost.category}</span>
@@ -162,13 +165,13 @@ export default function NewsPage() {
                 </span>
               </div>
             </div>
-          </div>
+          </Link>
         )}
 
         {/* 3. LƯỚI DANH SÁCH BÀI VIẾT PHÍA DƯỚI (GRID LIST) */}
         <div>
           {searchQuery !== '' && <h3 className="text-gray-600 font-semibold mb-6">Kết quả tìm kiếm cho: "{searchQuery}"</h3>}
-          
+
           {filteredNews.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center text-gray-500">
               Không tìm thấy bài viết nào phù hợp với bộ lọc hiện tại.
@@ -176,15 +179,16 @@ export default function NewsPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredNews.map((post) => (
-                <div 
-                  key={post.id} 
+                <Link
+                  key={post.id}
+                  href={`/news/${post.id}`}
                   className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col justify-between"
                 >
                   {/* Ảnh bài viết */}
                   <div className="relative aspect-[16/10] overflow-hidden bg-gray-100">
-                    <img 
-                      src={post.image} 
-                      alt={post.title} 
+                    <img
+                      src={post.image}
+                      alt={post.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <span className="absolute bottom-3 left-3 bg-blue-950/80 text-white backdrop-blur-sm text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider">
@@ -211,7 +215,7 @@ export default function NewsPage() {
                       </span>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

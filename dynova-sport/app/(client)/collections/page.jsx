@@ -2,216 +2,118 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Be_Vietnam_Pro } from 'next/font/google';
-import { Search, ChevronRight, ArrowRight, ArrowUpRight } from 'lucide-react';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
 
-// Font hiển thị riêng cho tiêu đề — đồng bộ với trang chủ / about.
 const display = Be_Vietnam_Pro({
   subsets: ['latin', 'vietnamese'],
   weight: ['700', '800', '900'],
   variable: '--font-display',
 });
 
-function SectionHeading({ eyebrow, title, align = 'center' }) {
-  const isCenter = align === 'center';
-  return (
-    <div className={`space-y-3 ${isCenter ? 'text-center' : 'text-left'}`}>
-      <div className="inline-flex items-center gap-2">
-        <span className="w-5 h-[2px] bg-orange-500" />
-        <span className="text-[11px] font-bold text-orange-500 uppercase tracking-[0.25em]">{eyebrow}</span>
-        {isCenter && <span className="w-5 h-[2px] bg-orange-500" />}
-      </div>
-      <h2 className="font-[family-name:var(--font-display)] text-2xl md:text-3xl font-extrabold text-blue-950 uppercase tracking-tight">
-        {title}
-      </h2>
-    </div>
-  );
-}
-
-export default function AllBrandsPage() {
-  const [query, setQuery] = useState('');
-
-  // Thương hiệu nổi bật — hiển thị ở lưới lớn, ưu tiên các tên quen thuộc nhất
-  const featuredBrands = [
-    { id: 1, name: 'Nike', slug: 'nike' },
-    { id: 2, name: 'Adidas', slug: 'adidas' },
-    { id: 3, name: 'Puma', slug: 'puma' },
-    { id: 4, name: 'Mizuno', slug: 'mizuno' },
-    { id: 5, name: 'New Balance', slug: 'new-balance' },
-    { id: 6, name: 'Under Armour', slug: 'under-armour' },
-    { id: 7, name: 'Asics', slug: 'asics' },
-    { id: 8, name: 'On Running', slug: 'on-running' },
+export default function PremiumAccordionBrands() {
+  // Cố định đúng 5 thương hiệu hàng đầu với hình ảnh lookbook chất lượng cao
+  const brands = [
+    { id: 1, name: 'Nike', slug: 'nike', slogan: 'Just Do It', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80' },
+    { id: 2, name: 'Adidas', slug: 'adidas', slogan: 'Impossible Is Nothing', image: 'https://images.unsplash.com/photo-1518002171953-a080ee817e1f?w=800&q=80' },
+    { id: 3, name: 'Puma', slug: 'puma', slogan: 'Forever Faster', image: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&q=80' },
+    { id: 4, name: 'New Balance', slug: 'new-balance', slogan: 'We Got Now', image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&q=80' },
+    { id: 5, name: 'Asics', slug: 'asics', slogan: 'Sound Mind, Sound Body', image: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&q=80' },
   ];
 
-  // Thương hiệu khác — danh sách dài hơn, hiển thị ở lưới nhỏ và gọn hơn
-  const otherBrands = [
-    { id: 9, name: 'HOKA', slug: 'hoka' },
-    { id: 10, name: 'Wilson', slug: 'wilson' },
-    { id: 11, name: 'Yonex', slug: 'yonex' },
-    { id: 12, name: 'Joola', slug: 'joola' },
-    { id: 13, name: 'Selkirk', slug: 'selkirk' },
-    { id: 14, name: 'Speedo', slug: 'speedo' },
-    { id: 15, name: 'Crocs', slug: 'crocs' },
-    { id: 16, name: 'Columbia', slug: 'columbia' },
-    { id: 17, name: 'Kelme', slug: 'kelme' },
-    { id: 18, name: 'Diadora', slug: 'diadora' },
-    { id: 19, name: 'Umbro', slug: 'umbro' },
-    { id: 20, name: 'Molten', slug: 'molten' },
-    { id: 21, name: 'Mikasa', slug: 'mikasa' },
-    { id: 22, name: 'Li-Ning', slug: 'li-ning' },
-    { id: 23, name: 'Head', slug: 'head' },
-    { id: 24, name: 'Babolat', slug: 'babolat' },
-  ];
-
-  const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const matches = (brand) => norm(brand.name).includes(norm(query));
-
-  const filteredFeatured = featuredBrands.filter(matches);
-  const filteredOther = otherBrands.filter(matches);
-  const totalResults = filteredFeatured.length + filteredOther.length;
-
-  // Tile thương hiệu dùng chung cho cả hai lưới — chỉ khác kích thước qua className truyền vào
-  function BrandTile({ brand, size = 'lg' }) {
-    const isLg = size === 'lg';
-    return (
-      <Link
-        href={`/brands/${brand.slug}`}
-        className={`group relative bg-white border border-gray-100 hover:border-orange-500/50 rounded-2xl flex items-center justify-center transition-all motion-safe:hover:-translate-y-1 hover:shadow-lg hover:shadow-orange-500/5 ${
-          isLg ? 'aspect-[4/3]' : 'aspect-[3/2]'
-        }`}
-      >
-        <span
-          className={`font-[family-name:var(--font-display)] font-extrabold text-gray-800 group-hover:text-blue-950 uppercase tracking-tight transition-colors text-center px-4 ${
-            isLg ? 'text-xl md:text-2xl' : 'text-sm md:text-base'
-          }`}
-        >
-          {brand.name}
-        </span>
-        <ArrowUpRight
-          size={isLg ? 16 : 13}
-          className="absolute top-3 right-3 text-orange-500 opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all"
-        />
-      </Link>
-    );
-  }
+  // Mặc định khi chưa hover vào đâu, cột đầu tiên (Nike) sẽ mở rộng
+  const [hoveredIndex, setHoveredIndex] = useState(0);
 
   return (
-    <div className={`${display.variable} bg-white min-h-screen pb-24`}>
+    <div className={`${display.variable} bg-white min-h-screen text-gray-900 font-sans flex flex-col justify-between`}>
 
-      {/* 1. HERO BANNER */}
-      <section className="relative h-[34vh] md:h-[42vh] bg-blue-950 flex items-center justify-center overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 mix-blend-overlay"
-          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1530549387789-4c1017266635?w=1200&q=80')` }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-950/50 to-blue-950 z-10" />
-        <div className="pointer-events-none absolute inset-0 opacity-20 z-10">
-          <div className="absolute top-[20%] -left-10 w-[55%] h-[2px] bg-orange-500 -rotate-[8deg]" />
-          <div className="absolute bottom-[25%] -right-10 w-[45%] h-[2px] bg-emerald-400 -rotate-[8deg]" />
-        </div>
-
-        <div className="relative z-20 text-center text-white space-y-4 px-4">
-          <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-            <Link href="/" className="hover:text-orange-400 transition-colors">Trang chủ</Link>
-            <ChevronRight size={12} />
-            <span className="text-orange-400">Thương hiệu</span>
+      {/* 1. THANH HEADER TỐI GIẢN */}
+      <header className="p-6 md:p-10 flex justify-between items-center bg-white border-b border-gray-100">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-[10px] text-gray-400 uppercase tracking-widest">
+            <Link href="/" className="hover:text-black transition-colors">Dynova</Link>
+            <span>/</span>
+            <span className="text-orange-500 font-medium">Bộ sưu tập</span>
           </div>
-
-          <h1 className="font-[family-name:var(--font-display)] text-3xl md:text-5xl font-black uppercase tracking-tight">
-            Tất cả <span className="text-orange-500">thương hiệu</span>
+          <h1 className="font-[family-name:var(--font-display)] text-xl font-black uppercase tracking-tight text-gray-900">
+            Năm bộ sưu tập <span className="text-orange-500">tinh hoa</span>
           </h1>
-          <p className="text-sm text-gray-300 max-w-lg mx-auto font-light leading-relaxed">
-            Dynova phân phối chính hãng các thương hiệu thể thao hàng đầu thế giới. Chọn thương hiệu bạn yêu thích để khám phá toàn bộ sản phẩm.
-          </p>
         </div>
-      </section>
+        <Link href="/shop" className="text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-black transition-colors flex items-center gap-1">
+          Xem tất cả sản phẩm <ArrowUpRight size={14} />
+        </Link>
+      </header>
 
-      {/* 2. Ô TÌM KIẾM THƯƠNG HIỆU */}
-      <section className="container mx-auto px-4 max-w-2xl pt-10">
-        <div className="relative">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Tìm thương hiệu, ví dụ: Nike, Adidas…"
-            className="w-full bg-gray-50 border border-gray-200 rounded-full pl-11 pr-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-orange-500 focus:bg-white transition-colors"
-          />
-        </div>
-        {query && (
-          <p className="text-xs text-gray-400 font-light text-center pt-3">
-            Tìm thấy <span className="font-bold text-gray-700">{totalResults}</span> thương hiệu cho "{query}"
-          </p>
-        )}
-      </section>
+      {/* 2. KHÔNG GIAN TƯƠNG TÁC ACCORDION (CHIA ĐỀU 5 CỘT) */}
+      <main className="flex-grow flex flex-col md:flex-row w-full h-[65vh] md:h-[70vh] overflow-hidden bg-gray-50">
+        {brands.map((brand, index) => {
+          const isHovered = hoveredIndex === index;
 
-      {/* 3. THƯƠNG HIỆU NỔI BẬT */}
-      {filteredFeatured.length > 0 && (
-        <section className="container mx-auto px-4 max-w-7xl pt-14 space-y-8">
-          <SectionHeading eyebrow="Được tin dùng nhiều nhất" title="Thương hiệu nổi bật" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-            {filteredFeatured.map(brand => (
-              <BrandTile key={brand.id} brand={brand} size="lg" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 4. THƯƠNG HIỆU KHÁC */}
-      {filteredOther.length > 0 && (
-        <section className="container mx-auto px-4 max-w-7xl pt-16 space-y-8">
-          <SectionHeading eyebrow="Đa dạng lựa chọn" title="Thương hiệu khác" />
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-            {filteredOther.map(brand => (
-              <BrandTile key={brand.id} brand={brand} size="sm" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 5. TRẠNG THÁI KHÔNG CÓ KẾT QUẢ */}
-      {totalResults === 0 && (
-        <section className="container mx-auto px-4 max-w-7xl pt-16">
-          <div className="text-center py-16 space-y-3">
-            <p className="text-sm text-gray-500 font-light">Không tìm thấy thương hiệu nào khớp với "{query}".</p>
-            <button
-              onClick={() => setQuery('')}
-              className="text-xs font-bold text-orange-500 hover:underline"
+          return (
+            <div
+              key={brand.id}
+              onMouseEnter={() => setHoveredIndex(index)}
+              className="relative h-full border-b md:border-b-0 md:border-r border-gray-200/60 transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] flex flex-col justify-between overflow-hidden"
+              style={{
+                // Trên màn hình máy tính: cột được hover chiếm nhiều diện tích hơn, các cột còn lại thu nhỏ
+                flexGrow: isHovered ? 4 : 1.2,
+                flexBasis: '0%'
+              }}
             >
-              Xoá tìm kiếm
-            </button>
-          </div>
-        </section>
-      )}
+              {/* Ảnh nền xuất hiện khi active */}
+              <div
+                className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-out ${isHovered ? 'opacity-100 scale-100 grayscale-0' : 'opacity-0 scale-105 grayscale'
+                  }`}
+                style={{ backgroundImage: `url('${brand.image}')` }}
+              />
 
-      {/* 6. CALL TO ACTION */}
-      <section className="container mx-auto px-4 max-w-7xl pt-20">
-        <div className="relative bg-blue-950 rounded-3xl overflow-hidden p-10 md:p-14 text-center text-white">
-          <div className="pointer-events-none absolute inset-0 opacity-[0.07]">
-            <div className="absolute top-[15%] -left-10 w-[60%] h-px bg-white -rotate-[10deg]" />
-            <div className="absolute bottom-[25%] -right-10 w-[50%] h-px bg-white -rotate-[10deg]" />
-          </div>
-          <div className="absolute -right-14 -top-14 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl" />
-          <div className="absolute -left-14 -bottom-14 w-48 h-48 bg-emerald-400/10 rounded-full blur-3xl" />
+              {/* Lớp phủ gradient làm dịu ảnh */}
+              <div className={`absolute inset-0 transition-colors duration-500 ${isHovered ? 'bg-gradient-to-t from-white via-white/20 to-transparent' : 'bg-white'
+                }`} />
 
-          <div className="relative z-10 max-w-xl mx-auto space-y-5">
-            <p className="text-orange-400 text-[11px] font-bold uppercase tracking-[0.25em]">Chưa tìm thấy thương hiệu yêu thích?</p>
-            <h2 className="font-[family-name:var(--font-display)] text-2xl md:text-4xl font-black uppercase tracking-tight">
-              Khám phá toàn bộ <span className="text-orange-500">cửa hàng</span>
-            </h2>
-            <p className="text-sm text-gray-300 font-light leading-relaxed">
-              Hàng trăm sản phẩm quần áo, giày và phụ kiện thể thao chính hãng đang chờ bạn tại Dynova.
-            </p>
-            <Link
-              href="/shop"
-              className="group inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold uppercase tracking-widest pl-6 pr-5 py-3.5 transition-colors"
-              style={{ clipPath: 'polygon(0 0, 100% 0, 92% 100%, 0% 100%)' }}
-            >
-              Đến cửa hàng ngay
-              <ArrowRight size={14} className="motion-safe:group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-        </div>
-      </section>
+              {/* KHU VỰC NỘI DUNG TRÊN CỘT */}
+              <div className="relative z-10 p-6 md:p-10 h-full flex flex-row md:flex-col justify-between items-center md:items-start pointer-events-none">
+
+                {/* Số thứ tự lớn */}
+                <span className={`text-xs font-mono font-bold ${isHovered ? 'text-orange-500' : 'text-gray-300'} transition-colors`}>
+                  {(index + 1).toString().padStart(2, '0')}
+                </span>
+
+                {/* Phần giữa: Tên thương hiệu chuyển hướng xoay dọc/ngang linh hoạt */}
+                <div className="md:my-auto transition-transform duration-500">
+                  <h2 className={`font-[family-name:var(--font-display)] font-black uppercase tracking-tighter text-gray-900 transition-all ${isHovered ? 'text-3xl md:text-5xl mb-2' : 'text-lg md:text-2xl md:-rotate-90 md:my-12 block whitespace-nowrap opacity-60'
+                    }`}>
+                    {brand.name}
+                  </h2>
+
+                  {/* Slogan */}
+                  <p className={`text-xs text-gray-500 font-light tracking-wide transition-opacity duration-500 ${isHovered ? 'opacity-100 hidden md:block' : 'opacity-0 hidden'
+                    }`}>
+                    {brand.slogan}
+                  </p>
+                </div>
+
+                {/* ĐƯỜNG DẪN ĐÃ ĐỔI: Chuyển hướng chính xác tới trang /collections/[slug] */}
+                <div className={`pointer-events-auto transition-all duration-500 ${isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 md:pointer-events-none'
+                  }`}>
+                  <Link
+                    href={`/collections/${brand.slug}`}
+                    className="w-10 h-10 md:w-12 md:h-12 bg-gray-900 text-white rounded-full flex items-center justify-center hover:bg-orange-500 transition-colors shadow-lg shadow-gray-900/10"
+                  >
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+
+              </div>
+            </div>
+          );
+        })}
+      </main>
+
+      {/* 3. THANH FOOTER */}
+      <footer className="p-6 md:p-8 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center text-[11px] text-gray-400 tracking-wider">
+        <p>© 2026 DYNOVA STUDIO. PREMIUM EXPERIENCE.</p>
+        <p className="font-medium text-gray-600 hidden sm:block">RÊ CHUỘT VÀO TÊN THƯƠNG HIỆU ĐỂ MỞ RỘNG BỘ SƯU TẬP</p>
+      </footer>
 
     </div>
   );
