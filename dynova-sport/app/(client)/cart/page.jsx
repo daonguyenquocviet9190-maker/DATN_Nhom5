@@ -2,80 +2,358 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Minus, Plus, ShieldCheck, ShoppingBag, Ticket, Trash2, Truck } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Minus,
+  Plus,
+  ShieldCheck,
+  ShoppingBag,
+  Ticket,
+  Trash2,
+  Truck,
+  X,
+} from "lucide-react";
+
 import { formatCurrency } from "@/data/shop";
-import { calculateOrder, getCart, removeCartItem, updateCartItem } from "@/utils/shopStorage";
+import {
+  calculateOrder,
+  getCart,
+  removeCartItem,
+  updateCartItem,
+} from "@/utils/shopStorage";
+
+const FREE_SHIPPING_TARGET = 799000;
 
 export default function CartPage() {
   const [items, setItems] = useState([]);
   const [coupon, setCoupon] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
+  const [notice, setNotice] = useState("");
 
-  const sync = () => setItems(getCart());
-  useEffect(() => { sync(); }, []);
+  const syncCart = () => {
+    setItems(getCart());
+    window.dispatchEvent(new Event("dynova:storage"));
+  };
 
-  const totals = useMemo(() => calculateOrder(items, appliedCoupon), [items, appliedCoupon]);
-  const progress = Math.min(100, (totals.subtotal / 799000) * 100);
+  useEffect(() => {
+    syncCart();
+  }, []);
+
+  const totals = useMemo(
+    () => calculateOrder(items, appliedCoupon),
+    [items, appliedCoupon]
+  );
+
+  const progress = Math.min(
+    100,
+    Math.round((totals.subtotal / FREE_SHIPPING_TARGET) * 100)
+  );
+
+  const missingFreeShip = Math.max(0, FREE_SHIPPING_TARGET - totals.subtotal);
+
+  const showNotice = (text) => {
+    setNotice(text);
+    setTimeout(() => setNotice(""), 1800);
+  };
 
   const updateQty = (key, qty) => {
-    updateCartItem(key, qty);
-    sync();
+    updateCartItem(key, Math.max(1, qty));
+    syncCart();
   };
 
   const remove = (key) => {
     removeCartItem(key);
-    sync();
+    syncCart();
+    showNotice("Đã xóa sản phẩm khỏi giỏ hàng.");
+  };
+
+  const applyCoupon = () => {
+    const cleanCoupon = coupon.trim().toUpperCase();
+
+    if (!cleanCoupon) {
+      setAppliedCoupon("");
+      showNotice("Vui lòng nhập mã giảm giá.");
+      return;
+    }
+
+    setAppliedCoupon(cleanCoupon);
+    showNotice("Đã áp dụng mã giảm giá.");
   };
 
   return (
     <div className="min-h-screen bg-[#f7f8fb] py-10">
+      {notice && (
+        <div className="fixed right-5 top-24 z-[90] rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
+          <div className="flex items-center gap-3">
+            <CheckCircle size={17} className="text-orange-300" />
+            {notice}
+          </div>
+        </div>
+      )}
+
       <div className="container-page">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-500">Shopping cart</p><h1 className="mt-2 text-4xl font-black text-slate-950">Giỏ hàng của bạn</h1></div>
-          <Link href="/shop" className="btn-ghost inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black"><ArrowLeft size={16} /> Tiếp tục mua sắm</Link>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">
+              Shopping cart
+            </p>
+
+            <h1 className="mt-2 text-4xl font-black tracking-[-0.03em] text-slate-950">
+              Giỏ hàng của bạn
+            </h1>
+
+            <p className="mt-2 text-sm leading-7 text-slate-500">
+              Kiểm tra sản phẩm, số lượng và mã giảm giá trước khi thanh toán.
+            </p>
+          </div>
+
+          <Link
+            href="/shop"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:-translate-x-1 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+          >
+            <ArrowLeft size={16} />
+            Tiếp tục mua sắm
+          </Link>
         </div>
 
         {items.length === 0 ? (
-          <div className="surface mx-auto max-w-xl rounded-3xl p-10 text-center"><div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-orange-50 text-orange-500"><ShoppingBag size={34} /></div><h2 className="mt-5 text-2xl font-black text-slate-950">Giỏ hàng đang trống</h2><p className="mt-2 text-sm leading-6 text-slate-500">Bạn có thể quay lại cửa hàng để thêm sản phẩm và thử luồng checkout đầy đủ.</p><Link href="/shop" className="btn-primary mt-6 inline-flex rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-wider">Khám phá sản phẩm</Link></div>
+          <div className="mx-auto max-w-xl rounded-[34px] border border-slate-200 bg-white p-10 text-center shadow-sm">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-orange-50 text-orange-500">
+              <ShoppingBag size={34} />
+            </div>
+
+            <h2 className="mt-5 text-2xl font-black text-slate-950">
+              Giỏ hàng đang trống
+            </h2>
+
+            <p className="mt-2 text-sm leading-7 text-slate-500">
+              Bạn có thể quay lại cửa hàng để thêm sản phẩm và trải nghiệm luồng
+              checkout đầy đủ.
+            </p>
+
+            <Link
+              href="/shop"
+              className="mt-6 inline-flex rounded-2xl bg-orange-500 px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
+            >
+              Khám phá sản phẩm
+            </Link>
+          </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+          <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
             <section className="space-y-4">
-              <div className="surface rounded-2xl p-5">
-                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700"><Truck size={17} className="text-orange-500" /> {totals.shipping === 0 ? "Đơn hàng đã được miễn phí vận chuyển." : "Mua thêm " + formatCurrency(799000 - totals.subtotal) + " để miễn phí vận chuyển."}</div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-orange-500 transition-all" style={{ width: progress + "%" }} /></div>
+              <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
+                      <Truck size={20} />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-black text-slate-950">
+                        {missingFreeShip === 0
+                          ? "Bạn đã được miễn phí vận chuyển."
+                          : "Mua thêm " +
+                            formatCurrency(missingFreeShip) +
+                            " để miễn phí vận chuyển."}
+                      </p>
+
+                      <p className="mt-1 text-xs font-bold text-slate-400">
+                        Mốc miễn phí vận chuyển:{" "}
+                        {formatCurrency(FREE_SHIPPING_TARGET)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-sm font-black text-orange-600">
+                    {progress}%
+                  </span>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-orange-500 transition-all duration-700"
+                    style={{ width: progress + "%" }}
+                  />
+                </div>
               </div>
 
-              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
                 {items.map((item) => (
-                  <div key={item.key} className="grid gap-4 border-b border-slate-100 p-5 last:border-b-0 sm:grid-cols-[96px_1fr_auto] sm:items-center">
-                    <img src={item.image} alt={item.name} className="h-24 w-24 rounded-2xl object-cover" />
+                  <div
+                    key={item.key}
+                    className="grid gap-4 border-b border-slate-100 p-5 last:border-b-0 sm:grid-cols-[96px_1fr_auto] sm:items-center"
+                  >
+                    <Link
+                      href={"/shop/product/" + item.id}
+                      className="block overflow-hidden rounded-2xl bg-slate-100"
+                    >
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="h-24 w-24 object-cover transition duration-500 hover:scale-105"
+                      />
+                    </Link>
+
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-wider text-orange-500">{item.category}</p>
-                      <h3 className="mt-1 font-black text-slate-950">{item.name}</h3>
-                      <p className="mt-1 text-sm font-semibold text-slate-500">{item.color} / Size {item.size}</p>
-                      <p className="mt-2 font-black text-orange-600">{formatCurrency(item.price)}</p>
+                      <p className="text-[11px] font-black uppercase tracking-wider text-orange-500">
+                        {item.category || "Dynova Sport"}
+                      </p>
+
+                      <Link href={"/shop/product/" + item.id}>
+                        <h3 className="mt-1 line-clamp-2 font-black text-slate-950 transition hover:text-orange-600">
+                          {item.name}
+                        </h3>
+                      </Link>
+
+                      <p className="mt-1 text-sm font-semibold text-slate-500">
+                        {item.color || "Mặc định"} / Size{" "}
+                        {item.size || "Freesize"}
+                      </p>
+
+                      <p className="mt-2 font-black text-orange-600">
+                        {formatCurrency(item.price)}
+                      </p>
                     </div>
+
                     <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
-                      <div className="flex items-center overflow-hidden rounded-xl border border-slate-200"><button onClick={() => updateQty(item.key, item.quantity - 1)} className="p-3 hover:bg-slate-50"><Minus size={13} /></button><span className="w-10 text-center text-sm font-black">{item.quantity}</span><button onClick={() => updateQty(item.key, item.quantity + 1)} className="p-3 hover:bg-slate-50"><Plus size={13} /></button></div>
-                      <p className="font-black text-slate-950">{formatCurrency(item.price * item.quantity)}</p>
-                      <button onClick={() => remove(item.key)} className="rounded-xl p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-500" aria-label="Xóa"><Trash2 size={17} /></button>
+                      <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        <button
+                          onClick={() =>
+                            updateQty(item.key, item.quantity - 1)
+                          }
+                          className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                        >
+                          <Minus size={13} />
+                        </button>
+
+                        <span className="w-10 text-center text-sm font-black text-slate-950">
+                          {item.quantity}
+                        </span>
+
+                        <button
+                          onClick={() =>
+                            updateQty(item.key, item.quantity + 1)
+                          }
+                          className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
+
+                      <p className="font-black text-slate-950">
+                        {formatCurrency(item.price * item.quantity)}
+                      </p>
+
+                      <button
+                        onClick={() => remove(item.key)}
+                        className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
+                        aria-label="Xóa sản phẩm"
+                      >
+                        <Trash2 size={17} />
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             </section>
 
-            <aside className="surface h-fit rounded-3xl p-6 lg:sticky lg:top-24">
-              <h2 className="text-lg font-black text-slate-950">Tóm tắt đơn hàng</h2>
-              <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-700"><Ticket size={16} className="text-orange-500" /> Mã giảm giá</div>
-                <div className="flex gap-2"><input value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} className="input-control" placeholder="DYNOVANEW" /><button onClick={() => setAppliedCoupon(coupon)} className="btn-primary rounded-xl px-4 text-xs font-black uppercase">Áp dụng</button></div>
-                {totals.message && <p className="mt-2 text-xs font-bold text-slate-500">{totals.message}</p>}
+            <aside className="h-fit rounded-[30px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 lg:sticky lg:top-24">
+              <h2 className="text-xl font-black text-slate-950">
+                Tóm tắt đơn hàng
+              </h2>
+
+              <div className="mt-5 rounded-3xl bg-slate-50 p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-700">
+                  <Ticket size={16} className="text-orange-500" />
+                  Mã giảm giá
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    value={coupon}
+                    onChange={(e) =>
+                      setCoupon(e.target.value.toUpperCase())
+                    }
+                    className="h-[46px] min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black uppercase text-slate-950 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10"
+                    placeholder="DYNOVANEW"
+                  />
+
+                  <button
+                    onClick={applyCoupon}
+                    className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white transition hover:bg-orange-500"
+                  >
+                    Áp dụng
+                  </button>
+                </div>
+
+                {appliedCoupon && (
+                  <div className="mt-3 flex items-center justify-between rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-500">
+                    <span>Đang áp dụng: {appliedCoupon}</span>
+                    <button
+                      onClick={() => {
+                        setAppliedCoupon("");
+                        setCoupon("");
+                      }}
+                      className="text-slate-400 hover:text-rose-500"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
+                {totals.message && (
+                  <p className="mt-2 text-xs font-bold text-slate-500">
+                    {totals.message}
+                  </p>
+                )}
               </div>
-              <div className="mt-5 space-y-3 text-sm font-bold text-slate-600"><div className="flex justify-between"><span>Tạm tính</span><span className="text-slate-950">{formatCurrency(totals.subtotal)}</span></div><div className="flex justify-between"><span>Vận chuyển</span><span className="text-slate-950">{totals.shipping === 0 ? "Miễn phí" : formatCurrency(totals.shipping)}</span></div>{totals.discount > 0 && <div className="flex justify-between text-rose-600"><span>Giảm giá</span><span>-{formatCurrency(totals.discount)}</span></div>}</div>
-              <div className="mt-5 border-t border-dashed border-slate-200 pt-5"><div className="flex items-end justify-between"><span className="font-black text-slate-950">Tổng cộng</span><span className="text-3xl font-black text-orange-600">{formatCurrency(totals.total)}</span></div></div>
-              <Link href="/checkout" className="btn-primary mt-6 block rounded-2xl py-4 text-center text-xs font-black uppercase tracking-wider">Tiến hành thanh toán</Link>
-              <p className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500"><ShieldCheck size={15} className="text-emerald-500" /> Dữ liệu thanh toán được xử lý bảo mật</p>
+
+              <div className="mt-5 space-y-3 text-sm font-bold text-slate-600">
+                <div className="flex justify-between">
+                  <span>Tạm tính</span>
+                  <span className="text-slate-950">
+                    {formatCurrency(totals.subtotal)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span>Vận chuyển tạm tính</span>
+                  <span className="text-slate-950">
+                    {totals.shipping === 0
+                      ? "Miễn phí"
+                      : formatCurrency(totals.shipping)}
+                  </span>
+                </div>
+
+                {totals.discount > 0 && (
+                  <div className="flex justify-between text-rose-600">
+                    <span>Giảm giá</span>
+                    <span>-{formatCurrency(totals.discount)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-dashed border-slate-200 pt-5">
+                <div className="flex items-end justify-between">
+                  <span className="font-black text-slate-950">Tổng cộng</span>
+                  <span className="text-3xl font-black text-orange-600">
+                    {formatCurrency(totals.total)}
+                  </span>
+                </div>
+              </div>
+
+              <Link
+                href="/checkout"
+                className="mt-6 block rounded-2xl bg-orange-500 py-4 text-center text-xs font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600"
+              >
+                Tiến hành thanh toán
+              </Link>
+
+              <p className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
+                <ShieldCheck size={15} className="text-emerald-500" />
+                Phí vận chuyển thật sẽ tính ở bước checkout
+              </p>
             </aside>
           </div>
         )}

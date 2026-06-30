@@ -19,7 +19,7 @@ import {
   Truck,
 } from "lucide-react";
 
-import { categories, formatCurrency, heroSlides } from "@/data/shop";
+import { formatCurrency } from "@/data/shop";
 import { addToCart, toggleWishlist } from "@/utils/shopStorage";
 
 const DEFAULT_BANNER = {
