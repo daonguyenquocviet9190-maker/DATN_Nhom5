@@ -1,14 +1,13 @@
-import axios from "axios";
+import axios from 'axios';
+
+// Lấy link từ file .env.local (http://127.0.0.1:8000/api)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
 const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL,
-
+    baseURL: API_URL,
     headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
     },
-
-    withCredentials: true, // chuẩn bị cho Sanctum sau này
 });
 
 export default api;

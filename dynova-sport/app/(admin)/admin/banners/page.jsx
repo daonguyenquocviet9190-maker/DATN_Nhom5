@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Layers, 
@@ -14,15 +14,12 @@ import {
   UploadCloud,
   Image as ImageIcon
 } from 'lucide-react';
+import { bannerService } from '@/services/banner.service'; // Tích hợp file dịch vụ của bạn
 
 export default function BannersAdmin() {
-  // 1. Khởi tạo danh sách dữ liệu (Đã đổi bgPreview thành ảnh mẫu để nhìn trực quan và cao cấp)
-  const [banners, setBanners] = useState([
-    { id: 'BNR-001', title: 'Bộ Sưu Tập Hè Đột Phá 2026', position: 'Slide Trang Chủ (Chính)', link: '/collection/summer-2026', clicks: 1420, status: 'Hiển thị', image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop&q=60' },
-    { id: 'BNR-002', title: 'Giày Chạy Siêu Nhẹ Dynova X-Pro', position: 'Slide Trang Chủ (Phụ)', link: '/products/dynova-x-pro', clicks: 890, status: 'Hiển thị', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=60' },
-    { id: 'BNR-003', title: 'Ưu Đãi Thành Viên Mới - Giảm 10%', position: 'Banner Giữa Trang', link: '/promotions', clicks: 2310, status: 'Hiển thị', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&auto=format&fit=crop&q=60' },
-    { id: 'BNR-004', title: 'Xả Kho Cuối Mùa - Up To 50%', position: 'Slide Trang Chủ (Chính)', link: '/sale-off', clicks: 0, status: 'Đang ẩn', image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&auto=format&fit=crop&q=60' },
-  ]);
+  // 1. Khởi tạo danh sách dữ liệu rỗng để đón nhận dữ liệu từ Laravel API
+  const [banners, setBanners] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Các State quản lý bộ lọc và đóng mở Modal
   const [positionFilter, setPositionFilter] = useState('Tất cả');
@@ -32,14 +29,51 @@ export default function BannersAdmin() {
   // Form State cho việc Thêm/Sửa
   const [formData, setFormData] = useState({ title: '', position: 'Slide Trang Chủ (Chính)', link: '', image: '', status: 'Hiển thị' });
 
-  // 2. Các hàm xử lý logic nghiệp vụ (Action Handlers)
-  const toggleStatus = (id) => {
-    setBanners(banners.map(b => b.id === id ? { ...b, status: b.status === 'Hiển thị' ? 'Đang ẩn' : 'Hiển thị' } : b));
+  // Hàm gọi API lấy danh sách banners từ Laravel
+  const fetchBanners = async () => {
+    try {
+      setLoading(true);
+      const data = await bannerService.getAll();
+      setBanners(data);
+    } catch (error) {
+      console.error("Lỗi khi kết nối API lấy danh sách banner:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const deleteBanner = (id) => {
-    if(confirm("Bạn có chắc chắn muốn xóa banner này vĩnh viễn?")) {
-      setBanners(banners.filter(b => b.id !== id));
+  // Tự động gọi API ngay khi cấu trúc giao diện Admin vừa render xong
+  useEffect(() => {
+    fetchBanners();
+  }, []);
+
+  // 2. Các hàm xử lý logic nghiệp vụ kết nối trực tiếp đến API Backend
+  const toggleStatus = async (banner) => {
+    const updatedStatus = banner.status === 'Hiển thị' ? 'Đang ẩn' : 'Hiển thị';
+    try {
+      // Gọi API cập nhật trạng thái
+      await bannerService.update(banner.id, {
+        ...banner,
+        status: updatedStatus
+      });
+      // Tải lại danh sách mới
+      fetchBanners();
+    } catch (error) {
+      alert("Cập nhật trạng thái hiển thị thất bại!");
+      console.error(error);
+    }
+  };
+
+  const deleteBanner = async (id) => {
+    if(confirm("Bạn có chắc chắn muốn xóa banner này vĩnh viễn khỏi Database?")) {
+      try {
+        await bannerService.delete(id);
+        alert("Đã xóa banner thành công!");
+        fetchBanners(); // Cập nhật lại danh sách sau khi xóa
+      } catch (error) {
+        alert("Xóa banner thất bại. Vui lòng kiểm tra lại hệ thống.");
+        console.error(error);
+      }
     }
   };
 
@@ -51,24 +85,47 @@ export default function BannersAdmin() {
 
   const openEditModal = (banner) => {
     setEditingBanner(banner);
-    setFormData({ title: banner.title, position: banner.position, link: banner.link, image: banner.image, status: banner.status });
+    setFormData({ 
+      title: banner.title || '', 
+      position: banner.position || 'Slide Trang Chủ (Chính)', 
+      link: banner.link || '', 
+      image: banner.image || banner.image_url || '', 
+      status: banner.status || 'Hiển thị' 
+    });
     setIsModalOpen(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (editingBanner) {
-      // Logic Cập nhật
-      setBanners(banners.map(b => b.id === editingBanner.id ? { ...b, ...formData } : b));
-    } else {
-      // Logic Thêm mới
-      const newId = `BNR-00${banners.length + 1}`;
-      setBanners([...banners, { id: newId, ...formData, clicks: 0 }]);
+    try {
+      if (editingBanner) {
+        // Logic Cập nhật thông qua API PUT
+        await bannerService.update(editingBanner.id, formData);
+        alert("Cập nhật thông tin banner thành công!");
+      } else {
+        // Logic Thêm mới thông qua API POST
+        await bannerService.create({ ...formData, clicks: 0 });
+        alert("Tạo banner mới thành công!");
+      }
+      setIsModalOpen(false);
+      fetchBanners(); // Tải lại danh sách dữ liệu thực tế mới nhất
+    } catch (error) {
+      alert("Lưu thiết lập banner thất bại. Bạn hãy kiểm tra lại kết nối Laravel.");
+      console.error(error);
     }
-    setIsModalOpen(false);
   };
 
+  // Bộ lọc Client-side mượt mà dựa trên dữ liệu trả về từ API
   const filteredBanners = banners.filter(b => positionFilter === 'Tất cả' || b.position === positionFilter);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-neutral-400 font-sans">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500 mb-4"></div>
+        <p className="text-xs uppercase tracking-widest">Đang tải dữ liệu từ hệ thống Laravel API...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 text-neutral-200 p-2 max-w-7xl mx-auto font-sans antialiased">
@@ -80,7 +137,7 @@ export default function BannersAdmin() {
             QUẢN LÝ <span className="font-semibold text-orange-500">BANNERS</span>
           </h2>
           <p className="text-xs text-neutral-400 mt-1 font-light tracking-wider">
-            Hệ thống tối ưu hóa hình ảnh chiến dịch, tracking lượt click và vị trí hiển thị.
+            Hệ thống tối ưu hóa hình ảnh chiến dịch, tracking lượt click và vị trí hiển thị (Dữ liệu từ API).
           </p>
         </div>
         <button 
@@ -125,9 +182,9 @@ export default function BannersAdmin() {
             >
               {/* IMAGE WRAPPER WITH REAL BANNER IMAGE */}
               <div className="h-52 p-6 flex flex-col justify-between relative overflow-hidden bg-neutral-950">
-                {banner.image ? (
+                {(banner.image || banner.image_url) ? (
                   <img 
-                    src={banner.image} 
+                    src={banner.image || banner.image_url} 
                     alt={banner.title} 
                     className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105 opacity-60 group-hover:opacity-70"
                   />
@@ -141,17 +198,17 @@ export default function BannersAdmin() {
                 <div className="relative z-10 flex justify-between items-center">
                   <span className="text-[10px] uppercase font-semibold tracking-widest bg-black/70 text-white/90 border border-white/10 px-2.5 py-1 backdrop-blur-md">
                     <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-orange-500"></span>
-                    {banner.position}
+                    {banner.position || 'Slide Trang Chủ (Chính)'}
                   </span>
                   <span className="font-mono text-[10px] tracking-wider text-white/50 bg-black/50 px-2 py-0.5 border border-white/5">
-                    {banner.id}
+                    ID: {banner.id}
                   </span>
                 </div>
 
                 {/* Info Text */}
                 <div className="relative z-10 space-y-1.5">
                   <h3 className="text-lg font-light text-white tracking-wide leading-snug group-hover:text-orange-400 transition-colors duration-300">
-                    {banner.title}
+                    {banner.title || 'Không có tiêu đề'}
                   </h3>
                   <div className="flex items-center gap-1.5 text-white/60 font-mono text-[11px] bg-black/40 w-fit px-2 py-0.5 backdrop-blur-sm border border-white/5">
                     <Link2 size={10} className="text-neutral-400" />
@@ -164,7 +221,7 @@ export default function BannersAdmin() {
               <div className="p-4 bg-[#080808] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs border-t border-neutral-900">
                 <div className="flex items-center gap-2 text-neutral-400 font-light tracking-wide">
                   <BarChart3 size={13} className="text-neutral-500" />
-                  Lượt tương tác: <span className="text-white font-mono font-medium">{banner.clicks.toLocaleString('vi-VN')} click</span>
+                  Lượt tương tác: <span className="text-white font-mono font-medium">{(banner.clicks || 0).toLocaleString('vi-VN')} click</span>
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-neutral-900">
@@ -172,7 +229,7 @@ export default function BannersAdmin() {
                     banner.status === 'Hiển thị' ? 'text-emerald-400' : 'text-neutral-500'
                   }`}>
                     <span className={`w-1 h-1 rounded-full ${banner.status === 'Hiển thị' ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-600'}`}></span>
-                    {banner.status}
+                    {banner.status || 'Hiển thị'}
                   </span>
 
                   <div className="flex items-center gap-1 pl-3 border-l border-neutral-800">
@@ -185,7 +242,7 @@ export default function BannersAdmin() {
                     </button>
                     
                     <button 
-                      onClick={() => toggleStatus(banner.id)}
+                      onClick={() => toggleStatus(banner)}
                       className={`p-2 transition-all active:scale-90 ${
                         banner.status === 'Hiển thị' ? 'text-neutral-400 hover:text-rose-400' : 'text-neutral-400 hover:text-emerald-400'
                       }`}
@@ -210,7 +267,7 @@ export default function BannersAdmin() {
         ) : (
           <div className="col-span-1 lg:col-span-2 bg-[#0d0d0d] border border-neutral-900 py-20 text-center text-neutral-500 font-light tracking-wide">
             <Layers className="mx-auto mb-3 text-neutral-700" size={24} />
-            Không có banner nào được phân bổ tại vị trí này.
+            Không có banner nào được phân bổ tại hệ thống hoặc vị trí này.
           </div>
         )}
       </div>

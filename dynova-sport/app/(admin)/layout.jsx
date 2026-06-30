@@ -2,22 +2,38 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Boxes, ClipboardList, LayoutDashboard, Percent, Search, Settings, ShoppingBag, Tags, Users, SquareMenu, Briefcase } from "lucide-react";
+import { BarChart3, Boxes, ClipboardList, LayoutDashboard, Percent, Search, Settings, ShoppingBag, Tags, Users, SquareMenu, Briefcase, Star } from "lucide-react";
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
-  const sections = [
-    { title: "Tổng quan", items: [{ name: "Dashboard", href: "/admin", icon: LayoutDashboard }] },
-    { title: "Bán hàng", items: [{ name: "Sản phẩm", href: "/admin/products", icon: ShoppingBag },
-       { name: "Danh mục", href: "/admin/categories", icon: Tags },
-        { name: "Đơn hàng", href: "/admin/orders", icon: ClipboardList },
-         { name: "Mã giảm giá", href: "/admin/promotions", icon: Percent },
-          { name: "Người dùng", href: "/admin/customers", icon: Users },
-           { name: "Tồn kho", href: "/admin/inventory", icon: Boxes },
-            { name: "Banner", href: "/admin/banners", icon: SquareMenu },
-             { name: "Brands", href: "/admin/brands", icon: Briefcase },] },
-    { title: "Hệ thống", items: [{ name: "Cấu hình", href: "/admin/settings", icon: Settings }] },
-  ];
+ const sections = [
+  { 
+    title: "Tổng quan", 
+    items: [
+      { name: "Dashboard", href: "/admin", icon: LayoutDashboard }
+    ] 
+  },
+  { 
+    title: "Bán hàng", 
+    items: [
+      { name: "Sản phẩm", href: "/admin/products", icon: ShoppingBag },
+      { name: "Danh mục", href: "/admin/categories", icon: Tags },
+      { name: "Đơn hàng", href: "/admin/orders", icon: ClipboardList },
+      { name: "Mã giảm giá", href: "/admin/promotions", icon: Percent },
+      { name: "Thành viên", href: "/admin/customers", icon: Users },
+      { name: "Tồn kho", href: "/admin/inventory", icon: Boxes },
+      { name: "Banner", href: "/admin/banners", icon: SquareMenu },
+      { name: "Thương hiệu", href: "/admin/brands", icon: Briefcase },
+      { name: "Đánh giá", href: "/admin/ratings", icon: Star }, // Bổ sung phân hệ Đánh giá (Ratings) còn thiếu
+    ] 
+  },
+  { 
+    title: "Hệ thống", 
+    items: [
+      { name: "Cấu hình", href: "/admin/settings", icon: Settings }
+    ] 
+  },
+];
   return (
     <div className="admin-shell min-h-screen text-white">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-xl lg:block">

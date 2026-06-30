@@ -1,45 +1,78 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { brandService } from '@/services/brand.service'; // Import file dịch vụ thương hiệu
 
 export default function BrandsAdmin() {
-  // 1. Giả lập danh sách thương hiệu của Dynova Sport
-  const [brands, setBrands] = useState([
-    { id: 'BRD-001', name: 'Dynova Premium', slug: 'dynova-premium', totalProducts: 45, status: 'Hiển thị', logo: '⚡' },
-    { id: 'BRD-002', name: 'Nike Sportswear', slug: 'nike-sportswear', totalProducts: 120, status: 'Hiển thị', logo: '✔️' },
-    { id: 'BRD-003', name: 'Adidas Originals', slug: 'adidas-originals', totalProducts: 85, status: 'Hiển thị', logo: '📐' },
-    { id: 'BRD-004', name: 'Puma Performance', slug: 'puma-performance', totalProducts: 30, status: 'Hiển thị', logo: '🐾' },
-    { id: 'BRD-005', name: 'Under Armour', slug: 'under-armour', totalProducts: 0, status: 'Đang ẩn', logo: '🛡️' },
-  ]);
+  // 1. Chuyển đổi danh sách thương hiệu sang State trống để hứng dữ liệu từ Backend Laravel
+  const [brands, setBrands] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // 2. State quản lý tìm kiếm và bộ lọc trạng thái
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Tất cả');
 
-  // 3. Hàm thay đổi trạng thái Hiển thị / Ẩn thương hiệu nhanh
-  const toggleStatus = (id) => {
-    setBrands(brands.map(brand => {
-      if (brand.id === id) {
-        const nextStatus = brand.status === 'Hiển thị' ? 'Đang ẩn' : 'Hiển thị';
-        return { ...brand, status: nextStatus };
-      }
-      return brand;
-    }));
+  // Hàm gọi API lấy danh sách thương hiệu thực tế từ hệ thống Laravel
+  const fetchBrands = async () => {
+    try {
+      setLoading(true);
+      const data = await brandService.getAll();
+      setBrands(data);
+    } catch (error) {
+      console.error("Lỗi khi kết nối API lấy danh sách thương hiệu:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // 4. Lọc dữ liệu dựa trên từ khóa tìm kiếm và bộ lọc trạng thái
+  // Tự động kích hoạt nạp dữ liệu ngay khi vừa truy cập trang Admin
+  useEffect(() => {
+    fetchBrands();
+  }, []);
+
+  // 3. Hàm thay đổi trạng thái Hiển thị / Ẩn thương hiệu đồng bộ trực tiếp lên Database
+  const toggleStatus = async (brand) => {
+    const updatedStatus = brand.status === 'Hiển thị' ? 'Đang ẩn' : 'Hiển thị';
+    try {
+      // Gọi API cập nhật dữ liệu của Laravel
+      await brandService.update(brand.id, {
+        ...brand,
+        status: updatedStatus
+      });
+      // Tải lại danh sách mới nhất để giao diện cập nhật ngay lập tức
+      fetchBrands();
+    } catch (error) {
+      alert("Cập nhật trạng thái thương hiệu thất bại!");
+      console.error(error);
+    }
+  };
+
+  // 4. Lọc dữ liệu mượt mà dựa trên từ khóa tìm kiếm và bộ lọc trạng thái từ dữ liệu API đổ về
   const filteredBrands = brands.filter(brand => {
-    const matchesSearch = brand.name.toLowerCase().includes(searchTerm.toLowerCase()) || brand.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'Tất cả' || brand.status === statusFilter;
+    const brandName = brand.name || '';
+    const brandId = String(brand.id || '');
+    const brandStatus = brand.status || 'Hiển thị';
+
+    const matchesSearch = brandName.toLowerCase().includes(searchTerm.toLowerCase()) || brandId.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'Tất cả' || brandStatus === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-gray-400 font-sans">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500 mb-4"></div>
+        <p className="text-xs uppercase tracking-widest">Đang kết nối cơ sở dữ liệu thương hiệu...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 text-white">
+    <div className="space-y-6 text-white p-2">
       {/* TIÊU ĐỀ TRANG & NÚT THÊM MỚI */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-bold">Quản lý thương hiệu</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Quản lý các nhãn hàng, thương hiệu đối tác đang kinh doanh tại hệ thống</p>
+          <h2 className="text-xl font-bold uppercase tracking-wider">Quản lý <span className="text-orange-500">thương hiệu</span></h2>
+          <p className="text-xs text-gray-500 mt-0.5">Quản lý các nhãn hàng, thương hiệu đối tác đang kinh doanh tại hệ thống (Real-time API)</p>
         </div>
         <button className="bg-orange-500 hover:bg-orange-600 text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-orange-500/10">
           <span>+</span> Thêm thương hiệu mới
@@ -92,28 +125,32 @@ export default function BrandsAdmin() {
               {filteredBrands.length > 0 ? (
                 filteredBrands.map((brand) => (
                   <tr key={brand.id} className="hover:bg-[#1c1c1c]/40 transition-colors">
-                    {/* Cột Logo đại diện (Demo bằng Emoji icon) */}
+                    {/* Cột Logo đại diện (Hỗ trợ URL ảnh từ DB hoặc render Icon mặc định) */}
                     <td className="p-4">
-                      <div className="w-9 h-9 bg-[#222222] rounded-xl flex items-center justify-center text-lg border border-[#2d2d2d]">
-                        {brand.logo}
+                      <div className="w-9 h-9 bg-[#222222] rounded-xl flex items-center justify-center text-lg border border-[#2d2d2d] overflow-hidden">
+                        {(brand.logo && (brand.logo.startsWith('http') || brand.logo.startsWith('/'))) ? (
+                          <img src={brand.logo} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{brand.logo || '🏷️'}</span>
+                        )}
                       </div>
                     </td>
                     {/* Mã số */}
-                    <td className="p-4 font-mono text-xs text-gray-500">{brand.id}</td>
+                    <td className="p-4 font-mono text-xs text-gray-500">ID: {brand.id}</td>
                     {/* Tên thương hiệu */}
-                    <td className="p-4 text-white font-medium">{brand.name}</td>
+                    <td className="p-4 text-white font-medium">{brand.name || 'Chưa đặt tên'}</td>
                     {/* Slug */}
-                    <td className="p-4 font-mono text-xs text-orange-400/80">{brand.slug}</td>
+                    <td className="p-4 font-mono text-xs text-orange-400/80">{brand.slug || 'no-slug'}</td>
                     {/* Tổng số lượng sản phẩm gắn liền nhãn hàng */}
                     <td className="p-4 text-center text-white font-semibold">
-                      {brand.totalProducts} sp
+                      {brand.totalProducts || brand.products_count || 0} sp
                     </td>
                     {/* Trạng thái tag */}
                     <td className="p-4">
                       <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
-                        brand.status === 'Hiển thị' ? 'text-emerald-500 bg-emerald-500/10' : 'text-rose-500 bg-rose-500/10'
+                        (brand.status || 'Hiển thị') === 'Hiển thị' ? 'text-emerald-500 bg-emerald-500/10' : 'text-rose-500 bg-rose-500/10'
                       }`}>
-                        {brand.status}
+                        {brand.status || 'Hiển thị'}
                       </span>
                     </td>
                     {/* Nút hành động */}
@@ -123,14 +160,14 @@ export default function BrandsAdmin() {
                           ✏️
                         </button>
                         <button 
-                          onClick={() => toggleStatus(brand.id)}
+                          onClick={() => toggleStatus(brand)}
                           className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
-                            brand.status === 'Hiển thị' 
+                            (brand.status || 'Hiển thị') === 'Hiển thị' 
                               ? 'border-rose-500/30 text-rose-400 hover:bg-rose-500/10' 
                               : 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
                           }`}
                         >
-                          {brand.status === 'Hiển thị' ? '👁️ Ẩn đi' : '👀 Hiện lại'}
+                          {(brand.status || 'Hiển thị') === 'Hiển thị' ? '👁️ Ẩn đi' : '👀 Hiện lại'}
                         </button>
                       </div>
                     </td>
@@ -140,7 +177,7 @@ export default function BrandsAdmin() {
                 /* Kết quả rỗng */
                 <tr>
                   <td colSpan="7" className="p-8 text-center text-gray-500">
-                    🔍 Không tìm thấy nhãn hàng nào khớp với bộ lọc tìm kiếm.
+                    🔍 Không tìm thấy nhãn hàng nào khớp với bộ lọc tìm kiếm trong Database.
                   </td>
                 </tr>
               )}

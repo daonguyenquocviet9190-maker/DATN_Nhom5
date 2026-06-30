@@ -1,18 +1,111 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { Lock, Search, ShieldCheck, Unlock, Users } from "lucide-react";
-import { getOrders, getUsers, saveUsers } from "@/utils/shopStorage";
-import { formatCurrency } from "@/data/shop";
+import { useEffect, useState } from "react";
+import { Lock, Search, ShieldCheck, Unlock, Users, Trash2 } from "lucide-react";
+import { userService } from "../../../../services/user.service";
 
 export default function CustomersAdmin() {
   const [users, setUsers] = useState([]);
-  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [role, setRole] = useState("all");
-  useEffect(() => { setUsers(getUsers()); setOrders(getOrders()); }, []);
-  const filtered = useMemo(() => users.filter((user) => (role === "all" || user.role === role) && (user.fullName + user.email + user.phone).toLowerCase().includes(query.toLowerCase())), [users, query, role]);
-  const toggle = (id) => { const next = users.map((user) => user.id === id ? { ...user, status: user.status === "Bị khóa" ? "Hoạt động" : "Bị khóa" } : user); setUsers(next); saveUsers(next); };
-  const spent = (user) => orders.filter((order) => order.email === user.email || order.phone === user.phone).reduce((sum, order) => sum + Number(order.total || 0), 0);
-  return <div className="space-y-6"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">User MGMT</p><h2 className="mt-2 text-3xl font-black">Quản lý thành viên</h2><p className="mt-2 text-sm text-slate-400">Theo dõi tài khoản, vai trò, trạng thái và chi tiêu của khách hàng.</p></div><section className="grid gap-4 md:grid-cols-3"><div className="admin-card rounded-3xl p-5"><Users className="text-orange-300" /><p className="mt-3 text-2xl font-black">{users.length}</p><p className="text-sm text-slate-400">Tổng thành viên</p></div><div className="admin-card rounded-3xl p-5"><ShieldCheck className="text-emerald-300" /><p className="mt-3 text-2xl font-black">{users.filter((user) => user.status === "Hoạt động").length}</p><p className="text-sm text-slate-400">Đang hoạt động</p></div><div className="admin-card rounded-3xl p-5"><Lock className="text-rose-300" /><p className="mt-3 text-2xl font-black">{users.filter((user) => user.status === "Bị khóa").length}</p><p className="text-sm text-slate-400">Bị khóa</p></div></section><div className="admin-card rounded-3xl p-5"><div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]"><div className="relative"><Search className="absolute left-3 top-3.5 text-slate-500" size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} className="admin-input w-full pl-10" placeholder="Tìm tên, email, số điện thoại" /></div><select value={role} onChange={(e) => setRole(e.target.value)} className="admin-input"><option value="all">Tất cả vai trò</option><option value="customer">Khách hàng</option><option value="admin">Admin</option></select></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs uppercase text-slate-500"><tr><th className="p-3">Thành viên</th><th className="p-3">Liên hệ</th><th className="p-3">Vai trò</th><th className="p-3">Chi tiêu</th><th className="p-3">Trạng thái</th><th className="p-3 text-right">Thao tác</th></tr></thead><tbody className="divide-y divide-white/10">{filtered.map((user) => <tr key={user.id} className="hover:bg-white/5"><td className="p-3"><p className="font-black text-white">{user.fullName}</p><p className="text-xs text-slate-500">{user.id}</p></td><td className="p-3"><p className="text-slate-300">{user.email}</p><p className="text-xs text-slate-500">{user.phone}</p></td><td className="p-3"><span className="status-pill bg-blue-400/10 text-blue-300">{user.role}</span></td><td className="p-3 font-bold text-orange-300">{formatCurrency(spent(user))}</td><td className="p-3"><span className={"status-pill " + (user.status === "Hoạt động" ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300")}>{user.status}</span></td><td className="p-3 text-right"><button onClick={() => toggle(user.id)} className={"rounded-xl p-2 " + (user.status === "Hoạt động" ? "text-rose-300 hover:bg-rose-400/10" : "text-emerald-300 hover:bg-emerald-400/10")}>{user.status === "Hoạt động" ? <Lock size={16} /> : <Unlock size={16} />}</button></td></tr>)}</tbody></table></div></div></div>;
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const data = await userService.getAll();
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Lỗi lấy danh sách thành viên:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const filteredUsers = users.filter((u) => {
+    const name = u.name || "";
+    const email = u.email || "";
+    return name.toLowerCase().includes(query.toLowerCase()) || email.toLowerCase().includes(query.toLowerCase());
+  });
+
+  const handleToggleStatus = async (id, currentStatus) => {
+    const newStatus = currentStatus === "Hoạt động" ? "Bị khóa" : "Hoạt động";
+    try {
+      await userService.update(id, { status: newStatus });
+      alert("Cập nhật trạng thái thành viên thành công!");
+      fetchUsers();
+    } catch (error) {
+      alert("Cập nhật thất bại!");
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center text-gray-400 py-10">Đang tải danh sách thành viên...</div>;
+  }
+
+  return (
+    <div className="space-y-6 p-2">
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Customers</p>
+        <h2 className="mt-2 text-3xl font-black uppercase text-white">Quản lý thành viên</h2>
+      </div>
+
+      <div className="admin-card rounded-3xl p-5 bg-[#161616] border border-[#222222]">
+        <div className="mb-4 relative">
+          <Search className="absolute left-3 top-3.5 text-slate-500" size={16} />
+          <input 
+            value={query} 
+            onChange={(e) => setQuery(e.target.value)} 
+            className="w-full pl-10 bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl py-2.5 text-sm text-white outline-none focus:border-orange-500" 
+            placeholder="Tìm kiếm theo tên hoặc email thành viên..." 
+          />
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-400">
+            <thead className="text-xs uppercase text-slate-500 bg-[#1c1c1c]">
+              <tr>
+                <th className="p-3">Thành viên</th>
+                <th className="p-3">Email</th>
+                <th className="p-3">Trạng thái</th>
+                <th className="p-3 text-right">Hành động</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-white/5">
+                    <td className="p-3 font-bold text-white">{u.name}</td>
+                    <td className="p-3 font-mono">{u.email}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded text-xs ${u.status === 'Bị khóa' ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                        {u.status || 'Hoạt động'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right">
+                      <button 
+                        onClick={() => handleToggleStatus(u.id, u.status)}
+                        className={`p-2 rounded-xl transition-all ${u.status === 'Bị khóa' ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-rose-400 hover:bg-rose-500/10'}`}
+                      >
+                        {u.status === 'Bị khóa' ? <Unlock size={16}/> : <Lock size={16}/>}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="4" className="p-8 text-center text-slate-500">
+                    <Users className="mx-auto mb-2 opacity-30" size={24} /> Không tìm thấy thành viên nào.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
