@@ -7,8 +7,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="vi">
-      <body className="antialiased">{children}</body>
+    <html lang="vi" data-scroll-behavior="smooth">
+      <body>{children}</body>
     </html>
   );
 }
