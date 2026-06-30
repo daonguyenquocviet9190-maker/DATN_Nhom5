@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ClipboardList,
   CreditCard,
+  Flame,
   Headphones,
   Heart,
   LogOut,
@@ -89,6 +90,7 @@ export default function ClientLayout({ children }) {
 
   const menuItems = [
     { name: "Trang chủ", href: "/" },
+    { name: "Flash Sale", href: "/sale", hot: true },
     { name: "Sản phẩm", href: "/shop" },
     { name: "Bộ sưu tập", href: "/collections" },
     { name: "Tin tức", href: "/news" },
@@ -100,6 +102,7 @@ export default function ClientLayout({ children }) {
     {
       title: "Mua sắm",
       links: [
+        { name: "Flash Sale", href: "/flash-sale" },
         { name: "Sản phẩm mới", href: "/shop" },
         { name: "Bộ sưu tập", href: "/collections" },
         { name: "Sản phẩm yêu thích", href: "/wishlist" },
@@ -283,8 +286,8 @@ export default function ClientLayout({ children }) {
           </div>
         </div>
 
-        <div className="container-page flex h-[76px] items-center justify-between gap-4">
-          <Link href="/" className="group flex items-center gap-3">
+        <div className="container-page flex h-[76px] items-center justify-between gap-3">
+          <Link href="/" className="group flex shrink-0 items-center gap-3">
             <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 text-[12px] font-black tracking-tight text-white shadow-lg shadow-slate-950/15 transition group-hover:-translate-y-0.5">
               <span className="relative z-10">DNV</span>
               <span className="absolute inset-x-0 bottom-0 h-1/2 bg-orange-500/90" />
@@ -300,7 +303,7 @@ export default function ClientLayout({ children }) {
             </div>
           </Link>
 
-          <nav className="hidden items-center gap-1 rounded-2xl bg-slate-50 p-1 lg:flex">
+          <nav className="hidden items-center gap-0.5 rounded-2xl bg-slate-50 p-1 xl:flex">
             {menuItems.map((item) => {
               const active =
                 pathname === item.href ||
@@ -311,26 +314,38 @@ export default function ClientLayout({ children }) {
                   key={item.href}
                   href={item.href}
                   className={
-                    "relative rounded-xl px-4 py-2.5 text-[13px] font-extrabold transition-all duration-300 " +
-                    (active
-                      ? "bg-white text-orange-600 shadow-sm shadow-slate-200"
-                      : "text-slate-600 hover:bg-white hover:text-slate-950")
+                    "relative flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2.5 text-[12.5px] font-extrabold transition-all duration-300 " +
+                    (item.hot
+                      ? active
+                        ? "bg-white text-rose-600 shadow-sm shadow-slate-200"
+                        : "text-rose-600 hover:bg-white"
+                      : active
+                        ? "bg-white text-orange-600 shadow-sm shadow-slate-200"
+                        : "text-slate-600 hover:bg-white hover:text-slate-950")
                   }
                 >
+                  {item.hot && (
+                    <Flame size={13} className="fill-rose-500 text-rose-500" />
+                  )}
                   {item.name}
 
                   {active && (
-                    <span className="absolute inset-x-4 -bottom-1 h-[3px] rounded-full bg-orange-500" />
+                    <span
+                      className={
+                        "absolute inset-x-4 -bottom-1 h-[3px] rounded-full " +
+                        (item.hot ? "bg-rose-500" : "bg-orange-500")
+                      }
+                    />
                   )}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setOpenSearch(true)}
-              className="btn-ghost flex h-11 w-11 items-center justify-center rounded-2xl"
+              className="btn-ghost flex h-10 w-10 items-center justify-center rounded-2xl sm:h-11 sm:w-11"
               aria-label="Tìm kiếm"
             >
               <Search size={18} />
@@ -338,7 +353,7 @@ export default function ClientLayout({ children }) {
 
             <Link
               href="/wishlist"
-              className="btn-ghost relative hidden h-11 w-11 items-center justify-center rounded-2xl sm:flex"
+              className="btn-ghost relative hidden h-10 w-10 items-center justify-center rounded-2xl sm:flex sm:h-11 sm:w-11"
               aria-label="Yêu thích"
             >
               <Heart size={18} />
@@ -352,7 +367,7 @@ export default function ClientLayout({ children }) {
 
             <Link
               href="/cart"
-              className="btn-ghost relative flex h-11 w-11 items-center justify-center rounded-2xl"
+              className="btn-ghost relative flex h-10 w-10 items-center justify-center rounded-2xl sm:h-11 sm:w-11"
               aria-label="Giỏ hàng"
             >
               <ShoppingBag size={18} />
@@ -367,13 +382,13 @@ export default function ClientLayout({ children }) {
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setOpenUser(!openUser)}
-                className="hidden h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-slate-700 shadow-sm transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 md:flex"
+                className="hidden h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-slate-700 shadow-sm transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 md:flex sm:h-11"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100">
                   <User size={16} />
                 </span>
 
-                <span className="max-w-28 truncate text-[13px] font-extrabold">
+                <span className="max-w-24 truncate text-[13px] font-extrabold lg:max-w-28">
                   {user?.fullName || "Tài khoản"}
                 </span>
 
@@ -387,7 +402,7 @@ export default function ClientLayout({ children }) {
 
               <button
                 onClick={() => setOpenUser(!openUser)}
-                className="btn-ghost flex h-11 w-11 items-center justify-center rounded-2xl md:hidden"
+                className="btn-ghost flex h-10 w-10 items-center justify-center rounded-2xl sm:h-11 sm:w-11 md:hidden"
                 aria-label="Tài khoản"
               >
                 <User size={18} />
@@ -482,7 +497,7 @@ export default function ClientLayout({ children }) {
 
             <button
               onClick={() => setOpenMobile(true)}
-              className="btn-ghost flex h-11 w-11 items-center justify-center rounded-2xl lg:hidden"
+              className="btn-ghost flex h-10 w-10 items-center justify-center rounded-2xl sm:h-11 sm:w-11 xl:hidden"
               aria-label="Mở menu"
             >
               <Menu size={20} />
@@ -492,7 +507,7 @@ export default function ClientLayout({ children }) {
       </header>
 
       {openMobile && (
-        <div className="fixed inset-0 z-[70] bg-slate-950/50 backdrop-blur-sm lg:hidden">
+        <div className="fixed inset-0 z-[70] bg-slate-950/50 backdrop-blur-sm xl:hidden">
           <div className="float-in ml-auto flex h-full w-[86%] max-w-sm flex-col bg-white shadow-2xl">
             <div className="border-b border-slate-100 p-5">
               <div className="flex items-center justify-between">
@@ -527,12 +542,19 @@ export default function ClientLayout({ children }) {
                       href={item.href}
                       onClick={() => setOpenMobile(false)}
                       className={
-                        "rounded-2xl px-4 py-3 text-sm font-extrabold transition " +
-                        (active
-                          ? "bg-orange-50 text-orange-600"
-                          : "text-slate-700 hover:bg-slate-50")
+                        "flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold transition " +
+                        (item.hot
+                          ? active
+                            ? "bg-rose-50 text-rose-600"
+                            : "text-rose-600 hover:bg-rose-50"
+                          : active
+                            ? "bg-orange-50 text-orange-600"
+                            : "text-slate-700 hover:bg-slate-50")
                       }
                     >
+                      {item.hot && (
+                        <Flame size={15} className="fill-rose-500 text-rose-500" />
+                      )}
                       {item.name}
                     </Link>
                   );
