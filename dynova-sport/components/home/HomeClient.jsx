@@ -36,7 +36,12 @@ const DEFAULT_BANNER = {
   secondaryLink: "/collections",
 };
 
-export default function HomeClient({ products = [], banners = [] }) {
+export default function HomeClient({
+  products = [],
+  banners = [],
+  apiCategories = [],
+  apiBrands = [],
+}) {
   const router = useRouter();
 
   const [notice, setNotice] = useState("");
@@ -45,6 +50,14 @@ export default function HomeClient({ products = [], banners = [] }) {
   const [pauseBanner, setPauseBanner] = useState(false);
 
   const safeProducts = Array.isArray(products) ? products : [];
+
+  const safeCategories =
+    Array.isArray(apiCategories) && apiCategories.length > 0
+      ? apiCategories
+      : categories;
+
+  const safeBrands =
+    Array.isArray(apiBrands) && apiBrands.length > 0 ? apiBrands : [];
 
   const featured = useMemo(() => {
     const featuredProducts = safeProducts.filter(
@@ -85,9 +98,7 @@ export default function HomeClient({ products = [], banners = [] }) {
           banner.name ||
           "Trang bị thể thao cho phong cách sống năng động",
         subtitle:
-          banner.subtitle ||
-          banner.tagline ||
-          "Sport Collection 2026",
+          banner.subtitle || banner.tagline || "Sport Collection 2026",
         description:
           banner.description ||
           "Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
@@ -142,8 +153,50 @@ export default function HomeClient({ products = [], banners = [] }) {
     setTimeout(() => setNotice(""), 1800);
   };
 
+  const getProductImage = (product) => {
+    return (
+      product?.image ||
+      product?.image_url ||
+      product?.imageUrl ||
+      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
+    );
+  };
+
+  const getProductCategory = (product) => {
+    if (typeof product?.category === "string") return product.category;
+
+    return (
+      product?.category?.name ||
+      product?.category_name ||
+      product?.categoryName ||
+      "Dynova Sport"
+    );
+  };
+
+  const getProductBrand = (product) => {
+    if (typeof product?.brand === "string") return product.brand;
+
+    return (
+      product?.brand_data?.name ||
+      product?.brandInfo?.name ||
+      product?.brand?.name ||
+      product?.brand_name ||
+      "Dynova"
+    );
+  };
+
+  const normalizeProductForStorage = (product) => {
+    return {
+      ...product,
+      image: getProductImage(product),
+      category: getProductCategory(product),
+      brand: getProductBrand(product),
+      oldPrice: product.oldPrice || product.compare_price,
+    };
+  };
+
   const handleAdd = (product) => {
-    addToCart(product, { quantity: 1 });
+    addToCart(normalizeProductForStorage(product), { quantity: 1 });
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dynova:storage"));
@@ -181,31 +234,11 @@ export default function HomeClient({ products = [], banners = [] }) {
     setActiveBanner((prev) => (prev + 1) % heroBanners.length);
   };
 
-  const getProductImage = (product) => {
-    return (
-      product?.image ||
-      product?.image_url ||
-      product?.imageUrl ||
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
-    );
-  };
-
-  const getProductCategory = (product) => {
-    if (typeof product?.category === "string") return product.category;
-
-    return (
-      product?.category?.name ||
-      product?.category_name ||
-      product?.categoryName ||
-      "Dynova Sport"
-    );
-  };
-
   const ProductCard = ({ product }) => {
     if (!product) return null;
 
     return (
-      <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl">
+      <article className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl">
         <Link
           href={"/shop/product/" + product.id}
           className="relative block overflow-hidden bg-slate-100"
@@ -213,7 +246,7 @@ export default function HomeClient({ products = [], banners = [] }) {
           <img
             src={getProductImage(product)}
             alt={product.name}
-            className="aspect-[4/4.35] w-full object-cover transition duration-500 group-hover:scale-105"
+            className="aspect-[4/4.25] w-full object-cover transition duration-500 group-hover:scale-105"
           />
 
           <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-orange-600 shadow-sm">
@@ -238,6 +271,10 @@ export default function HomeClient({ products = [], banners = [] }) {
               {product.name}
             </h3>
           </Link>
+
+          <p className="mt-2 text-xs font-bold text-slate-400">
+            {getProductBrand(product)}
+          </p>
 
           <div className="mt-auto pt-4">
             <div className="flex items-end justify-between gap-3">
@@ -286,256 +323,265 @@ export default function HomeClient({ products = [], banners = [] }) {
       )}
 
       <section
-        className="relative isolate overflow-hidden bg-slate-950 text-white"
-        onMouseEnter={() => setPauseBanner(true)}
-        onMouseLeave={() => setPauseBanner(false)}
-      >
-        <div className="absolute inset-0 overflow-hidden">
-          <div
-            className="flex h-full transition-transform duration-700 ease-out"
-            style={{
-              transform: `translateX(-${activeBanner * 100}%)`,
-            }}
-          >
-            {heroBanners.map((banner) => (
-              <div key={banner.id} className="relative h-full min-w-full">
-                <img
-                  src={banner.image}
-                  alt={banner.title}
-                  className="h-full w-full object-cover opacity-45"
-                />
-              </div>
-            ))}
-          </div>
+  className="home-hero-clean relative isolate overflow-hidden bg-slate-950 text-white"
+  onMouseEnter={() => setPauseBanner(true)}
+  onMouseLeave={() => setPauseBanner(false)}
+>
+  <div className="absolute inset-0">
+    <div
+      key={currentBanner.id}
+      className="hero-soft-fade absolute inset-0"
+    >
+      <img
+        src={currentBanner.image}
+        alt={currentBanner.title}
+        className="h-full w-full object-cover opacity-40"
+      />
+    </div>
 
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/45" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_25%,rgba(249,115,22,0.22),transparent_32%),radial-gradient(circle_at_80%_10%,rgba(255,255,255,0.08),transparent_26%)]" />
+    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/58" />
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(249,115,22,0.18),transparent_32%),radial-gradient(circle_at_85%_18%,rgba(255,255,255,0.08),transparent_26%)]" />
+  </div>
+
+  <div className="container-page relative z-10 grid min-h-[610px] items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
+    <div className="max-w-3xl">
+      <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
+        <Sparkles size={14} />
+        {currentBanner.subtitle}
+      </div>
+
+      <h1 className="max-w-3xl text-4xl font-black uppercase leading-[1.02] tracking-[-0.045em] md:text-6xl">
+        {currentBanner.title}
+      </h1>
+
+      <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
+        {currentBanner.description}
+      </p>
+
+      <form
+        onSubmit={handleSearch}
+        className="mt-8 flex max-w-xl flex-col gap-2 rounded-[22px] border border-white/10 bg-white p-2 shadow-2xl shadow-slate-950/25 sm:flex-row"
+      >
+        <div className="flex flex-1 items-center gap-3 px-3 text-slate-400">
+          <Search size={18} />
+
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onFocus={() => setPauseBanner(true)}
+            onBlur={() => setPauseBanner(false)}
+            className="h-12 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+            placeholder="Tìm sản phẩm, thương hiệu..."
+          />
         </div>
 
-        <div className="container-page relative z-10 grid min-h-[620px] items-center gap-10 py-14 lg:grid-cols-[1.04fr_0.96fr]">
-          <div>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-              <Sparkles size={14} />
-              {currentBanner.subtitle}
-            </div>
+        <button className="rounded-[18px] bg-orange-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600">
+          Tìm kiếm
+        </button>
+      </form>
 
-            <h1 className="max-w-2xl text-4xl font-black uppercase leading-tight tracking-[-0.04em] md:text-6xl">
-              {currentBanner.title}
-            </h1>
+      <div className="mt-8 flex flex-wrap gap-3">
+        <Link
+          href={currentBanner.buttonLink}
+          className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
+        >
+          {currentBanner.buttonText}
+          <ArrowRight size={16} />
+        </Link>
 
-            <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
-              {currentBanner.description}
+        <Link
+          href={currentBanner.secondaryLink}
+          className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+        >
+          {currentBanner.secondaryText}
+        </Link>
+      </div>
+
+      <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
+        {[
+          { value: "500+", label: "Sản phẩm" },
+          { value: "30 ngày", label: "Đổi trả" },
+          { value: "24/7", label: "Hỗ trợ" },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur transition hover:bg-white/[0.14]"
+          >
+            <p className="text-xl font-black text-white md:text-2xl">
+              {item.value}
             </p>
-
-            <form
-              onSubmit={handleSearch}
-              className="mt-7 flex max-w-xl flex-col gap-2 rounded-2xl bg-white p-2 shadow-xl sm:flex-row"
-            >
-              <div className="flex flex-1 items-center gap-3 px-3 text-slate-400">
-                <Search size={18} />
-
-                <input
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  onFocus={() => setPauseBanner(true)}
-                  onBlur={() => setPauseBanner(false)}
-                  className="h-11 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-                  placeholder="Tìm sản phẩm, danh mục, thương hiệu..."
-                />
-              </div>
-
-              <button className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-600">
-                Tìm kiếm
-              </button>
-            </form>
-
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                href={currentBanner.buttonLink}
-                className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
-              >
-                {currentBanner.buttonText}
-                <ArrowRight size={16} />
-              </Link>
-
-              <Link
-                href={currentBanner.secondaryLink}
-                className="rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white transition hover:bg-white/20"
-              >
-                {currentBanner.secondaryText}
-              </Link>
-            </div>
-
-            <div className="mt-10 grid max-w-lg grid-cols-3 gap-5">
-              <div>
-                <p className="text-2xl font-black">500+</p>
-                <p className="mt-1 text-xs font-bold text-slate-400">
-                  Sản phẩm
-                </p>
-              </div>
-
-              <div>
-                <p className="text-2xl font-black">30 ngày</p>
-                <p className="mt-1 text-xs font-bold text-slate-400">
-                  Đổi trả
-                </p>
-              </div>
-
-              <div>
-                <p className="text-2xl font-black">24/7</p>
-                <p className="mt-1 text-xs font-bold text-slate-400">
-                  Hỗ trợ
-                </p>
-              </div>
-            </div>
+            <p className="mt-1 text-xs font-bold text-slate-400">
+              {item.label}
+            </p>
           </div>
+        ))}
+      </div>
+    </div>
 
-          <div className="relative hidden lg:block">
-            <div className="relative ml-auto max-w-[470px] overflow-hidden rounded-[32px] border border-white/10 bg-white/10 p-3 shadow-2xl backdrop-blur">
-              <div className="overflow-hidden rounded-[24px]">
-                <div
-                  className="flex transition-transform duration-700 ease-out"
-                  style={{
-                    transform: `translateX(-${activeBanner * 100}%)`,
-                  }}
-                >
-                  {heroBanners.map((banner) => (
-                    <img
-                      key={banner.id}
-                      src={banner.image}
-                      alt={banner.title}
-                      className="h-[470px] min-w-full object-cover"
-                    />
-                  ))}
-                </div>
-              </div>
+    <div className="hidden lg:block">
+      <div className="hero-product-panel relative ml-auto max-w-[460px]">
+        <div
+          key={"panel-" + currentBanner.id}
+          className="hero-card-fade overflow-hidden rounded-[36px] border border-white/10 bg-white/10 p-3 shadow-2xl shadow-slate-950/30 backdrop-blur"
+        >
+          <div className="relative overflow-hidden rounded-[28px] bg-slate-900">
+            <img
+              src={currentBanner.image}
+              alt={currentBanner.title}
+              className="h-[430px] w-full object-cover"
+            />
 
-              <div className="absolute bottom-7 left-7 right-7 rounded-3xl bg-white/95 p-5 text-slate-950 shadow-xl backdrop-blur">
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent" />
+
+            <div className="absolute bottom-5 left-5 right-5">
+              <div className="rounded-[26px] border border-white/10 bg-white/95 p-5 text-slate-950 shadow-2xl backdrop-blur">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-500">
-                  Banner đang hiển thị
+                  Dynova Collection
                 </p>
 
-                <h3 className="mt-2 line-clamp-1 text-lg font-black">
+                <h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
                   {currentBanner.title}
                 </h3>
 
-                <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
-                  Sau này có thể quản lý ảnh, tiêu đề, mô tả và nút CTA từ
-                  Laravel Admin.
-                </p>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {[
+                    "Chính hãng",
+                    "Dễ mua",
+                    "Dễ đổi",
+                  ].map((item) => (
+                    <span
+                      key={item}
+                      className="rounded-2xl bg-slate-100 px-3 py-2 text-center text-[11px] font-black text-slate-700"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
-
-            {heroBanners.length > 1 && (
-              <div className="absolute -left-5 bottom-8 flex flex-col gap-2">
-                {heroBanners.slice(0, 3).map((banner, index) => (
-                  <button
-                    key={banner.id}
-                    onClick={() => setActiveBanner(index)}
-                    className={
-                      "h-16 w-24 overflow-hidden rounded-2xl border transition " +
-                      (activeBanner === index
-                        ? "border-orange-400 opacity-100"
-                        : "border-white/20 opacity-65 hover:opacity-100")
-                    }
-                    aria-label={"Chọn banner " + (index + 1)}
-                  >
-                    <img
-                      src={banner.image}
-                      alt={banner.title}
-                      className="h-full w-full object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
         {heroBanners.length > 1 && (
-          <>
-            <button
-              onClick={goPrevBanner}
-              className="absolute left-4 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/20 lg:flex"
-              aria-label="Banner trước"
-            >
-              <ChevronLeft size={22} />
-            </button>
-
-            <button
-              onClick={goNextBanner}
-              className="absolute right-4 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/20 lg:flex"
-              aria-label="Banner sau"
-            >
-              <ChevronRight size={22} />
-            </button>
-
-            <div className="absolute bottom-7 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
+          <div className="mt-5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
               {heroBanners.map((banner, index) => (
                 <button
                   key={banner.id}
                   onClick={() => setActiveBanner(index)}
                   className={
-                    "h-2.5 rounded-full transition-all " +
+                    "h-2.5 rounded-full transition-all duration-300 " +
                     (activeBanner === index
                       ? "w-9 bg-orange-500"
-                      : "w-2.5 bg-white/40 hover:bg-white")
+                      : "w-2.5 bg-white/35 hover:bg-white/70")
                   }
                   aria-label={"Chuyển banner " + (index + 1)}
                 />
               ))}
             </div>
-          </>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goPrevBanner}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+                aria-label="Banner trước"
+              >
+                <ChevronLeft size={21} />
+              </button>
+
+              <button
+                onClick={goNextBanner}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+                aria-label="Banner sau"
+              >
+                <ChevronRight size={21} />
+              </button>
+            </div>
+          </div>
         )}
+      </div>
+    </div>
+  </div>
+</section>
+
+      <section className="container-page py-10">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              icon: Truck,
+              title: "Giao hàng nhanh",
+              text: "Hỗ trợ giao hàng toàn quốc, trạng thái đơn rõ ràng.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "Đổi trả 30 ngày",
+              text: "Chính sách đổi trả minh bạch, dễ theo dõi.",
+            },
+            {
+              icon: PackageCheck,
+              title: "Sản phẩm rõ biến thể",
+              text: "Có size, màu sắc, giá bán và tồn kho.",
+            },
+            {
+              icon: Headphones,
+              title: "Hỗ trợ tư vấn",
+              text: "Tư vấn size, đơn hàng và thanh toán nhanh.",
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <div
+                key={item.title}
+                className="h-full rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
+                  <Icon size={22} />
+                </div>
+
+                <h3 className="mt-4 text-base font-black text-slate-950">
+                  {item.title}
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  {item.text}
+                </p>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
-      <section className="container-page -mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[
-          {
-            icon: Truck,
-            title: "Giao hàng nhanh",
-            text: "Hỗ trợ giao hàng toàn quốc, trạng thái đơn rõ ràng.",
-          },
-          {
-            icon: ShieldCheck,
-            title: "Đổi trả 30 ngày",
-            text: "Chính sách đổi trả minh bạch, dễ theo dõi.",
-          },
-          {
-            icon: PackageCheck,
-            title: "Sản phẩm rõ biến thể",
-            text: "Có size, màu sắc, giá bán và tồn kho.",
-          },
-          {
-            icon: Headphones,
-            title: "Hỗ trợ tư vấn",
-            text: "Tư vấn size, đơn hàng và thanh toán nhanh.",
-          },
-        ].map((item) => {
-          const Icon = item.icon;
-
-          return (
-            <div
-              key={item.title}
-              className="h-full rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
-                <Icon size={22} />
+      {safeBrands.length > 0 && (
+        <section className="container-page pb-14">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+                  Thương hiệu
+                </p>
+                <h2 className="mt-1 text-2xl font-black text-slate-950">
+                  Brand nổi bật
+                </h2>
               </div>
 
-              <h3 className="mt-4 text-base font-black text-slate-950">
-                {item.title}
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                {item.text}
-              </p>
+              <div className="flex flex-wrap gap-2">
+                {safeBrands.slice(0, 8).map((brand) => (
+                  <Link
+                    key={brand.id}
+                    href={"/shop?brand=" + brand.id}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+                  >
+                    {brand.name}
+                  </Link>
+                ))}
+              </div>
             </div>
-          );
-        })}
-      </section>
+          </div>
+        </section>
+      )}
 
-      <section className="container-page py-16">
+      <section className="container-page pb-16">
         <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
@@ -562,7 +608,7 @@ export default function HomeClient({ products = [], banners = [] }) {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {categories.map((category) => (
+          {safeCategories.map((category) => (
             <Link
               key={category.id}
               href={"/shop?category=" + category.id}
@@ -604,8 +650,8 @@ export default function HomeClient({ products = [], banners = [] }) {
               </h2>
 
               <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-                Hiển thị sản phẩm nổi bật giúp người dùng vào chi tiết, thêm giỏ
-                hàng hoặc lưu yêu thích nhanh hơn.
+                Sản phẩm nổi bật giúp khách hàng vào chi tiết, thêm giỏ hàng
+                hoặc lưu yêu thích nhanh hơn.
               </p>
             </div>
 
@@ -637,7 +683,7 @@ export default function HomeClient({ products = [], banners = [] }) {
       </section>
 
       <section className="container-page grid gap-6 py-16 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="flex min-h-[420px] flex-col justify-between overflow-hidden rounded-[32px] bg-slate-950 p-7 text-white">
+        <div className="flex min-h-[380px] flex-col justify-between overflow-hidden rounded-[32px] bg-slate-950 p-7 text-white">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-xs font-black uppercase tracking-wider">
               <BadgePercent size={15} />
@@ -731,67 +777,7 @@ export default function HomeClient({ products = [], banners = [] }) {
         </div>
       </section>
 
-      <section className="bg-white py-16">
-        <div className="container-page">
-          <div className="rounded-[32px] border border-slate-200 bg-[#f7f8fb] p-7 md:p-10">
-            <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-                  Trải nghiệm mua hàng
-                </p>
-
-                <h2 className="mt-2 text-3xl font-black tracking-[-0.03em] text-slate-950">
-                  Luồng mua hàng rõ ràng, dễ hiểu
-                </h2>
-
-                <p className="mt-3 text-sm leading-7 text-slate-500">
-                  Trang chủ dẫn người dùng theo đúng hành trình: xem danh mục,
-                  chọn sản phẩm, thêm giỏ hàng, thanh toán và theo dõi đơn hàng.
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                {[
-                  {
-                    title: "01",
-                    name: "Chọn sản phẩm",
-                    text: "Xem danh mục và chi tiết sản phẩm.",
-                  },
-                  {
-                    title: "02",
-                    name: "Thêm giỏ hàng",
-                    text: "Kiểm tra số lượng, giá và ưu đãi.",
-                  },
-                  {
-                    title: "03",
-                    name: "Thanh toán",
-                    text: "COD, chuyển khoản hoặc online demo.",
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-3xl border border-slate-200 bg-white p-5"
-                  >
-                    <p className="text-3xl font-black text-orange-500">
-                      {item.title}
-                    </p>
-
-                    <h3 className="mt-3 text-base font-black text-slate-950">
-                      {item.name}
-                    </h3>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-500">
-                      {item.text}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="container-page py-16">
+      <section className="container-page pb-16">
         <div className="overflow-hidden rounded-[32px] bg-gradient-to-r from-slate-950 to-slate-800 p-8 text-white md:p-10">
           <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
             <div>
