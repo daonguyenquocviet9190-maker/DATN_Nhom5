@@ -2,13 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Boxes, ClipboardList, LayoutDashboard, Percent, Search, Settings, ShoppingBag, Tags, Users } from "lucide-react";
+import { BarChart3, Boxes, ClipboardList, LayoutDashboard, Percent, Search, Settings, ShoppingBag, Tags, Users, SquareMenu, Briefcase } from "lucide-react";
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const sections = [
     { title: "Tổng quan", items: [{ name: "Dashboard", href: "/admin", icon: LayoutDashboard }] },
-    { title: "Bán hàng", items: [{ name: "Sản phẩm", href: "/admin/products", icon: ShoppingBag }, { name: "Danh mục", href: "/admin/categories", icon: Tags }, { name: "Đơn hàng", href: "/admin/orders", icon: ClipboardList }, { name: "Mã giảm giá", href: "/admin/promotions", icon: Percent }, { name: "Người dùng", href: "/admin/customers", icon: Users }, { name: "Tồn kho", href: "/admin/inventory", icon: Boxes }] },
+    { title: "Bán hàng", items: [{ name: "Sản phẩm", href: "/admin/products", icon: ShoppingBag },
+       { name: "Danh mục", href: "/admin/categories", icon: Tags },
+        { name: "Đơn hàng", href: "/admin/orders", icon: ClipboardList },
+         { name: "Mã giảm giá", href: "/admin/promotions", icon: Percent },
+          { name: "Người dùng", href: "/admin/customers", icon: Users },
+           { name: "Tồn kho", href: "/admin/inventory", icon: Boxes },
+            { name: "Banner", href: "/admin/banners", icon: SquareMenu },
+             { name: "Brands", href: "/admin/brands", icon: Briefcase },] },
     { title: "Hệ thống", items: [{ name: "Cấu hình", href: "/admin/settings", icon: Settings }] },
   ];
   return (
