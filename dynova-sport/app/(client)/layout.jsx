@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUp,
   BadgeCheck,
   ChevronDown,
   ClipboardList,
@@ -38,6 +39,30 @@ import {
   logoutUser,
 } from "@/utils/shopStorage";
 
+function SocialIcon({ type }) {
+  if (type === "facebook") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+        <path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5h1.7V4.9c-.8-.1-1.6-.2-2.4-.2-2.4 0-4 1.5-4 4.1V11H7.8v3h2.6v8h3.1Z" />
+      </svg>
+    );
+  }
+
+  if (type === "instagram") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+        <path d="M7.8 2h8.4A5.8 5.8 0 0 1 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8A5.8 5.8 0 0 1 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2Zm0 2A3.8 3.8 0 0 0 4 7.8v8.4A3.8 3.8 0 0 0 7.8 20h8.4a3.8 3.8 0 0 0 3.8-3.8V7.8A3.8 3.8 0 0 0 16.2 4H7.8Zm8.7 2.4a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2ZM12 7.2A4.8 4.8 0 1 1 12 16.8 4.8 4.8 0 0 1 12 7.2Zm0 2A2.8 2.8 0 1 0 12 14.8 2.8 2.8 0 0 0 12 9.2Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+      <path d="M16.6 5.8c-1.1-.7-1.9-1.8-2.1-3.1h-3v12.1a2.4 2.4 0 1 1-2.4-2.4c.2 0 .5 0 .7.1V9.4c-.2 0-.5-.1-.7-.1a5.5 5.5 0 1 0 5.5 5.5V8.7c1.2.9 2.6 1.4 4.1 1.4V7c-.8 0-1.5-.4-2.1-1.2Z" />
+    </svg>
+  );
+}
+
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -53,6 +78,7 @@ export default function ClientLayout({ children }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [settings, setSettings] = useState(null);
+  const [showBackTop, setShowBackTop] = useState(false);
 
   const [messages, setMessages] = useState([
     {
@@ -122,6 +148,17 @@ export default function ClientLayout({ children }) {
   }, []);
 
   useEffect(() => {
+    const handleScroll = () => {
+      setShowBackTop(window.scrollY > 500);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll);
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setOpenUser(false);
@@ -132,15 +169,45 @@ export default function ClientLayout({ children }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const products = useMemo(() => getProducts(), [openSearch, searchTerm]);
+  const products = useMemo(() => {
+    try {
+      return getProducts();
+    } catch {
+      return [];
+    }
+  }, [openSearch, searchTerm]);
+
+  const getProductImage = (product) => {
+    return (
+      product?.image ||
+      product?.image_url ||
+      product?.imageUrl ||
+      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
+    );
+  };
+
+  const getProductCategory = (product) => {
+    if (typeof product?.category === "string") return product.category;
+
+    return (
+      product?.category?.name ||
+      product?.category_name ||
+      product?.categoryName ||
+      "Dynova Sport"
+    );
+  };
 
   const searchResults = products
     .filter((product) => {
-      const keyword = searchTerm.toLowerCase();
+      const keyword = searchTerm.trim().toLowerCase();
+      if (!keyword) return false;
+
+      const name = product?.name || "";
+      const category = getProductCategory(product);
 
       return (
-        product.name.toLowerCase().includes(keyword) ||
-        product.category.toLowerCase().includes(keyword)
+        name.toLowerCase().includes(keyword) ||
+        category.toLowerCase().includes(keyword)
       );
     })
     .slice(0, 5);
@@ -178,6 +245,13 @@ export default function ClientLayout({ children }) {
     setChatInput("");
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 font-sans backdrop-blur-2xl">
@@ -196,16 +270,16 @@ export default function ClientLayout({ children }) {
             </div>
 
             <div className="flex items-center gap-5 text-slate-300">
-  <span className="flex items-center gap-2">
-    <Truck size={14} className="text-orange-400" />
-    Miễn phí giao hàng cho đơn từ 500K
-  </span>
+              <span className="flex items-center gap-2">
+                <Truck size={14} className="text-orange-400" />
+                Miễn phí giao hàng cho đơn từ 500K
+              </span>
 
-  <span className="flex items-center gap-2">
-    <ShieldCheck size={14} className="text-orange-400" />
-    Đổi trả 30 ngày
-  </span>
-</div>
+              <span className="flex items-center gap-2">
+                <ShieldCheck size={14} className="text-orange-400" />
+                Đổi trả 30 ngày
+              </span>
+            </div>
           </div>
         </div>
 
@@ -561,7 +635,7 @@ export default function ClientLayout({ children }) {
                     className="flex items-center gap-3 rounded-2xl p-2 transition hover:bg-slate-50"
                   >
                     <img
-                      src={product.image}
+                      src={getProductImage(product)}
                       alt={product.name}
                       className="h-14 w-14 rounded-2xl object-cover"
                     />
@@ -571,7 +645,7 @@ export default function ClientLayout({ children }) {
                         {product.name}
                       </p>
                       <p className="text-xs font-semibold text-slate-500">
-                        {product.category}
+                        {getProductCategory(product)}
                       </p>
                     </div>
                   </Link>
@@ -756,19 +830,44 @@ export default function ClientLayout({ children }) {
 
             <div className="flex items-center gap-3">
               <span className="font-semibold">Social</span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-xs font-black text-slate-300 transition hover:border-orange-400 hover:text-orange-400">
-                FB
-              </span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-xs font-black text-slate-300 transition hover:border-orange-400 hover:text-orange-400">
-                IG
-              </span>
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-xs font-black text-slate-300 transition hover:border-orange-400 hover:text-orange-400">
-                TT
-              </span>
+
+              <a
+                href="#"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-orange-400 hover:bg-orange-500 hover:text-white"
+                aria-label="Facebook"
+              >
+                <SocialIcon type="facebook" />
+              </a>
+
+              <a
+                href="#"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-orange-400 hover:bg-orange-500 hover:text-white"
+                aria-label="Instagram"
+              >
+                <SocialIcon type="instagram" />
+              </a>
+
+              <a
+                href="#"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-orange-400 hover:bg-orange-500 hover:text-white"
+                aria-label="TikTok"
+              >
+                <SocialIcon type="tiktok" />
+              </a>
             </div>
           </div>
         </div>
       </footer>
+
+      {showBackTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-24 right-5 z-[60] flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-xl shadow-slate-950/10 transition hover:-translate-y-1 hover:border-orange-200 hover:bg-orange-500 hover:text-white"
+          aria-label="Lên đầu trang"
+        >
+          <ArrowUp size={20} />
+        </button>
+      )}
 
       <div className="fixed bottom-5 right-5 z-[60]">
         {chatOpen && (

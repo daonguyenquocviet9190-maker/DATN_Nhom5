@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Dynova Sport Shop",
-  description: "Website bán đồ thể thao với giỏ hàng, thanh toán, đơn hàng và trang quản trị.",
+  title: "Dynova Sport",
+  description: "Website bán đồ thể thao Dynova Sport",
 };
 
 export default function RootLayout({ children }) {
