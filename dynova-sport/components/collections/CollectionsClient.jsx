@@ -344,7 +344,7 @@ const previewProducts = useMemo(() => {
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => setActiveIndex(index)}
                     className={
-                    "collection-brand-row reveal-smooth group flex min-h-[92px] items-center justify-between gap-4 rounded-[28px] border p-4 text-left " +
+                    "collection-brand-row group flex min-h-[92px] items-center justify-between gap-4 rounded-[28px] border p-4 text-left " +
                       (active
                         ? "border-orange-200 bg-white shadow-xl shadow-slate-200/70"
                         : "border-slate-200 bg-white/70 hover:border-orange-200 hover:bg-white")
@@ -389,11 +389,11 @@ const previewProducts = useMemo(() => {
             </div>
 
             {activeBrand && (
-              <div className="collections-preview-card reveal-smooth relative overflow-hidden rounded-[34px] border border-slate-200 bg-slate-950 text-white shadow-xl shadow-slate-200/70">
+              <div className="collections-preview-card relative overflow-hidden rounded-[34px] border border-slate-200 bg-slate-950 text-white shadow-xl shadow-slate-200/70">
                 <img
-                  src={getBrandCover(activeBrand, safeProducts)}
-                  alt={activeBrand.name}
-                  className="collection-soft-img absolute inset-0 h-full w-full object-cover opacity-45"
+                src={getBrandCover(activeBrand, safeProducts)}
+                alt={activeBrand.name}
+                className="collection-preview-bg absolute inset-0 h-full w-full object-cover opacity-45"
                 />
 
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/72 to-slate-950/20" />

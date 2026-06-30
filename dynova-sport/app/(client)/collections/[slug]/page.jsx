@@ -16,7 +16,7 @@ function normalizeText(value = "") {
 function matchProductBrand(product, brand) {
   const brandId =
     product?.brand_id ||
-    product?.brand_data?.id ||
+    product?.brand_data?.id ||a
     product?.brandInfo?.id ||
     product?.brand?.id;
 

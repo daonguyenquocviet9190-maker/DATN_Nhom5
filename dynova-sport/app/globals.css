@@ -608,3 +608,110 @@ html {
     opacity: 1 !important;
   }
 }
+.collection-brand-row {
+  transform: translateZ(0);
+  will-change: background-color, border-color, box-shadow;
+  transition:
+    background-color 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 420ms ease,
+    box-shadow 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 320ms ease;
+}
+
+.collection-brand-row:hover {
+  transform: translateZ(0);
+}
+
+.collections-preview-card {
+  min-height: 540px;
+  contain: layout paint;
+}
+
+.collections-preview-card img {
+  backface-visibility: hidden;
+}
+
+.collection-preview-product {
+  transform: translateZ(0);
+  min-height: 178px;
+  transition:
+    background-color 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 420ms ease;
+}
+
+.collection-preview-product:hover {
+  transform: translateY(-4px);
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.collection-preview-img {
+  transform: scale(1.001);
+  transition:
+    transform 850ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 420ms ease;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.collection-preview-product:hover .collection-preview-img {
+  transform: scale(1.06);
+}
+
+@media (max-width: 640px) {
+  .collections-preview-card {
+    min-height: auto;
+  }
+}
+.collection-brand-row,
+.collections-preview-card,
+.collection-preview-product {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.collection-brand-row {
+  transform: translateZ(0);
+  will-change: background-color, border-color, box-shadow;
+  transition:
+    background-color 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 360ms ease,
+    box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.collection-brand-row:hover {
+  transform: translateZ(0);
+}
+
+.collections-preview-card {
+  min-height: 540px;
+  contain: layout paint;
+}
+
+.collection-preview-bg {
+  transform: scale(1.01);
+  transition:
+    opacity 420ms ease,
+    transform 900ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 420ms ease;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.collections-preview-card:hover .collection-preview-bg {
+  transform: scale(1.045);
+}
+
+.collection-preview-product {
+  min-height: 178px;
+  transform: translateZ(0);
+  transition:
+    background-color 360ms ease,
+    transform 460ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 360ms ease;
+}
+
+.collection-preview-product:hover {
+  transform: translateY(-4px);
+  background-color: rgba(255, 255, 255, 0.18);
+}

@@ -1,8 +1,21 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, User, Clock, Share2, ArrowRight } from 'lucide-react';
+import { Archivo, Inter } from 'next/font/google';
+import { ArrowLeft, Calendar, User, Clock, Share2, ArrowRight, Zap } from 'lucide-react';
 import Link from 'next/link';
+
+const archivo = Archivo({
+  subsets: ['latin'],
+  weight: ['700', '800', '900'],
+  variable: '--font-archivo',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-inter',
+});
 
 // ---- Kiểu dữ liệu bài viết ----
 type Article = {
@@ -97,6 +110,7 @@ export default function NewsDetailPage() {
   const { id } = params as { id: string };
 
   const [article, setArticle] = useState<Article | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -104,9 +118,31 @@ export default function NewsDetailPage() {
     }
   }, [id]);
 
+  const handleShare = async () => {
+    const shareData = {
+      title: article?.title,
+      text: article?.title,
+      url: typeof window !== 'undefined' ? window.location.href : '',
+    };
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(shareData);
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareData.url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {
+      // người dùng huỷ chia sẻ, không cần xử lý gì thêm
+    }
+  };
+
   if (!article) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-xs font-bold uppercase tracking-widest text-gray-400">
+      <div
+        className={`${archivo.variable} ${inter.variable} min-h-screen flex items-center justify-center text-xs font-bold uppercase tracking-widest text-neutral-400 px-6 text-center`}
+        style={{ fontFamily: 'var(--font-inter)' }}
+      >
         Đang tải bài viết...
       </div>
     );
@@ -115,101 +151,121 @@ export default function NewsDetailPage() {
   const relatedArticles = RELATED_ARTICLES.filter((a) => a.id !== article.id).slice(0, 3);
 
   return (
-    <div className="bg-white min-h-screen pb-20">
+    <div className={`${archivo.variable} ${inter.variable} bg-white min-h-screen pb-16 sm:pb-20 text-[#0F0F0F]`} style={{ fontFamily: 'var(--font-inter)' }}>
 
       {/* ẢNH BÌA */}
-      <div className="relative w-full h-[50vh] bg-gray-900">
+      <div className="relative w-full h-[38vh] sm:h-[45vh] md:h-[50vh] min-h-[280px] bg-[#0F0F0F]">
         <img
           src={article.img}
           alt={article.title}
-          className="w-full h-full object-cover opacity-80"
+          className="w-full h-full object-cover opacity-75"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
 
         {/* Nút quay lại */}
-        <div className="absolute top-6 left-6 md:left-12 z-10">
+        <div className="absolute top-4 left-4 sm:top-6 sm:left-8 lg:left-12 z-10">
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-2 bg-white/10 hover:bg-white text-white hover:text-gray-900 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm transition-all shadow-sm"
+            className="flex items-center gap-1.5 sm:gap-2 bg-white/10 hover:bg-[#FF5A1F] active:bg-[#FF5A1F] text-white px-3 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider backdrop-blur-sm transition-all border border-white/30 hover:border-[#FF5A1F]"
+            style={{ fontFamily: 'var(--font-archivo)' }}
           >
-            <ArrowLeft size={14} /> Quay lại
+            <ArrowLeft size={13} /> Quay lại
           </button>
         </div>
 
         {/* Tiêu đề trên ảnh */}
-        <div className="absolute bottom-8 left-6 md:left-12 right-6 max-w-4xl space-y-3 text-white">
-          <span className="bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-sm">
-            {article.category}
+        <div className="absolute bottom-5 left-4 right-4 sm:bottom-8 sm:left-8 lg:left-12 sm:right-8 max-w-5xl space-y-3 sm:space-y-4 text-white">
+          <span
+            className="inline-flex items-center gap-1.5 bg-[#FF5A1F] text-white text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5"
+            style={{ fontFamily: 'var(--font-archivo)' }}
+          >
+            <Zap size={10} className="fill-white" /> {article.category}
           </span>
-          <h1 className="text-xl md:text-3xl font-black uppercase tracking-wide leading-tight">
+          <h1
+            className="uppercase tracking-tight leading-[1.1] sm:leading-[1.05] text-xl sm:text-2xl md:text-4xl"
+            style={{ fontFamily: 'var(--font-archivo)', fontWeight: 900 }}
+          >
             {article.title}
           </h1>
         </div>
       </div>
 
       {/* NỘI DUNG */}
-      <div className="max-w-3xl mx-auto px-6 pt-10 grid grid-cols-1 md:grid-cols-12 gap-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-6 sm:pt-10 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-10">
 
-        {/* Metadata bên trái */}
-        <div className="md:col-span-3 space-y-4 border-b md:border-b-0 md:border-r border-gray-100 pb-6 md:pb-0 md:pr-4 text-xs text-gray-500">
-          <div className="flex items-center gap-2 font-medium">
-            <Calendar size={14} className="text-orange-500" /> {article.date}
+        {/* Metadata: hàng ngang trên mobile, cột dọc từ md trở lên */}
+        <div className="md:col-span-3 flex flex-wrap items-center gap-x-5 gap-y-3 md:flex-col md:items-start md:gap-4 border-b md:border-b-0 md:border-r-2 border-neutral-200 pb-5 md:pb-0 md:pr-4 text-xs text-neutral-500">
+          <div className="flex items-center gap-2 font-semibold whitespace-nowrap">
+            <Calendar size={14} className="text-[#FF5A1F] shrink-0" /> {article.date}
           </div>
-          <div className="flex items-center gap-2 font-medium">
-            <User size={14} className="text-orange-500" /> Tác giả: {article.author}
+          <div className="flex items-center gap-2 font-semibold whitespace-nowrap">
+            <User size={14} className="text-[#FF5A1F] shrink-0" /> {article.author}
           </div>
-          <div className="flex items-center gap-2 font-medium">
-            <Clock size={14} className="text-orange-500" /> {article.readTime}
+          <div className="flex items-center gap-2 font-semibold whitespace-nowrap">
+            <Clock size={14} className="text-[#FF5A1F] shrink-0" /> {article.readTime}
           </div>
-          <button className="flex items-center gap-2 text-blue-950 font-bold hover:text-orange-500 transition-colors pt-2">
-            <Share2 size={14} /> Chia sẻ bài viết
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-2 text-[#0F0F0F] font-extrabold hover:text-[#FF5A1F] active:text-[#FF5A1F] transition-colors md:pt-2 uppercase tracking-wide text-[11px] whitespace-nowrap"
+            style={{ fontFamily: 'var(--font-archivo)' }}
+          >
+            <Share2 size={14} className="shrink-0" /> {copied ? 'Đã sao chép!' : 'Chia sẻ bài viết'}
           </button>
         </div>
 
         {/* Nội dung chính */}
-        <div className="md:col-span-9 space-y-6">
-          <p className="text-sm text-gray-700 leading-relaxed font-normal first-letter:text-4xl first-letter:font-black first-letter:text-orange-500 first-letter:mr-2 first-letter:float-left">
+        <div className="md:col-span-9 space-y-5 sm:space-y-6">
+          <p
+            className="text-base sm:text-lg text-neutral-700 leading-relaxed sm:leading-loose font-normal first-letter:text-4xl sm:first-letter:text-5xl first-letter:font-black first-letter:text-[#FF5A1F] first-letter:mr-2 first-letter:float-left"
+            style={{ fontFamily: 'var(--font-inter)' }}
+          >
             {article.content}
           </p>
 
-          <div className="bg-gray-50 border-l-4 border-orange-500 p-4 rounded-r-xl">
-            <p className="text-xs text-gray-600 italic font-medium leading-relaxed">
+          <div className="bg-neutral-50 border-l-4 border-[#FF5A1F] p-4 sm:p-5">
+            <p className="text-sm text-neutral-600 italic font-medium leading-relaxed">
               "Hãy tiếp tục theo dõi chuyên mục tin tức của Dynova Sport Shop để cập nhật liên tục các xu hướng thời trang, mẹo tập luyện cùng các sự kiện ưu đãi lớn nhất trong năm!"
             </p>
           </div>
 
-          <p className="text-sm text-gray-700 leading-relaxed font-normal">
+          <p className="text-base sm:text-lg text-neutral-700 leading-relaxed sm:leading-loose font-normal">
             Sản phẩm và trang thiết bị thể thao phục vụ bài viết hiện đang có sẵn tại toàn bộ hệ thống showroom của Dynova trên toàn quốc hoặc đặt mua trực tuyến thông qua danh mục sản phẩm chính thức của chúng tôi.
           </p>
 
           {/* Bài viết liên quan */}
           {relatedArticles.length > 0 && (
-            <div className="pt-8 border-t border-gray-100">
-              <h3 className="text-base font-black text-blue-950 uppercase tracking-wide mb-6">
-                Bài viết liên quan
+            <div className="pt-6 sm:pt-8 border-t-2 border-neutral-200">
+              <h3
+                className="uppercase tracking-wide mb-5 sm:mb-6 font-extrabold text-sm sm:text-base"
+                style={{ fontFamily: 'var(--font-archivo)' }}
+              >
+                Bài viết <span className="text-[#FF5A1F]">liên quan</span>
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-4">
                 {relatedArticles.map((related) => (
                   <Link
                     key={related.id}
                     href={`/news/${related.id}`}
-                    className="group bg-gray-50 rounded-xl overflow-hidden border border-gray-100 hover:shadow-md transition-all"
+                    className="group bg-white border-2 border-neutral-200 hover:border-[#0F0F0F] overflow-hidden transition-all"
                   >
-                    <div className="aspect-[16/9] overflow-hidden bg-gray-100">
+                    <div className="aspect-[16/9] overflow-hidden bg-neutral-100 relative">
                       <img
                         src={related.img}
                         alt={related.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
-                    </div>
-                    <div className="p-3 space-y-1">
-                      <span className="text-[10px] font-bold uppercase text-orange-500 tracking-wider">
+                      <span
+                        className="absolute top-2 left-2 bg-[#FF5A1F] text-white text-[9px] font-extrabold uppercase tracking-wider px-2 py-1"
+                        style={{ fontFamily: 'var(--font-archivo)' }}
+                      >
                         {related.category}
                       </span>
-                      <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2 group-hover:text-orange-500 transition-colors">
+                    </div>
+                    <div className="p-3 space-y-1">
+                      <p className="text-xs font-bold text-neutral-800 leading-snug line-clamp-2 group-hover:text-[#FF5A1F] transition-colors">
                         {related.title}
                       </p>
-                      <p className="text-[10px] text-gray-400">{related.date}</p>
+                      <p className="text-[10px] text-neutral-400">{related.date}</p>
                     </div>
                   </Link>
                 ))}
@@ -217,16 +273,18 @@ export default function NewsDetailPage() {
             </div>
           )}
 
-          <div className="pt-6 border-t border-gray-100 flex justify-between items-center">
+          <div className="pt-5 sm:pt-6 border-t-2 border-neutral-200 flex flex-col xs:flex-row gap-3 xs:gap-0 justify-between xs:items-center">
             <Link
               href="/news"
-              className="text-xs font-black text-orange-500 hover:underline uppercase tracking-wider flex items-center gap-1"
+              className="text-xs font-extrabold text-[#FF5A1F] hover:underline uppercase tracking-wider flex items-center gap-1"
+              style={{ fontFamily: 'var(--font-archivo)' }}
             >
               <ArrowLeft size={12} /> Về trang tin tức
             </Link>
             <Link
               href="/"
-              className="text-xs font-black text-blue-950 hover:text-orange-500 transition-colors uppercase tracking-wider flex items-center gap-1"
+              className="text-xs font-extrabold text-[#0F0F0F] hover:text-[#FF5A1F] transition-colors uppercase tracking-wider flex items-center gap-1"
+              style={{ fontFamily: 'var(--font-archivo)' }}
             >
               Trang chủ <ArrowRight size={12} />
             </Link>
