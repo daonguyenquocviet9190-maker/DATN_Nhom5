@@ -1,104 +1,25 @@
-import React from 'react';
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BarChart3, Boxes, ClipboardList, LayoutDashboard, Percent, Search, Settings, ShoppingBag, Tags, Users } from "lucide-react";
 
 export default function AdminLayout({ children }) {
+  const pathname = usePathname();
+  const sections = [
+    { title: "Tổng quan", items: [{ name: "Dashboard", href: "/admin", icon: LayoutDashboard }] },
+    { title: "Bán hàng", items: [{ name: "Sản phẩm", href: "/admin/products", icon: ShoppingBag }, { name: "Danh mục", href: "/admin/categories", icon: Tags }, { name: "Đơn hàng", href: "/admin/orders", icon: ClipboardList }, { name: "Mã giảm giá", href: "/admin/promotions", icon: Percent }, { name: "Người dùng", href: "/admin/customers", icon: Users }, { name: "Tồn kho", href: "/admin/inventory", icon: Boxes }] },
+    { title: "Hệ thống", items: [{ name: "Cấu hình", href: "/admin/settings", icon: Settings }] },
+  ];
   return (
-    <div className="flex min-h-screen bg-[#111111] text-white font-sans">
-      {/* SIDEBAR BÊN TRÁI */}
-      <aside className="w-64 bg-[#161616] border-r border-[#222222] flex flex-col justify-between p-4 fixed h-full left-0 top-0">
-        <div>
-          {/* Brand Logo */}
-          <div className="flex items-center gap-3 mb-8 px-2 py-4 border-b border-[#222222]">
-            <div className="w-10 h-10 bg-gradient-to-tr from-orange-500 to-blue-500 rounded-full flex items-center justify-center font-bold text-sm tracking-tighter">
-      
-            </div>
-            <div>
-              <h1 className="text-sm font-bold tracking-wider">DYNOVA SPORT</h1>
-            </div>
-          </div>
-
-          {/* Danh sách Menu điều hướng */}
-          <nav className="space-y-6">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3 px-2">Tổng quan</p>
-              <ul className="space-y-1">
-                <li>
-                  <a href="/admin" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#f97316] text-white font-medium text-sm transition-all">
-                    <span>📊</span> Dashboard
-                  </a>
-                </li>
-                {/* <li>
-                  <a href="/admin/thong-ke" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-[#222222] hover:text-white text-sm transition-all">
-                    <span>📈</span> Thống kê
-                  </a>
-                </li> */}
-              </ul>
-            </div>
-
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3 px-2">Quản lý</p>
-              <ul className="space-y-1">
-                {[
-                  { name: 'Sản phẩm', icon: '📦', href: '/admin/products' },
-                  { name: 'Khách hàng', icon: '👥', href: '/admin/customers' },
-                  { name: 'Đơn hàng', icon: '🛒', href: '/admin/orders' },
-                  { name: 'Đánh giá', icon: '📝', href: '/admin/ratings' },
-                  { name: 'Khuyến mãi', icon: '🏷️', href: '/admin/promotions' },
-                  { name: 'Thương hiệu', icon: '🛡️', href: '/admin/brands' },
-                  { name: 'Tồn kho', icon: '🪵', href: '/admin/inventory' },
-                  { name: 'Banner', icon: '🖼️', href: '/admin/banners' },
-                ].map((item, idx) => (
-                  <li key={idx}>
-                    <a href={item.href} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-[#222222] hover:text-white text-sm transition-all">
-                      <span>{item.icon}</span> {item.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </nav>
-        </div>
+    <div className="admin-shell min-h-screen text-white">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-xl lg:block">
+        <Link href="/" className="mb-8 flex items-center gap-3 rounded-2xl border border-white/10 p-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500 text-xs font-black">DNV</div><div><p className="font-black uppercase tracking-wide">Dynova Admin</p><p className="text-xs text-slate-400">Commerce Console</p></div></Link>
+        <nav className="space-y-6">{sections.map((section) => <div key={section.title}><p className="mb-2 px-3 text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">{section.title}</p><div className="space-y-1">{section.items.map((item) => { const Icon = item.icon; const active = pathname === item.href; return <Link key={item.href} href={item.href} className={"flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition " + (active ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" : "text-slate-400 hover:bg-white/5 hover:text-white")}><Icon size={18} /> {item.name}</Link>; })}</div></div>)}</nav>
       </aside>
-
-      {/* VÙNG CHỨA NỘI DUNG CHÍNH (BÊN PHẢI) */}
-      <div className="flex-1 pl-64 flex flex-col">
-        {/* HEADER PHÍA TRÊN */}
-        <header className="h-20 bg-[#111111] border-b border-[#222222] flex items-center justify-between px-8 sticky top-0 z-50">
-          <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              Dashboard <span className="text-xs text-gray-500 font-normal">/ Tổng quan</span>
-            </h2>
-          </div>
-
-          {/* Thanh tìm kiếm & Thông tin tài khoản */}
-          <div className="flex items-center gap-6">
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-gray-400 text-sm">🔍</span>
-              <input
-                type="text"
-                placeholder="Tìm kiếm..."
-                className="bg-[#1c1c1c] text-sm text-white pl-9 pr-4 py-2 rounded-lg w-64 border border-[#2d2d2d] focus:outline-none focus:border-orange-500 transition-all"
-              />
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button className="p-2 bg-[#1c1c1c] rounded-lg text-gray-400 hover:text-white relative">
-                <span>🔔</span>
-                <span className="absolute top-1 right-1 w-2 h-2 bg-orange-500 rounded-full"></span>
-              </button>
-              <button className="p-2 bg-[#1c1c1c] rounded-lg text-gray-400 hover:text-white">
-                <span>💬</span>
-              </button>
-              <div className="w-9 h-9 bg-orange-500 text-white font-bold rounded-lg flex items-center justify-center text-sm cursor-pointer shadow-md shadow-orange-500/20">
-                A
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* PHẦN HIỂN THỊ NỘI DUNG THAY ĐỔI CỦA TỪNG TRANG */}
-        <main className="p-8 bg-[#111111] flex-1">
-          {children}
-        </main>
+      <div className="lg:pl-72">
+        <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/65 px-5 py-4 backdrop-blur-xl lg:px-8"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Dynova Sport</p><h1 className="text-xl font-black">Bảng quản trị</h1></div><div className="hidden max-w-md flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-400 md:flex"><Search size={17} /><input className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500" placeholder="Tìm nhanh đơn hàng, sản phẩm, người dùng..." /></div><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 font-black">A</div></div></header>
+        <main className="p-5 lg:p-8">{children}</main>
       </div>
     </div>
   );

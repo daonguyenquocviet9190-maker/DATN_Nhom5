@@ -1,277 +1,285 @@
-'use client';
-import React, { useState, useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
-import { ShoppingBag, Eye, Phone, Mail, MapPin, ArrowRight, User, LogOut, Settings, ClipboardList } from 'lucide-react';
-import "../globals.css";
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ClipboardList,
+  Heart,
+  LogOut,
+  Mail,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Phone,
+  Search,
+  Send,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  User,
+  X,
+} from "lucide-react";
+import { getCart, getCurrentUser, getProducts, getSettings, getWishlistProducts, logoutUser } from "@/utils/shopStorage";
 
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
-  const dropdownRef = useRef(null);
-
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [displayName, setDisplayName] = useState('Khách hàng');
+  const router = useRouter();
+  const menuRef = useRef(null);
+  const [user, setUser] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
+  const [wishlistCount, setWishlistCount] = useState(0);
+  const [openUser, setOpenUser] = useState(false);
+  const [openMobile, setOpenMobile] = useState(false);
+  const [openSearch, setOpenSearch] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState([
+    { role: "shop", text: "Dynova xin chào. Bạn cần tư vấn size, đơn hàng hay thanh toán?" },
+  ]);
+  const [settings, setSettings] = useState(null);
 
   const menuItems = [
-    { name: 'Trang chủ', href: '/' },
-    { name: 'Giới thiệu', href: '/about' },
-    { name: 'Sản phẩm', href: '/shop' },
-    { name: 'Tin tức', href: '/news' },
-    { name: 'Bộ sưu tập', href: '/collections' },
-    { name: 'Liên hệ', href: '/contact' },
+    { name: "Trang chủ", href: "/" },
+    { name: "Sản phẩm", href: "/shop" },
+    { name: "Bộ sưu tập", href: "/collections" },
+    { name: "Tin tức", href: "/news" },
+    { name: "Giới thiệu", href: "/about" },
+    { name: "Liên hệ", href: "/contact" },
   ];
 
-  useEffect(() => {
-    const savedStatus = localStorage.getItem('isLoggedIn');
-    const savedName = localStorage.getItem('userDisplayName');
-
-    if (savedStatus === 'true') {
-      setIsLoggedIn(true);
-      if (savedName) {
-        setDisplayName(savedName);
-      }
-    }
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('isLoggedIn');
-    setIsLoggedIn(false);
-    setShowUserMenu(false);
-    window.location.reload();
+  const syncState = () => {
+    setUser(getCurrentUser());
+    setCartCount(getCart().reduce((sum, item) => sum + Number(item.quantity || 0), 0));
+    setWishlistCount(getWishlistProducts().length);
+    setSettings(getSettings());
   };
 
   useEffect(() => {
+    syncState();
+    window.addEventListener("storage", syncState);
+    window.addEventListener("dynova:storage", syncState);
+    return () => {
+      window.removeEventListener("storage", syncState);
+      window.removeEventListener("dynova:storage", syncState);
+    };
+  }, []);
+
+  useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowUserMenu(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpenUser(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const products = useMemo(() => getProducts(), [openSearch, searchTerm]);
+  const searchResults = products
+    .filter((product) => product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.category.toLowerCase().includes(searchTerm.toLowerCase()))
+    .slice(0, 5);
+
+  const handleSearch = (event) => {
+    event.preventDefault();
+    const query = searchTerm.trim();
+    if (!query) return;
+    setOpenSearch(false);
+    router.push("/search?q=" + encodeURIComponent(query));
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setOpenUser(false);
+    syncState();
+    router.push("/");
+  };
+
+  const sendChat = (preset) => {
+    const text = (preset || chatInput).trim();
+    if (!text) return;
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text },
+      { role: "shop", text: "Mình đã nhận thông tin. Nhân viên Dynova sẽ phản hồi trong ít phút. Bạn có thể để lại số điện thoại nếu cần gọi lại." },
+    ]);
+    setChatInput("");
+  };
+
   return (
     <>
-      {/* ================= HEADER CHUNG TRÀN VIỀN ================= */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 px-6 md:px-12 py-4 flex items-center justify-between w-full">
-        {/* Logo Brand */}
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-gradient-to-tr from-blue-900 to-orange-500 rounded-full flex items-center justify-center text-white font-black text-xs tracking-tighter">DYNOVA</div>
-          <span className="font-black text-xl tracking-wider text-blue-950">DYNOVA<span className="text-orange-500 text-xs font-bold block -mt-1 tracking-widest">SPORT SHOP</span></span>
-        </div>
-
-        {/* Navigation links */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-semibold">
-          {menuItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`transition-all pb-1 uppercase tracking-wider text-xs ${isActive
-                    ? 'text-orange-500 border-b-2 border-orange-500 font-bold scale-105'
-                    : 'text-gray-600 hover:text-orange-500 font-medium'
-                  }`}
-              >
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Icons Controls */}
-        <div className="flex items-center gap-5 text-gray-600">
-          <button className="hover:text-orange-500 transition-colors"><Eye size={20} /></button>
-
-          {/* ICON GIỎ HÀNG */}
-          <Link href="/cart" className="hover:text-orange-500 transition-colors relative block">
-            <ShoppingBag size={20} />
-            <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
-              2
-            </span>
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/92 backdrop-blur-xl">
+        <div className="container-page flex h-20 items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-[11px] font-black tracking-tight text-white">DNV</div>
+            <div className="leading-tight">
+              <p className="text-lg font-black uppercase tracking-wide text-slate-950">Dynova</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange-500">Sport Shop</p>
+            </div>
           </Link>
 
-          {/* KHỐI DROPDOWN USER */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className={`transition-colors p-1 rounded-full border ${isLoggedIn
-                  ? 'text-orange-500 border-orange-200 bg-orange-50'
-                  : 'text-gray-600 border-gray-200 hover:text-orange-500 hover:border-orange-500'
-                }`}
-            >
-              <User size={20} />
+          <nav className="hidden items-center gap-7 lg:flex">
+            {menuItems.map((item) => {
+              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+              return (
+                <Link key={item.href} href={item.href} className={"text-xs font-black uppercase tracking-wider transition " + (active ? "text-orange-500" : "text-slate-600 hover:text-orange-500")}>
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button onClick={() => setOpenSearch(true)} className="btn-ghost flex h-11 w-11 items-center justify-center rounded-xl" aria-label="Tìm kiếm">
+              <Search size={18} />
             </button>
+            <Link href="/wishlist" className="btn-ghost relative hidden h-11 w-11 items-center justify-center rounded-xl sm:flex" aria-label="Yêu thích">
+              <Heart size={18} />
+              {wishlistCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-950 px-1 text-[10px] font-black text-white">{wishlistCount}</span>}
+            </Link>
+            <Link href="/cart" className="btn-ghost relative flex h-11 w-11 items-center justify-center rounded-xl" aria-label="Giỏ hàng">
+              <ShoppingBag size={18} />
+              {cartCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-black text-white">{cartCount}</span>}
+            </Link>
 
-            {showUserMenu && (
-              <div className="absolute right-0 mt-3 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-2 z-50 animate-fadeIn">
-                {!isLoggedIn ? (
-                  <div className="px-2 space-y-1">
-                    <p className="text-[11px] font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Tài khoản Dynova</p>
-                    <Link
-                      href="/login"
-                      onClick={() => setShowUserMenu(false)}
-                      className="w-full text-xs font-bold uppercase tracking-wide bg-orange-500 hover:bg-orange-600 text-white px-3 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-center block"
-                    >
-                      Đăng nhập
-                    </Link>
-                    <Link
-                      href="/register"
-                      onClick={() => setShowUserMenu(false)}
-                      className="w-full text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 px-3 py-2.5 rounded-lg transition-colors text-center border border-gray-100 mt-1 block"
-                    >
-                      Tạo tài khoản mới
-                    </Link>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="px-4 py-2 border-b border-gray-50 pb-3 mb-1">
-                      <p className="text-xs text-gray-400 font-medium">Xin chào,</p>
-                      <p className="text-sm font-black text-blue-950 truncate">{displayName}</p>
+            <div className="relative" ref={menuRef}>
+              <button onClick={() => setOpenUser(!openUser)} className="btn-ghost flex h-11 items-center gap-2 rounded-xl px-3">
+                <User size={17} />
+                <span className="hidden max-w-24 truncate text-xs font-bold md:block">{user?.fullName || "Tài khoản"}</span>
+                <ChevronDown size={14} />
+              </button>
+              {openUser && (
+                <div className="float-in absolute right-0 mt-3 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
+                  {user ? (
+                    <>
+                      <div className="border-b border-slate-100 px-3 py-3">
+                        <p className="text-xs text-slate-500">Xin chào</p>
+                        <p className="truncate text-sm font-black text-slate-950">{user.fullName}</p>
+                      </div>
+                      <Link href="/profile" onClick={() => setOpenUser(false)} className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><Settings size={16} /> Hồ sơ cá nhân</Link>
+                      <Link href="/orders" onClick={() => setOpenUser(false)} className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><ClipboardList size={16} /> Lịch sử mua hàng</Link>
+                      {user.role === "admin" && <Link href="/admin" className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm font-bold text-orange-600 hover:bg-orange-50"><ShieldCheck size={16} /> Vào quản trị</Link>}
+                      <button onClick={handleLogout} className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-bold text-rose-600 hover:bg-rose-50"><LogOut size={16} /> Đăng xuất</button>
+                    </>
+                  ) : (
+                    <div className="space-y-2 p-2">
+                      <Link href="/login" onClick={() => setOpenUser(false)} className="btn-primary block rounded-xl px-4 py-3 text-center text-xs font-black uppercase tracking-wider">Đăng nhập</Link>
+                      <Link href="/register" onClick={() => setOpenUser(false)} className="btn-ghost block rounded-xl px-4 py-3 text-center text-xs font-black uppercase tracking-wider">Đăng ký</Link>
                     </div>
-                    <div className="px-1.5 space-y-0.5">
-                      <Link
-                        href="/profile"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex items-center gap-2.5 text-xs text-gray-700 font-semibold hover:bg-gray-50 px-3 py-2.5 rounded-lg transition-colors"
-                      >
-                        <Settings size={15} className="text-gray-400" /> Hồ sơ cá nhân
-                      </Link>
-                      <Link
-                        href="#/orders"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex items-center gap-2.5 text-xs text-gray-700 font-semibold hover:bg-gray-50 px-3 py-2.5 rounded-lg transition-colors"
-                      >
-                        <ClipboardList size={15} className="text-gray-400" /> Quản lý đơn hàng
-                      </Link>
-                      <div className="border-t border-gray-100 my-1" />
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-2.5 text-xs text-rose-600 font-bold hover:bg-rose-50 px-3 py-2.5 rounded-lg transition-colors"
-                      >
-                        <LogOut size={15} /> Đăng xuất
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => setOpenMobile(true)} className="btn-ghost flex h-11 w-11 items-center justify-center rounded-xl lg:hidden" aria-label="Mở menu">
+              <Menu size={19} />
+            </button>
           </div>
-
-          <a href="tel:0866347730" className="hidden lg:flex items-center gap-2 bg-orange-500 text-white text-xs font-bold px-4 py-2 rounded-full shadow-md shadow-orange-500/20 hover:bg-orange-600 transition-colors">
-            <Phone size={12} /> (+84) 0866347730
-          </a>
         </div>
       </header>
 
-      {/* ================= NỘI DUNG THAY ĐỔI ================= */}
-      <main className="min-h-screen">
-        {children}
-      </main>
-
-      {/* ================= FOOTER HỆ THỐNG TRÀN VIỀN ================= */}
-      <footer className="bg-[#232220] text-white pt-16 pb-8 border-t-4 border-orange-500 mt-20 font-sans">
-        <div className="container mx-auto px-6 max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-10 pb-8 border-b border-zinc-700 items-start">
-          <div className="md:col-span-5 space-y-3">
-            <h4 className="text-sm font-bold uppercase tracking-wider text-gray-200">ĐĂNG KÝ NHẬN THÔNG TIN TỪ DYNOVA</h4>
-            <p className="text-xs text-gray-400">Đừng bỏ lỡ các chương trình khuyến mãi mới, hấp dẫn</p>
-            <div className="flex max-w-md rounded-md overflow-hidden bg-white p-1.5 items-center justify-between shadow-sm">
-              <input type="email" placeholder="Nhập Email" className="w-full bg-transparent px-3 text-sm text-gray-800 focus:outline-none placeholder-gray-400" />
-              <button className="text-orange-500 hover:text-orange-600 px-2 flex items-center justify-center transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.475.553-.717.07L11 13 1.946 9.315Z" />
-                </svg>
-              </button>
+      {openMobile && (
+        <div className="fixed inset-0 z-[70] bg-slate-950/45 lg:hidden">
+          <div className="float-in ml-auto h-full w-[84%] max-w-sm bg-white p-5 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <p className="text-sm font-black uppercase tracking-wider text-slate-950">Dynova Menu</p>
+              <button onClick={() => setOpenMobile(false)} className="btn-ghost rounded-xl p-2"><X size={18} /></button>
             </div>
-          </div>
-
-          <div className="md:col-span-4 space-y-3 text-sm text-gray-300 pt-2">
-            <div className="flex items-center gap-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-              </svg>
-              <span className="font-medium">19009201</span>
+            <div className="space-y-2">
+              {menuItems.map((item) => <Link key={item.href} href={item.href} onClick={() => setOpenMobile(false)} className="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">{item.name}</Link>)}
+              <Link href="/wishlist" onClick={() => setOpenMobile(false)} className="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Danh sách yêu thích</Link>
+              <Link href="/orders" onClick={() => setOpenMobile(false)} className="block rounded-xl px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Theo dõi đơn hàng</Link>
             </div>
-            <div className="flex items-center gap-3 border-t border-zinc-700/50 pt-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500">
-                <rect width="20" height="16" x="2" y="4" rx="2"></rect>
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-              </svg>
-              <span className="text-gray-300">cskh@DYNOVA.vn</span>
-            </div>
-          </div>
-
-          <div className="md:col-span-3 flex md:justify-end gap-4 pt-2">
-            <a href="#" className="text-gray-300 hover:text-white transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" /></svg>
-            </a>
-            <a href="#" className="text-gray-300 hover:text-white transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.914 1.448 5.518 3.717 7.158V22l3.417-1.875c.91.253 1.871.392 2.866.392 5.523 0 10-4.146 10-9.259S17.523 2 12 2zm1.036 12.332l-2.56-2.739-5 2.739 5.5-5.842 2.56 2.739 5-2.739-5.5 5.842z" /></svg>
-            </a>
-            <a href="#" className="text-gray-300 hover:text-white transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.032 2.61.1 3.86.39.08.77.41 1.49.94 2.04.6.61 1.42.99 2.3 1.05v3.66c-.95-.08-1.88-.41-2.67-.97-.58-.41-1.07-.94-1.42-1.57v7.41c.07 1.8-.57 3.57-1.79 4.87-1.42 1.51-3.5 2.31-5.61 2.13-2.35-.19-4.43-1.63-5.36-3.81-.97-2.27-.45-4.94 1.29-6.66 1.42-1.4 3.49-2.03 5.46-1.65v3.73c-1.03-.31-2.16-.04-2.95.7-.75.71-1.08 1.77-.87 2.78.21 1.02.99 1.83 1.98 2.07.99.24 2.05-.13 2.65-.96.38-.54.55-1.19.5-1.85V0h1.79z" /></svg>
-            </a>
-            <a href="#" className="text-gray-300 hover:text-white transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line></svg>
-            </a>
           </div>
         </div>
+      )}
 
-        <div className="container mx-auto px-6 max-w-7xl grid grid-cols-2 md:grid-cols-5 gap-8 py-12 text-xs text-gray-400 font-light border-b border-zinc-700/50">
-          <div className="space-y-3">
-            <h5 className="font-bold text-white text-sm uppercase">DYNOVA</h5>
-            <p className="hover:text-white cursor-pointer transition-colors">Đăng ký thành viên</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Ưu đãi & Đặc quyền</p>
-          </div>
-
-          <div className="space-y-3">
-            <h5 className="font-bold text-white text-sm uppercase">MUA SẮM</h5>
-            <p className="hover:text-white cursor-pointer transition-colors">Hỏi đáp- FAQs</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Hướng dẫn mua hàng</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Hướng dẫn chọn size</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Hướng dẫn thanh toán VNPAY</p>
-            <p className="hover:text-white cursor-pointer transition-colors">In ấn đội nhóm TEAMPRINT</p>
-          </div>
-
-          <div className="space-y-3">
-            <h5 className="font-bold text-white text-sm uppercase">CHÍNH SÁCH</h5>
-            <p className="hover:text-white cursor-pointer transition-colors">Chính sách đổi trả & bảo hành</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Chính sách giao hàng</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Chính sách khuyến mãi</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Chính sách bảo mật</p>
-          </div>
-
-          <div className="space-y-3">
-            <h5 className="font-bold text-white text-sm uppercase">VỀ DYNOVA</h5>
-            <p className="hover:text-white cursor-pointer transition-colors">Giới Thiệu</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Cam kết thương hiệu</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Hệ thống cửa hàng</p>
-            <p className="hover:text-white cursor-pointer transition-colors">Tuyển dụng</p>
-          </div>
-
-          <div className="space-y-4 col-span-2 md:col-span-1 text-[11px] leading-relaxed">
-            <h5 className="font-bold text-white text-sm uppercase">ĐỊA CHỈ LIÊN HỆ</h5>
-            <p>Chi nhánh HCM: số 1, Đường B, Khu ADC Phường Trung Mỹ Tây, Quận 12, thành phố Hồ Chí Minh, Việt Nam.</p>
-            <p>Head Office: Tỉnh lộ 510, Thị Trấn Bút Sơn Huyện Hoằng Hóa, Tỉnh Tỉnh Thanh Hóa.</p>
+      {openSearch && (
+        <div className="fixed inset-0 z-[80] bg-slate-950/55 p-4 backdrop-blur-sm">
+          <div className="float-in mx-auto mt-16 max-w-2xl rounded-3xl bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between px-2">
+              <p className="text-sm font-black uppercase tracking-wider text-slate-950">Tìm kiếm sản phẩm</p>
+              <button onClick={() => setOpenSearch(false)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSearch} className="flex gap-2">
+              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus className="input-control" placeholder="Nhập tên sản phẩm, danh mục hoặc thương hiệu..." />
+              <button className="btn-primary rounded-xl px-5" aria-label="Tìm"><Search size={18} /></button>
+            </form>
+            <div className="mt-4 space-y-2">
+              {searchResults.map((product) => (
+                <Link key={product.id} href={"/shop/product/" + product.id} onClick={() => setOpenSearch(false)} className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-50">
+                  <img src={product.image} alt={product.name} className="h-14 w-14 rounded-xl object-cover" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-900">{product.name}</p>
+                    <p className="text-xs font-semibold text-slate-500">{product.category}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="container mx-auto px-6 max-w-7xl pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-400 font-light relative">
-          <div>
-            Số ĐKKD: 4828007025 do sở Kế Hoạch và Đầu Tư TP HCM cấp lần đầu ngày 05/08/2002
+      <main className="min-h-screen">{children}</main>
+
+      <footer className="mt-16 border-t border-slate-200 bg-slate-950 text-white">
+        <div className="container-page grid gap-10 py-14 md:grid-cols-4">
+          <div className="md:col-span-2">
+            <p className="text-2xl font-black uppercase tracking-wide">Dynova Sport</p>
+            <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">Cửa hàng đồ thể thao dành cho người tập luyện nghiêm túc: sản phẩm rõ thông tin, thanh toán linh hoạt và hỗ trợ nhanh.</p>
+            <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-slate-300">
+              <span className="rounded-full border border-white/10 px-3 py-2">Đổi trả 30 ngày</span>
+              <span className="rounded-full border border-white/10 px-3 py-2">COD và chuyển khoản</span>
+              <span className="rounded-full border border-white/10 px-3 py-2">Online gateway demo</span>
+            </div>
           </div>
           <div>
-            <img src="https://images.dmca.com/Badges/logo-bo-cong-thuong.png" alt="Đã thông báo bộ công thương" className="h-10 object-contain brightness-90 contrast-125" style={{ maxWidth: '150px' }} />
+            <p className="font-black uppercase tracking-wider">Liên hệ</p>
+            <div className="mt-4 space-y-3 text-sm text-slate-300">
+              <p className="flex items-center gap-2"><Phone size={15} /> {settings?.hotline || "0866 347 730"}</p>
+              <p className="flex items-center gap-2"><Mail size={15} /> {settings?.email || "cskh@dynova.vn"}</p>
+              <p className="flex items-start gap-2"><MapPin size={15} className="mt-1" /> {settings?.address || "TP. Hồ Chí Minh"}</p>
+            </div>
           </div>
-
-          <button className="absolute bottom-4 right-6 md:right-0 bg-[#fbb03b] hover:bg-orange-500 text-white p-2.5 rounded-md shadow-lg transition-colors hidden md:block">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m18 15-6-6-6 6"></path>
-            </svg>
-          </button>
+          <div>
+            <p className="font-black uppercase tracking-wider">Tài khoản</p>
+            <div className="mt-4 grid gap-3 text-sm text-slate-300">
+              <Link href="/profile" className="hover:text-white">Hồ sơ cá nhân</Link>
+              <Link href="/orders" className="hover:text-white">Theo dõi đơn hàng</Link>
+              <Link href="/wishlist" className="hover:text-white">Wishlist</Link>
+              <Link href="/admin" className="hover:text-white">Dashboard quản trị</Link>
+            </div>
+          </div>
         </div>
       </footer>
+
+      <div className="fixed bottom-5 right-5 z-[60]">
+        {chatOpen && (
+          <div className="chat-panel float-in mb-3 w-[calc(100vw-40px)] max-w-sm overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <div className="bg-slate-950 p-4 text-white">
+              <p className="text-sm font-black uppercase tracking-wider">Chat Dynova</p>
+              <p className="mt-1 text-xs text-slate-300">Hỗ trợ tư vấn size, đơn hàng và thanh toán.</p>
+            </div>
+            <div className="max-h-72 space-y-3 overflow-y-auto p-4">
+              {messages.map((message, index) => (
+                <div key={index} className={"rounded-2xl px-3 py-2 text-sm " + (message.role === "user" ? "ml-8 bg-orange-500 text-white" : "mr-8 bg-slate-100 text-slate-700")}>
+                  {message.text}
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                {["Tư vấn size", "Kiểm tra đơn", "Hỗ trợ thanh toán"].map((item) => <button key={item} onClick={() => sendChat(item)} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-200">{item}</button>)}
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-slate-100 p-3">
+              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendChat()} className="input-control py-2 text-sm" placeholder="Nhập tin nhắn..." />
+              <button onClick={() => sendChat()} className="btn-primary rounded-xl px-3" aria-label="Gửi"><Send size={16} /></button>
+            </div>
+          </div>
+        )}
+        <button onClick={() => setChatOpen(!chatOpen)} className="btn-primary flex h-14 w-14 items-center justify-center rounded-2xl" aria-label="Chat trực tuyến">
+          {chatOpen ? <X size={22} /> : <MessageCircle size={22} />}
+        </button>
+      </div>
     </>
   );
 }

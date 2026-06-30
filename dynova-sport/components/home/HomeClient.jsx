@@ -1,284 +1,114 @@
-'use client';
-import '@/app/(client)/home.css';
-import React, { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+"use client";
 
-export default function HomePage({
-  products: apiProducts = [],
-}) {
-  const [activeTab, setActiveTab] = useState('khuyenmai');
-  const collectionsRef = useRef(null);
+import Link from "next/link";
+import { ArrowRight, Heart, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
+import { categories, formatCurrency, heroSlides } from "@/data/shop";
+import { addToCart, toggleWishlist } from "@/utils/shopStorage";
+import { useState } from "react";
 
-  // Kích hoạt bộ quét màn hình để tạo hiệu ứng lướt tới đâu hiện tới đó
-  useEffect(() => {
-    const observerOptions = {
-      root: null,
-      rootMargin: '0px',
-      threshold: 0.12, // Kích hoạt khi cấu trúc lộ diện được 12% trên màn hình
-    };
+export default function HomeClient({ products = [] }) {
+  const [notice, setNotice] = useState("");
+  const featured = products.slice(0, 4);
+  const best = products.slice(4, 8);
 
-    const handleIntersect = (entries, observer) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('reveal-visible');
-          // Sau khi hiện rồi thì không quét lại nữa để mượt hiệu ứng
-          observer.unobserve(entry.target);
-        }
-      });
-    };
-
-    const observer = new IntersectionObserver(handleIntersect, observerOptions);
-    const hiddenElements = document.querySelectorAll('.reveal-hidden');
-    hiddenElements.forEach((el) => observer.observe(el));
-
-    return () => observer.disconnect();
-  }, []);
-
-  const scrollCollections = (direction) => {
-    if (collectionsRef.current) {
-      const container = collectionsRef.current;
-      const firstCard = container.firstElementChild;
-      if (firstCard) {
-        const cardWidth = firstCard.offsetWidth + 24; 
-        container.scrollBy({ left: direction * cardWidth, behavior: 'smooth' });
-      }
-    }
+  const handleAdd = (product) => {
+    addToCart(product, { quantity: 1 });
+    setNotice("Đã thêm " + product.name + " vào giỏ hàng.");
+    setTimeout(() => setNotice(""), 2200);
   };
-  // Bộ sưu tập theo dòng sản phẩm nổi bật
 
-  const categories = [
-    { id: 1, name: 'Áo Bóng Đá', icon: '👕' },
-    { id: 2, name: 'Giày Thể Thao', icon: '👟' },
-    { id: 3, name: 'Vợt Pickleball', icon: '🏓' },
-    { id: 4, name: 'Quần Thể Thao', icon: '🩳' },
-    { id: 5, name: 'Balo - Túi Xách', icon: '🎒' },
-  ];
-  const collections = [
-    { id: 1, brand: 'Nike', name: 'Mercurial', img: 'https://images.unsplash.com/photo-1511886929837-354d827aae26?w=600&auto=format&fit=crop&q=80' },
-    { id: 2, brand: 'Adidas', name: 'Predator', img: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80' },
-    { id: 3, brand: 'Mizuno', name: 'Morelia', tagline: 'Japan', img: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=600&auto=format&fit=crop&q=80' },
-    { id: 4, brand: 'Puma', name: 'Future', img: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80' },
-    { id: 5, brand: 'Nike', name: 'Phantom', img: 'https://images.unsplash.com/photo-1511886929837-354d827aae26?w=600&auto=format&fit=crop&q=80' },
-    { id: 6, brand: 'Adidas', name: 'X Crazyfast', img: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80' },
-    { id: 7, brand: 'Puma', name: 'King', tagline: 'Legacy', img: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=600&auto=format&fit=crop&q=80' },
-    { id: 8, brand: 'New Balance', name: 'Furon', img: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80' },
-  ];
+  const handleWishlist = (product) => {
+    toggleWishlist(product.id);
+    setNotice("Đã cập nhật danh sách yêu thích.");
+    setTimeout(() => setNotice(""), 1800);
+  };
 
-//   const products = [
-//     { id: 1, name: 'Áo Polo Nam Adidas Mercedes - Amg Petronas Formula 1 Team Engineers - Trắng', price: '2.300.000đ', sale: '-20%', img: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=500&auto=format&fit=crop&q=60' },
-//     { id: 2, name: 'Áo Polo Nam Adidas Mercedes - Amg Petronas Formula 1 Team Engineers - Trắng', price: '2.300.000đ', sale: '-20%', img: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=500&auto=format&fit=crop&q=60' },
-//     { id: 3, name: 'Áo Polo Nam Adidas Mercedes - Amg Petronas Formula 1 Team Engineers - Trắng', price: '2.300.000đ', sale: '-20%', img: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=500&auto=format&fit=crop&q=60' },
-//     { id: 4, name: 'Áo Polo Nam Adidas Mercedes - Amg Petronas Formula 1 Team Engineers - Trắng', price: '2.300.000đ', sale: '-20%', img: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=500&auto=format&fit=crop&q=60' },
-//   ];
-
-  const newsItems = [
-    { id: 1, title: 'HYROX Là Gì? Hướng Dẫn Trang Bị Tập HYROX Cho Người Mới', img: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=500&auto=format&fit=crop&q=60' },
-    { id: 2, title: 'Giày Chạy Đua UA Velociti Elite: Bí Quyết Chinh Phục Kỷ Lục Marathon', img: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=500&auto=format&fit=crop&q=60' },
-    { id: 3, title: 'Quần bó cơ là gì? 5 lợi ích "không thể bỏ qua" của quần bó cơ giúp bạn...', img: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=500&auto=format&fit=crop&q=60' },
-    { id: 4, title: 'TOP 5 Giày Đá Bóng Adidas Dành Cho Sân Cỏ Nhân Tạo - Chính Hãng - Giá Tốt', img: 'https://images.unsplash.com/photo-1511886929837-354d827aae26?w=500&auto=format&fit=crop&q=60' },
-  ];
   return (
-    <div className="home-wrapper space-y-24 pb-24 overflow-hidden">
+    <div className="bg-[#f7f8fb]">
+      {notice && <div className="fixed right-5 top-24 z-50 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">{notice}</div>}
 
-      {/* 1. HERO BANNER (Luôn hiện đầu tiên, không cần cuộn) */}
-      <div className="relative w-full h-[88vh] bg-cover bg-center flex items-center px-6 md:px-20" style={{ backgroundImage: "linear-gradient(to right, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.3)), url('https://images.unsplash.com/photo-1530549387789-4c1017266635?w=1600&auto=format&fit=crop&q=80')" }}>
-        <div className="max-w-2xl space-y-6 text-white z-10">
-          <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-md">Bứt phá mọi giới hạn</span>
-          <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tight leading-none text-white">
-            TỐC ĐỘ <br />
-            <span className="text-orange-500">CHÍNH XÁC</span> <br />
-            KIỂM SOÁT <br />
-            <span className="text-emerald-400">CHIẾN THẮNG</span>
-          </h1>
-          <p className="text-sm text-gray-300 font-light max-w-md leading-relaxed">Dynova đồng hành cùng các chiến binh kiên cường trên hành trình chinh phục những đỉnh cao thể thao mới.</p>
-          <button className="btn-hero-premium bg-orange-500 text-white font-bold text-xs uppercase tracking-widest px-7 py-4 rounded-xl flex items-center gap-2 shadow-lg">
-            Khám phá ngay <ArrowRight size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* 2. DANH MỤC */}
-      <section className="container mx-auto px-4 max-w-7xl space-y-8 reveal-hidden">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-black text-blue-950 uppercase tracking-wider">Danh mục sản phẩm</h2>
-          <div className="w-12 h-0.5 bg-orange-500 mx-auto rounded-full"></div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5">
-          {categories.map((cat, index) => (
-            <div 
-              key={cat.id} 
-              className={`category-card-premium rounded-2xl p-6 text-center cursor-pointer group reveal-hidden delay-${(index + 1) * 100}`}
-            >
-              <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{cat.icon}</div>
-              <p className="text-xs font-black text-gray-800 uppercase tracking-wider">{cat.name}</p>
+      <section className="relative min-h-[calc(100vh-80px)] overflow-hidden bg-slate-950 text-white">
+        <img src={heroSlides[0].image} alt="Dynova Sport" className="absolute inset-0 h-full w-full object-cover opacity-55" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/75 to-transparent" />
+        <div className="container-page relative flex min-h-[calc(100vh-80px)] items-center py-16">
+          <div className="max-w-2xl reveal-up">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-orange-200">
+              <Sparkles size={14} /> Bộ sưu tập 2026
             </div>
+            <h1 className="text-5xl font-black uppercase leading-[0.95] tracking-tight md:text-7xl">Dynova Sport</h1>
+            <p className="mt-5 max-w-xl text-base leading-7 text-slate-200 md:text-lg">Website mua sắm đồ thể thao với trải nghiệm như cửa hàng thật: lọc sản phẩm, chọn biến thể, giỏ hàng, checkout, thanh toán COD, chuyển khoản và online demo.</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/shop" className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider">Mua sắm ngay <ArrowRight size={16} /></Link>
+              <Link href="/checkout" className="rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:bg-white/20">Thanh toán nhanh</Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="container-page -mt-10 grid gap-4 md:grid-cols-3">
+        {[{ icon: Truck, title: "Giao hàng linh hoạt", text: "COD, chuyển khoản, online gateway demo." }, { icon: ShieldCheck, title: "Đổi trả 30 ngày", text: "Theo dõi đơn hàng rõ từng trạng thái." }, { icon: Star, title: "Sản phẩm chọn lọc", text: "Biến thể size, màu, tồn kho và đánh giá." }].map((item) => {
+          const Icon = item.icon;
+          return <div key={item.title} className="surface relative rounded-2xl p-5"><Icon className="text-orange-500" size={24} /><h3 className="mt-3 font-black text-slate-950">{item.title}</h3><p className="mt-1 text-sm leading-6 text-slate-500">{item.text}</p></div>;
+        })}
+      </section>
+
+      <section className="container-page py-16">
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-500">Danh mục</p>
+            <h2 className="mt-2 text-3xl font-black text-slate-950">Mua theo nhu cầu tập luyện</h2>
+          </div>
+          <Link href="/shop" className="hidden text-sm font-black text-orange-600 hover:text-orange-700 md:block">Xem tất cả</Link>
+        </div>
+        <div className="grid gap-4 md:grid-cols-5">
+          {categories.map((category) => (
+            <Link key={category.id} href={"/shop?category=" + category.id} className="product-card group overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="h-40 overflow-hidden"><img src={category.image} alt={category.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /></div>
+              <div className="p-4"><h3 className="font-black text-slate-950">{category.name}</h3><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{category.description}</p></div>
+            </Link>
           ))}
         </div>
       </section>
 
-      {/* 2.5 BỘ SƯU TẬP */}
-      <section className="container mx-auto px-4 max-w-7xl space-y-10 reveal-hidden">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-black text-blue-950 uppercase tracking-wider">Bộ sưu tập nổi bật</h2>
-          <div className="w-12 h-0.5 bg-orange-500 mx-auto rounded-full"></div>
-        </div>
-
-        <div className="relative group/nav">
-          <button
-            onClick={() => scrollCollections(-1)}
-            aria-label="Cuộn sang trái"
-            className="btn-nav-glass absolute -left-5 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-xl shadow-lg flex items-center justify-center text-gray-700 opacity-0 group-hover/nav:opacity-100 transition-opacity duration-300"
-          >
-            <ChevronLeft size={20} />
-          </button>
-
-          <div
-            ref={collectionsRef}
-            className="flex gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-6 [&::-webkit-scrollbar]:hidden"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {collections.map((col, index) => (
-              <Link
-                href={`/collections/${col.id}`}
-                key={col.id}
-                className={`group relative collection-card-premium bg-white rounded-2xl overflow-hidden h-[390px] w-[260px] flex-shrink-0 snap-start flex flex-col reveal-hidden delay-${((index % 4) + 1) * 100}`}
-              >
-                <div className="pt-8 px-6 text-center z-10 space-y-0.5">
-                  <p className="text-[11px] font-bold text-orange-500 uppercase tracking-widest">{col.brand}</p>
-                  <h3 className="text-xl font-black text-blue-950 uppercase tracking-tight leading-tight group-hover:text-orange-600 transition-colors">{col.name}</h3>
-                  {col.tagline && (
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.25em] pt-1">{col.tagline}</p>
-                  )}
+      <section className="bg-white py-16">
+        <div className="container-page">
+          <div className="mb-8 flex items-end justify-between gap-4">
+            <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-500">Sản phẩm nổi bật</p><h2 className="mt-2 text-3xl font-black text-slate-950">Được chọn nhiều tuần này</h2></div>
+            <Link href="/shop" className="text-sm font-black text-orange-600 hover:text-orange-700">Vào cửa hàng</Link>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {featured.map((product) => (
+              <article key={product.id} className="product-card rounded-2xl border border-slate-200 bg-white p-3">
+                <Link href={"/shop/product/" + product.id} className="block overflow-hidden rounded-xl bg-slate-100"><img src={product.image} alt={product.name} className="aspect-[4/4.5] w-full object-cover transition duration-500 hover:scale-105" /></Link>
+                <div className="p-2">
+                  <p className="mt-2 text-[11px] font-black uppercase tracking-wider text-orange-500">{product.category}</p>
+                  <Link href={"/shop/product/" + product.id}><h3 className="mt-1 line-clamp-2 min-h-10 text-sm font-black text-slate-950 hover:text-orange-600">{product.name}</h3></Link>
+                  <div className="mt-3 flex items-center justify-between"><p className="font-black text-slate-950">{formatCurrency(product.price)}</p><span className="text-xs font-bold text-slate-400">{product.rating} sao</span></div>
+                  <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                    <button onClick={() => handleAdd(product)} className="btn-primary rounded-xl px-3 py-3 text-xs font-black uppercase">Thêm giỏ</button>
+                    <button onClick={() => handleWishlist(product)} className="btn-ghost rounded-xl px-3" aria-label="Yêu thích"><Heart size={16} /></button>
+                  </div>
                 </div>
-                <div className="absolute bottom-0 left-0 w-full h-56 flex items-end justify-center overflow-hidden mb-6">
-                  <img
-                    src={col.img}
-                    alt={`${col.brand} ${col.name}`}
-                    className="w-[85%] object-contain group-hover:scale-108 group-hover:-translate-y-3 transition-transform duration-500 drop-shadow-2xl"
-                  />
-                </div>
-              </Link>
+              </article>
             ))}
           </div>
-
-          <button
-            onClick={() => scrollCollections(1)}
-            aria-label="Cuộn sang phải"
-            className="btn-nav-glass absolute -right-5 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-xl shadow-lg flex items-center justify-center text-gray-700 opacity-0 group-hover/nav:opacity-100 transition-opacity duration-300"
-          >
-            <ChevronRight size={20} />
-          </button>
         </div>
       </section>
 
-      {/* 3. KHỐI HAI CỘT TIN TỨC LỚN & SẢN PHẨM MỚI */}
-      <section className="container mx-auto px-4 max-w-7xl">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-
-          {/* Cột trái: Tin tức lớn */}
-          <div className="lg:col-span-7 space-y-8 reveal-hidden">
-            <h2 className="text-xl font-black text-blue-950 uppercase tracking-wider border-b border-gray-100 pb-3">Tin tức mới nhất</h2>
-
-            <div className="space-y-4 group cursor-pointer news-card-premium p-4 rounded-2xl reveal-hidden">
-              <div className="overflow-hidden rounded-xl relative">
-                <img src="https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&auto=format&fit=crop&q=60" alt="In áo bóng đá" className="w-full h-72 object-cover group-hover:scale-103 transition-transform duration-500" />
-                <span className="absolute top-4 left-4 bg-orange-500 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-md shadow-sm">Thiết kế ngay</span>
-              </div>
-              <div className="space-y-2 px-1">
-                <h3 className="text-lg font-black text-blue-950 group-hover:text-orange-500 transition-colors uppercase leading-tight">Dịch Vụ In Áo Bóng Đá Chính Hãng Theo Yêu Cầu Tại Dynova Chuẩn Fan</h3>
-                <p className="text-xs text-gray-400 font-light leading-relaxed">In tên & số theo yêu cầu cho áo đá bóng chính hãng tại Dynova. Khám phá ngay!</p>
-                <Link href="/news/5" className="text-xs font-bold text-orange-500 hover:text-orange-600 inline-flex items-center gap-1 pt-1">Xem chi tiết bài viết →</Link>
-              </div>
-            </div>
-            </div>
-
-{/* Sản phẩm bên phải */}
-          <div className="lg:col-span-5 space-y-8">
-            <h2 className="text-2xl font-black text-blue-950 uppercase tracking-wide border-b-2 border-gray-100 pb-3">Sản phẩm mới</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-              <div className="news-card-premium p-3 rounded-2xl space-y-3 group cursor-pointer reveal-hidden delay-100">
-                <div className="overflow-hidden rounded-xl h-40">
-                  <img src="https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=400&auto=format&fit=crop&q=60" alt="Pickleball" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                </div>
-                <h4 className="text-xs font-bold text-blue-950 group-hover:text-orange-500 transition-colors line-clamp-2 leading-snug px-1">Mới Chơi Pickleball Nên Bắt Đầu Từ Đâu? Cách Chọn Vợt, Giày Và Gear Phù Hợp</h4>
-                <Link href="/news/6" className="text-[10px] font-bold text-gray-400 group-hover:text-orange-500 block px-1">Xem thêm →</Link>
-              </div>
-              <div className="news-card-premium p-3 rounded-2xl space-y-3 group cursor-pointer reveal-hidden delay-200">
-                <div className="overflow-hidden rounded-xl h-40">
-                  <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&auto=format&fit=crop&q=60" alt="Nike Air Max" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                </div>
-                <h4 className="text-xs font-bold text-blue-950 group-hover:text-orange-500 transition-colors line-clamp-2 leading-snug px-1">Nike Air Max Day 2026 Tại Supersports Crescent Mall – Sự Kiện Toàn Cầu Không Thể Bỏ Lỡ!</h4>
-                <Link href="/news/7" className="text-[10px] font-bold text-gray-400 group-hover:text-orange-500 block px-1">Xem thêm →</Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Cột phải: Sản phẩm mới */}
-          <div className="lg:col-span-5 space-y-8 reveal-hidden">
-            <h2 className="text-xl font-black text-blue-950 uppercase tracking-wider border-b border-gray-100 pb-3">Sản phẩm mới</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {apiProducts.map((prod, index) => (
-                <div key={prod.id} className={`product-card-premium rounded-2xl p-4 space-y-3 relative group reveal-hidden delay-${(index + 1) * 100}`}>
-                  <span className="absolute top-3 left-3 bg-orange-500 text-white font-black text-[9px] px-2.5 py-1 rounded-md z-10 shadow-sm">{prod.sale_price}</span>
-                  <div className="overflow-hidden rounded-xl bg-gray-50 h-48 flex items-center justify-center">
-                    <img src={prod.thumbnail} alt={prod.name} className="object-cover h-full w-full group-hover:scale-105 transition-transform duration-500" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest">Adidas</p>
-                    <h3 className="text-xs font-bold text-gray-800 line-clamp-2 leading-snug min-h-[32px] group-hover:text-orange-500 transition-colors">{prod.name}</h3>
-                    <p className="text-sm font-black text-blue-950 pt-1">{Number(prod.price).toLocaleString('vi-VN')}₫</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+      <section className="container-page grid gap-6 py-16 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-3xl bg-slate-950 text-white">
+          <img src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=1200&auto=format&fit=crop&q=80" alt="Training" className="h-72 w-full object-cover opacity-80" />
+          <div className="p-7"><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Ưu đãi thành viên</p><h2 className="mt-2 text-3xl font-black">Nhập DYNOVANEW giảm ngay 100.000đ</h2><p className="mt-3 text-sm leading-6 text-slate-300">Mã áp dụng trong giỏ hàng và checkout cho đơn từ 500.000đ.</p></div>
         </div>
-      </section>
-
-      {/* 4. SECTION PHÂN LOẠI TIN TỨC THEO TAB */}
-      <section className="bg-gray-50/50 py-20 border-y border-gray-100 reveal-hidden">
-        <div className="container mx-auto px-4 max-w-7xl space-y-12">
-
-          <div className="text-center space-y-4">
-            <h2 className="text-xl font-black text-blue-950 uppercase tracking-wider">Tin tức thời trang & Thể thao</h2>
-            <div className="flex justify-center gap-3 text-[11px] font-bold uppercase tracking-wider">
-              <button onClick={() => setActiveTab('noibat')} className={`tab-btn-premium px-6 py-3 rounded-xl border ${activeTab === 'noibat' ? 'bg-white border-gray-200 text-gray-800 shadow-sm' : 'bg-transparent border-transparent text-gray-400 hover:text-gray-600'}`}>Tin nổi bật</button>
-              <button onClick={() => setActiveTab('khuyenmai')} className={`tab-btn-premium px-6 py-3 rounded-xl border ${activeTab === 'khuyenmai' ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/10' : 'bg-transparent border-transparent text-gray-400 hover:text-gray-600'}`}>Tin Khuyến mãi</button>
-              <button onClick={() => setActiveTab('meo')} className={`tab-btn-premium px-6 py-3 rounded-xl border ${activeTab === 'meo' ? 'bg-white border-gray-200 text-gray-800 shadow-sm' : 'bg-transparent border-transparent text-gray-400 hover:text-gray-600'}`}>Mẹo thời trang</button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-            {newsItems.map((item, index) => (
-              <div key={item.id} className={`news-card-premium rounded-2xl overflow-hidden flex flex-col h-full group reveal-hidden delay-${(index + 1) * 100}`}>
-                <div className="h-44 overflow-hidden">
-                  <img src={item.img} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                </div>
-                <div className="p-4 flex flex-col justify-between flex-grow space-y-4">
-                  <h3 className="text-xs font-bold text-gray-800 line-clamp-3 leading-snug group-hover:text-orange-500 transition-colors">{item.title}</h3>
-                  <Link
-                    href={`/news/${item.id}`}
-                    className="text-[10px] font-bold text-gray-400 group-hover:text-orange-500 inline-flex items-center gap-1 mt-auto transition-colors"
-                  >
-                    Xem thêm →
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="w-full flex justify-center pt-4 reveal-hidden">
-            <Link href="/news" className="btn-view-all-premium border-2 border-orange-500 text-orange-500 font-bold text-xs uppercase tracking-widest px-9 py-4 rounded-xl shadow-sm">
-              Xem tất cả tin tức
+        <div className="grid gap-4 sm:grid-cols-2">
+          {best.map((product) => (
+            <Link key={product.id} href={"/shop/product/" + product.id} className="soft-card product-card flex gap-3 rounded-2xl p-3">
+              <img src={product.image} alt={product.name} className="h-24 w-24 rounded-xl object-cover" />
+              <div><p className="text-[11px] font-black uppercase text-orange-500">{product.category}</p><h3 className="mt-1 line-clamp-2 text-sm font-black text-slate-950">{product.name}</h3><p className="mt-2 text-sm font-black text-slate-900">{formatCurrency(product.price)}</p></div>
             </Link>
-          </div>
-
+          ))}
         </div>
       </section>
-
     </div>
   );
 }

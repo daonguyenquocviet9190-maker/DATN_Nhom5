@@ -1,162 +1,25 @@
-'use client';
-import React, { useState } from 'react';
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Edit3, Plus, Save, Trash2 } from "lucide-react";
+import { formatCurrency } from "@/data/shop";
+import { getCategories, getProducts, saveProducts } from "@/utils/shopStorage";
+
+const emptyProduct = { name: "", brand: "Dynova", categoryId: "running", category: "Chạy bộ", price: 0, oldPrice: 0, stock: 0, image: "", rating: 4.8, sold: 0, sizes: ["S", "M", "L"], colors: ["Đen", "Trắng"], tags: ["new"], description: "" };
 
 export default function ProductsAdmin() {
-  // 1. Giả lập danh sách sản phẩm ban đầu của Dynova Sport
-  const [products, setProducts] = useState([
-    { id: 'PROD-001', name: 'Giày Chạy Bộ Dynova X-Pro', category: 'Giày thể thao', price: 1250000, stock: 45, status: 'Còn hàng', image: '👟' },
-    { id: 'PROD-002', name: 'Áo T-Shirt Thể Thao Pro-Dry', category: 'Quần áo', price: 350000, stock: 120, status: 'Còn hàng', image: '👕' },
-    { id: 'PROD-003', name: 'Quần Short Tập Luyện Co Giãn', category: 'Quần áo', price: 280000, stock: 0, status: 'Hết hàng', image: '🩳' },
-    { id: 'PROD-004', name: 'Bóng Đá Thăng Long Size 5', category: 'Phụ kiện', price: 450000, stock: 15, status: 'Còn hàng', image: '⚽' },
-    { id: 'PROD-005', name: 'Thảm Tập Yoga TPE Cao Cấp', category: 'Phụ kiện', price: 520000, stock: 8, status: 'Sắp hết hàng', image: '🧘' },
-  ]);
-
-  // 2. State quản lý Tìm kiếm và Bộ lọc danh mục
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Tất cả');
-
-  // 3. Hàm xử lý Xóa sản phẩm nhanh
-  const handleDelete = (id) => {
-    if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này không?')) {
-      setProducts(products.filter(prod => prod.id !== id));
-    }   
-  };
-
-  // 4. Lọc sản phẩm theo từ khóa tìm kiếm và danh mục được chọn
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'Tất cả' || product.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  return (
-    <div className="space-y-6 text-white">
-      {/* TIÊU ĐỀ TRANG & NÚT THÊM MỚI */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold">Quản lý sản phẩm</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Danh sách sản phẩm hiện có trên hệ thống Dynova Sport</p>
-        </div>
-        <button className="bg-orange-500 hover:bg-orange-600 text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-orange-500/10">
-          <span>+</span> Thêm sản phẩm mới
-        </button>
-      </div>
-
-      {/* THANH TÌM KIẾM & BỘ LỌC DANH MỤC */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-[#161616] border border-[#222222] p-4 rounded-2xl">
-        {/* Khung tìm kiếm */}
-        <div className="relative md:col-span-2">
-          <input
-            type="text"
-            placeholder="Tìm kiếm sản phẩm theo tên hoặc mã mã sản phẩm..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-[#1c1c1c] border border-[#2d2d2d] focus:border-orange-500 rounded-xl px-4 py-2.5 text-sm outline-none transition-all placeholder-gray-500 text-white"
-          />
-        </div>
-        
-        {/* Khung chọn Danh mục */}
-        <div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full bg-[#1c1c1c] border border-[#2d2d2d] focus:border-orange-500 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white cursor-pointer"
-          >
-            <option value="Tất cả">Tất cả danh mục</option>
-            <option value="Giày thể thao">Giày thể thao</option>
-            <option value="Quần áo">Quần áo</option>
-            <option value="Phụ kiện">Phụ kiện</option>
-          </select>
-        </div>
-      </div>
-
-      {/* BẢNG HIỂN THỊ DANH SÁCH SẢN PHẨM */}
-      <div className="bg-[#161616] border border-[#222222] rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-400">
-            <thead className="text-xs uppercase bg-[#1c1c1c] text-gray-500 font-bold">
-              <tr>
-                <th className="p-4">Hình ảnh</th>
-                <th className="p-4">Mã sản phẩm</th>
-                <th className="p-4">Tên sản phẩm</th>
-                <th className="p-4">Danh mục</th>
-                <th className="p-4">Giá bán</th>
-                <th className="p-4">Kho hàng</th>
-                <th className="p-4">Trạng thái</th>
-                <th className="p-4 text-center">Hành động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#222222]">
-              {filteredProducts.length > 0 ? (
-                filteredProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-[#1c1c1c]/40 transition-colors">
-                    {/* Ảnh đại diện demo bằng Emoji */}
-                    <td className="p-4">
-                      <div className="w-10 h-10 bg-[#222222] rounded-xl flex items-center justify-center text-xl border border-[#2d2d2d]">
-                        {product.image}
-                      </div>
-                    </td>
-                    {/* Mã sản phẩm */}
-                    <td className="p-4 font-semibold text-gray-400">{product.id}</td>
-                    {/* Tên sản phẩm */}
-                    <td className="p-4 text-white font-medium max-w-[200px] truncate">{product.name}</td>
-                    {/* Danh mục */}
-                    <td className="p-4 text-gray-400">{product.category}</td>
-                    {/* Giá tiền định dạng VND */}
-                    <td className="p-4 text-white font-semibold">
-                      {product.price.toLocaleString('vi-VN')}đ
-                    </td>
-                    {/* Số lượng tồn kho */}
-                    <td className="p-4 text-gray-300 font-medium">{product.stock} sp</td>
-                    {/* Trạng thái tồn kho với màu sắc tương ứng */}
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
-                        product.status === 'Còn hàng' ? 'text-emerald-500 bg-emerald-500/10' :
-                        product.status === 'Sắp hết hàng' ? 'text-amber-500 bg-amber-500/10' :
-                        'text-rose-500 bg-rose-500/10'
-                      }`}>
-                        {product.status}
-                      </span>
-                    </td>
-                    {/* Nhóm nút hành động Sửa / Xóa */}
-                    <td className="p-4 text-center">
-                      <div className="flex justify-center gap-2">
-                        <button className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors" title="Sửa sản phẩm">
-                          ✏️
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(product.id)}
-                          className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors" 
-                          title="Xóa sản phẩm"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                /* Hiển thị khi không tìm thấy kết quả lọc */
-                <tr>
-                  <td colSpan="8" className="p-8 text-center text-gray-500">
-                    🔍 Không tìm thấy sản phẩm nào khớp với bộ lọc hiện tại.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* PHÂN TRANG GIẢ LẬP (FOOTER TABLE) */}
-        <div className="p-4 bg-[#1c1c1c] border-t border-[#222222] flex justify-between items-center text-xs text-gray-500">
-          <p>Hiển thị {filteredProducts.length} trên tổng số {products.length} sản phẩm</p>
-          <div className="flex gap-1">
-            <button className="px-3 py-1 bg-[#222222] rounded hover:text-white transition-colors" disabled>Trước</button>
-            <button className="px-3 py-1 bg-orange-500 text-white rounded font-bold">1</button>
-            <button className="px-3 py-1 bg-[#222222] rounded hover:text-white transition-colors" disabled>Sau</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("all");
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(emptyProduct);
+  useEffect(() => { setProducts(getProducts()); setCategories(getCategories()); }, []);
+  const filtered = useMemo(() => products.filter((item) => (category === "all" || item.categoryId === category) && (item.name + item.sku + item.brand).toLowerCase().includes(query.toLowerCase())), [products, query, category]);
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const startEdit = (product) => { setEditing(product.id); setForm({ ...product, sizes: product.sizes || [], colors: product.colors || [], tags: product.tags || [] }); };
+  const reset = () => { setEditing(null); setForm(emptyProduct); };
+  const submit = (event) => { event.preventDefault(); const cat = categories.find((item) => item.id === form.categoryId); const product = { ...form, id: editing || Date.now(), sku: form.sku || "DNV-" + String(Date.now()).slice(-5), category: cat?.name || form.category, price: Number(form.price), oldPrice: Number(form.oldPrice || 0), stock: Number(form.stock || 0), rating: Number(form.rating || 4.8), sold: Number(form.sold || 0), image: form.image || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80", gallery: form.gallery || [form.image || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"] }; const next = editing ? products.map((item) => item.id === editing ? product : item) : [product, ...products]; setProducts(next); saveProducts(next); reset(); };
+  const remove = (id) => { const next = products.filter((item) => item.id !== id); setProducts(next); saveProducts(next); };
+  return <div className="space-y-6"><div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Product MGMT</p><h2 className="mt-2 text-3xl font-black">Quản lý sản phẩm</h2><p className="mt-2 text-sm text-slate-400">Thêm, sửa, xóa, lọc và cập nhật tồn kho sản phẩm.</p></div><button onClick={reset} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white"><Plus className="mr-2 inline" size={16} /> Thêm mới</button></div><form onSubmit={submit} className="admin-card rounded-3xl p-5"><div className="grid gap-4 md:grid-cols-4"><input required value={form.name} onChange={(e) => update("name", e.target.value)} className="admin-input md:col-span-2" placeholder="Tên sản phẩm" /><input value={form.brand} onChange={(e) => update("brand", e.target.value)} className="admin-input" placeholder="Thương hiệu" /><select value={form.categoryId} onChange={(e) => update("categoryId", e.target.value)} className="admin-input">{categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select><input type="number" value={form.price} onChange={(e) => update("price", e.target.value)} className="admin-input" placeholder="Giá bán" /><input type="number" value={form.oldPrice} onChange={(e) => update("oldPrice", e.target.value)} className="admin-input" placeholder="Giá cũ" /><input type="number" value={form.stock} onChange={(e) => update("stock", e.target.value)} className="admin-input" placeholder="Tồn kho" /><input value={form.image} onChange={(e) => update("image", e.target.value)} className="admin-input" placeholder="URL hình ảnh" /><textarea value={form.description} onChange={(e) => update("description", e.target.value)} className="admin-input md:col-span-4" placeholder="Mô tả" /></div><button className="mt-4 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white"><Save className="mr-2 inline" size={16} /> {editing ? "Lưu sản phẩm" : "Tạo sản phẩm"}</button></form><div className="admin-card rounded-3xl p-5"><div className="mb-4 grid gap-3 md:grid-cols-[1fr_240px]"><input value={query} onChange={(e) => setQuery(e.target.value)} className="admin-input" placeholder="Tìm theo tên, SKU, thương hiệu" /><select value={category} onChange={(e) => setCategory(e.target.value)} className="admin-input"><option value="all">Tất cả danh mục</option>{categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs uppercase text-slate-500"><tr><th className="p-3">Sản phẩm</th><th className="p-3">Danh mục</th><th className="p-3">Giá</th><th className="p-3">Kho</th><th className="p-3 text-right">Thao tác</th></tr></thead><tbody className="divide-y divide-white/10">{filtered.map((product) => <tr key={product.id} className="hover:bg-white/5"><td className="p-3"><div className="flex items-center gap-3"><img src={product.image} alt={product.name} className="h-12 w-12 rounded-xl object-cover" /><div><p className="font-black text-white">{product.name}</p><p className="text-xs text-slate-500">{product.sku}</p></div></div></td><td className="p-3 text-slate-300">{product.category}</td><td className="p-3 font-bold text-orange-300">{formatCurrency(product.price)}</td><td className="p-3"><span className={"status-pill " + (product.stock > 10 ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300")}>{product.stock} sp</span></td><td className="p-3 text-right"><button onClick={() => startEdit(product)} className="rounded-xl p-2 text-blue-300 hover:bg-blue-400/10"><Edit3 size={16} /></button><button onClick={() => remove(product.id)} className="rounded-xl p-2 text-rose-300 hover:bg-rose-400/10"><Trash2 size={16} /></button></td></tr>)}</tbody></table></div></div></div>;
 }

@@ -1,171 +1,34 @@
-'use client';
-import './register.css'; // 1. Hãy chắc chắn rằng bạn đã import file css này vào
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Mail, Lock, User, Phone, ArrowRight, ShieldCheck } from 'lucide-react';
-import Link from 'next/link';
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { ArrowRight, Lock, Mail, Phone, User } from "lucide-react";
+import { registerUser } from "@/utils/shopStorage";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: ''
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "", password: "", confirmPassword: "" });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleRegister = (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (formData.password !== formData.confirmPassword) {
-      setError('Mật khẩu xác nhận không trùng khớp!');
-      return;
-    }
-
-    setIsLoading(true);
-
-    setTimeout(() => {
-      setIsLoading(false);
-      setIsSuccess(true);
-      
-      localStorage.setItem('userDisplayName', formData.fullName);
-
-      setTimeout(() => {
-        router.push('/login');
-      }, 1500);
-    }, 1500);
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const submit = (event) => {
+    event.preventDefault();
+    setError("");
+    if (form.password.length < 6) return setError("Mật khẩu cần tối thiểu 6 ký tự.");
+    if (form.password !== form.confirmPassword) return setError("Mật khẩu xác nhận không khớp.");
+    const result = registerUser(form);
+    if (!result.ok) return setError(result.message);
+    setMessage("Đăng ký thành công. Bạn có thể đăng nhập ngay.");
+    setTimeout(() => router.push("/login"), 900);
   };
 
   return (
-    /* Đổi thành: register-container */
-    <div className="register-container min-h-[85vh] flex items-center justify-center px-4 py-12">
-      {/* Đổi thành: register-card */}
-      <div className="max-w-md w-full register-card rounded-3xl p-8 space-y-6">
-        
-        {/* Header */}
-        <div className="text-center space-y-2">
-          {/* Đổi thành: logo-dynova-premium */}
-          <div className="w-12 h-12 logo-dynova-premium rounded-full flex items-center justify-center text-white font-black text-[10px] mx-auto tracking-tighter">DYNOVA</div>
-          <h2 className="text-xl font-black text-blue-950 uppercase tracking-wide pt-2">Tạo tài khoản mới</h2>
-          <p className="text-xs text-gray-400 font-light">Đăng ký thành viên để nhận hàng ngàn ưu đãi từ Dynova Sport</p>
-        </div>
-
-        {/* Thông báo thành công */}
-        {isSuccess && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-4 text-xs font-bold uppercase tracking-wide flex items-center gap-2 transition-all">
-            <ShieldCheck size={16} className="text-emerald-500" /> Đăng ký thành công! Đang chuyển đến trang Đăng nhập...
-          </div>
-        )}
-
-        {/* Thông báo lỗi */}
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold text-center animate-shake">
-            {error}
-          </div>
-        )}
-
-        {/* Form Đăng ký */}
-        <form onSubmit={handleRegister} className="space-y-4">
-          
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Họ và tên *</label>
-            {/* Thêm bao bọc: input-wrapper-premium */}
-            <div className="input-wrapper-premium">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400 pointer-events-none">
-                <User size={16} />
-              </span>
-              {/* Thêm class: register-input */}
-              <input 
-                type="text" required name="fullName" value={formData.fullName} onChange={handleChange}
-                placeholder="Ví dụ: Nguyễn Văn A"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all text-gray-800 font-medium register-input"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Địa chỉ Email *</label>
-              <div className="input-wrapper-premium">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400 pointer-events-none">
-                  <Mail size={16} />
-                </span>
-                <input 
-                  type="email" required name="email" value={formData.email} onChange={handleChange}
-                  placeholder="name@company.com"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all text-gray-800 font-medium register-input"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Số điện thoại *</label>
-              <div className="input-wrapper-premium">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400 pointer-events-none">
-                  <Phone size={16} />
-                </span>
-                <input 
-                  type="tel" required name="phone" value={formData.phone} onChange={handleChange}
-                  placeholder="Số điện thoại"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all text-gray-800 font-medium register-input"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mật khẩu *</label>
-            <div className="input-wrapper-premium">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400 pointer-events-none">
-                <Lock size={16} />
-              </span>
-              <input 
-                type="password" required name="password" value={formData.password} onChange={handleChange}
-                placeholder="••••••••"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all text-gray-800 font-medium register-input"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Xác nhận mật khẩu *</label>
-            <div className="input-wrapper-premium">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400 pointer-events-none">
-                <Lock size={16} />
-              </span>
-              <input 
-                type="password" required name="confirmPassword" value={formData.confirmPassword} onChange={handleChange}
-                placeholder="••••••••"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all text-gray-800 font-medium register-input"
-              />
-            </div>
-          </div>
-
-          {/* Đổi thành class nút bấm mới: btn-register-premium */}
-          <button 
-            type="submit" disabled={isLoading || isSuccess}
-            className="w-full btn-register-premium text-white font-bold py-3.5 px-6 rounded-xl text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md mt-4 disabled:bg-gray-300"
-          >
-            {isLoading ? 'Đang khởi tạo tài khoản...' : 'Đăng ký ngay'} <ArrowRight size={14} />
-          </button>
-        </form>
-
-        {/* Đổi link thành: login-link-premium */}
-        <div className="text-center pt-2 border-t border-gray-50 text-xs text-gray-400">
-          Bạn đã có tài khoản rồi?{' '}
-          <Link href="/login" className="text-orange-500 font-bold login-link-premium">Đăng nhập ngay</Link>
-        </div>
-
+    <div className="min-h-screen bg-[#f7f8fb] py-12">
+      <div className="container-page grid items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-500">Thành viên Dynova</p><h1 className="mt-3 text-4xl font-black text-slate-950 md:text-5xl">Tạo tài khoản để mua nhanh hơn</h1><p className="mt-4 text-sm leading-7 text-slate-500">Lưu hồ sơ giao hàng, theo dõi đơn, quản lý wishlist và nhận ưu đãi thành viên.</p><img src="https://images.unsplash.com/photo-1508609349937-5ec4ae374ebf?w=1200&auto=format&fit=crop&q=80" alt="Register" className="mt-8 h-72 w-full rounded-3xl object-cover" /></div>
+        <div className="surface rounded-3xl p-7 md:p-8"><h2 className="text-2xl font-black text-slate-950">Đăng ký tài khoản</h2>{error && <div className="mt-4 rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-600">{error}</div>}{message && <div className="mt-4 rounded-2xl bg-emerald-50 p-3 text-sm font-bold text-emerald-600">{message}</div>}<form onSubmit={submit} className="mt-6 grid gap-4 md:grid-cols-2"><label className="block md:col-span-2"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Họ tên</span><div className="relative"><User className="absolute left-3 top-3.5 text-slate-400" size={16} /><input required value={form.fullName} onChange={(e) => update("fullName", e.target.value)} className="input-control pl-10" /></div></label><label className="block"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Email</span><div className="relative"><Mail className="absolute left-3 top-3.5 text-slate-400" size={16} /><input required type="email" value={form.email} onChange={(e) => update("email", e.target.value)} className="input-control pl-10" /></div></label><label className="block"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Số điện thoại</span><div className="relative"><Phone className="absolute left-3 top-3.5 text-slate-400" size={16} /><input required value={form.phone} onChange={(e) => update("phone", e.target.value)} className="input-control pl-10" /></div></label><label className="block"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Mật khẩu</span><div className="relative"><Lock className="absolute left-3 top-3.5 text-slate-400" size={16} /><input required type="password" value={form.password} onChange={(e) => update("password", e.target.value)} className="input-control pl-10" /></div></label><label className="block"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Xác nhận</span><div className="relative"><Lock className="absolute left-3 top-3.5 text-slate-400" size={16} /><input required type="password" value={form.confirmPassword} onChange={(e) => update("confirmPassword", e.target.value)} className="input-control pl-10" /></div></label><button className="btn-primary flex items-center justify-center gap-2 rounded-2xl py-4 text-xs font-black uppercase tracking-wider md:col-span-2">Đăng ký <ArrowRight size={15} /></button></form><p className="mt-5 text-center text-sm text-slate-500">Đã có tài khoản? <Link href="/login" className="font-black text-orange-600">Đăng nhập</Link></p></div>
       </div>
     </div>
   );

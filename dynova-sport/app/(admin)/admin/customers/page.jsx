@@ -1,167 +1,18 @@
-'use client';
-import React, { useState } from 'react';
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Lock, Search, ShieldCheck, Unlock, Users } from "lucide-react";
+import { getOrders, getUsers, saveUsers } from "@/utils/shopStorage";
+import { formatCurrency } from "@/data/shop";
 
 export default function CustomersAdmin() {
-  // 1. Giả lập danh sách khách hàng của hệ thống Dynova Sport
-  const [customers, setCustomers] = useState([
-    { id: 'CUST-001', name: 'Nguyễn Văn A', email: 'vana@gmail.com', phone: '0901234567', totalOrders: 12, totalSpent: 15450000, status: 'Hoạt động', avatar: '👨‍🦱' },
-    { id: 'CUST-002', name: 'Lê Hoàng Nam', email: 'namle@gmail.com', phone: '0918765432', totalOrders: 5, totalSpent: 2150000, status: 'Hoạt động', avatar: '👦' },
-    { id: 'CUST-003', name: 'Trần Thị Bích', email: 'bichtran@gmail.com', phone: '0933445566', totalOrders: 28, totalSpent: 42800000, status: 'Hoạt động', avatar: '👩' },
-    { id: 'CUST-004', name: 'Phạm Minh Tuấn', email: 'tuanpham@gmail.com', phone: '0977889900', totalOrders: 0, totalSpent: 0, status: 'Bị khóa', avatar: '👨' },
-    { id: 'CUST-005', name: 'Hoàng Thu Thảo', email: 'thaohoang@gmail.com', phone: '0981122334', totalOrders: 2, totalSpent: 850000, status: 'Hoạt động', avatar: '👩‍🦰' },
-  ]);
-
-  // 2. State quản lý Tìm kiếm và Bộ lọc trạng thái tài khoản
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Tất cả');
-
-  // 3. Hàm xử lý Khóa / Mở khóa tài khoản khách hàng nhanh
-  const toggleStatus = (id) => {
-    setCustomers(customers.map(cust => {
-      if (cust.id === id) {
-        const newStatus = cust.status === 'Hoạt động' ? 'Bị khóa' : 'Hoạt động';
-        return { ...cust, status: newStatus };
-      }
-      return cust;
-    }));
-  };
-
-  // 4. Bộ lọc danh sách khách hàng dựa trên dữ liệu nhập vào
-  const filteredCustomers = customers.filter(customer => {
-    const matchesSearch = 
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone.includes(searchTerm);
-    const matchesStatus = statusFilter === 'Tất cả' || customer.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  return (
-    <div className="space-y-6 text-white">
-      {/* TIÊU ĐỀ TRANG & KHÁI QUÁT */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold">Quản lý khách hàng</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Quản lý thông tin tài khoản, lịch sử mua hàng và trạng thái thành viên</p>
-        </div>
-        <div className="bg-[#161616] border border-[#222222] px-4 py-2 rounded-xl text-xs text-gray-400">
-          Tổng thành viên: <span className="text-orange-500 font-bold text-sm ml-1">{customers.length}</span>
-        </div>
-      </div>
-
-      {/* THANH TÌM KIẾM & BỘ LỌC TRẠNG THÁI */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-[#161616] border border-[#222222] p-4 rounded-2xl">
-        {/* Nhập ô tìm kiếm */}
-        <div className="relative md:col-span-2">
-          <input
-            type="text"
-            placeholder="Tìm theo tên, email hoặc số điện thoại khách hàng..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-[#1c1c1c] border border-[#2d2d2d] focus:border-orange-500 rounded-xl px-4 py-2.5 text-sm outline-none transition-all placeholder-gray-500 text-white"
-          />
-        </div>
-        
-        {/* Bộ lọc trạng thái tài khoản */}
-        <div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full bg-[#1c1c1c] border border-[#2d2d2d] focus:border-orange-500 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white cursor-pointer"
-          >
-            <option value="Tất cả">Tất cả trạng thái</option>
-            <option value="Hoạt động">Đang hoạt động</option>
-            <option value="Bị khóa">Đang bị khóa</option>
-          </select>
-        </div>
-      </div>
-
-      {/* BẢNG DANH SÁCH KHÁCH HÀNG */}
-      <div className="bg-[#161616] border border-[#222222] rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-400">
-            <thead className="text-xs uppercase bg-[#1c1c1c] text-gray-500 font-bold">
-              <tr>
-                <th className="p-4">Khách hàng</th>
-                <th className="p-4">Mã số</th>
-                <th className="p-4">Liên hệ</th>
-                <th className="p-4 text-center">Đơn mua</th>
-                <th className="p-4">Tổng chi tiêu</th>
-                <th className="p-4">Trạng thái</th>
-                <th className="p-4 text-center">Hành động</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#222222]">
-              {filteredCustomers.length > 0 ? (
-                filteredCustomers.map((customer) => (
-                  <tr key={customer.id} className="hover:bg-[#1c1c1c]/40 transition-colors">
-                    {/* Cột thông tin cá nhân đại diện */}
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-[#222222] rounded-full flex items-center justify-center text-lg border border-[#2d2d2d]">
-                          {customer.avatar}
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">{customer.name}</p>
-                          <span className="text-[11px] text-gray-500">{customer.email}</span>
-                        </div>
-                      </div>
-                    </td>
-                    {/* Mã khách hàng */}
-                    <td className="p-4 font-semibold text-xs text-gray-500">{customer.id}</td>
-                    {/* Số điện thoại */}
-                    <td className="p-4 text-gray-300 text-xs">{customer.phone}</td>
-                    {/* Số đơn hàng đã đặt */}
-                    <td className="p-4 text-center text-white font-medium">{customer.totalOrders} đơn</td>
-                    {/* Số tiền tích lũy định dạng tiền Việt Nam */}
-                    <td className="p-4 text-orange-400 font-semibold">
-                      {customer.totalSpent.toLocaleString('vi-VN')}đ
-                    </td>
-                    {/* Nhãn trạng thái */}
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
-                        customer.status === 'Hoạt động' ? 'text-emerald-500 bg-emerald-500/10' : 'text-rose-500 bg-rose-500/10'
-                      }`}>
-                        {customer.status}
-                      </span>
-                    </td>
-                    {/* Nút thao tác chặn / bỏ chặn nhanh */}
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => toggleStatus(customer.id)}
-                        className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-                          customer.status === 'Hoạt động' 
-                            ? 'border-rose-500/30 text-rose-400 hover:bg-rose-500/10' 
-                            : 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
-                        }`}
-                      >
-                        {customer.status === 'Hoạt động' ? '🔒 Khóa nick' : '🔓 Mở khóa'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                /* Thông báo khi không tìm thấy kết quả */
-                <tr>
-                  <td colSpan="7" className="p-8 text-center text-gray-500">
-                    🔍 Không tìm thấy thành viên nào khớp với từ khóa tìm kiếm.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* FOOTER BẢNG PHÂN TRANG */}
-        <div className="p-4 bg-[#1c1c1c] border-t border-[#222222] flex justify-between items-center text-xs text-gray-500">
-          <p>Hiển thị {filteredCustomers.length} trên tổng số {customers.length} thành viên</p>
-          <div className="flex gap-1">
-            <button className="px-3 py-1 bg-[#222222] rounded hover:text-white transition-colors" disabled>Trước</button>
-            <button className="px-3 py-1 bg-orange-500 text-white rounded font-bold">1</button>
-            <button className="px-3 py-1 bg-[#222222] rounded hover:text-white transition-colors" disabled>Sau</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const [users, setUsers] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("all");
+  useEffect(() => { setUsers(getUsers()); setOrders(getOrders()); }, []);
+  const filtered = useMemo(() => users.filter((user) => (role === "all" || user.role === role) && (user.fullName + user.email + user.phone).toLowerCase().includes(query.toLowerCase())), [users, query, role]);
+  const toggle = (id) => { const next = users.map((user) => user.id === id ? { ...user, status: user.status === "Bị khóa" ? "Hoạt động" : "Bị khóa" } : user); setUsers(next); saveUsers(next); };
+  const spent = (user) => orders.filter((order) => order.email === user.email || order.phone === user.phone).reduce((sum, order) => sum + Number(order.total || 0), 0);
+  return <div className="space-y-6"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">User MGMT</p><h2 className="mt-2 text-3xl font-black">Quản lý thành viên</h2><p className="mt-2 text-sm text-slate-400">Theo dõi tài khoản, vai trò, trạng thái và chi tiêu của khách hàng.</p></div><section className="grid gap-4 md:grid-cols-3"><div className="admin-card rounded-3xl p-5"><Users className="text-orange-300" /><p className="mt-3 text-2xl font-black">{users.length}</p><p className="text-sm text-slate-400">Tổng thành viên</p></div><div className="admin-card rounded-3xl p-5"><ShieldCheck className="text-emerald-300" /><p className="mt-3 text-2xl font-black">{users.filter((user) => user.status === "Hoạt động").length}</p><p className="text-sm text-slate-400">Đang hoạt động</p></div><div className="admin-card rounded-3xl p-5"><Lock className="text-rose-300" /><p className="mt-3 text-2xl font-black">{users.filter((user) => user.status === "Bị khóa").length}</p><p className="text-sm text-slate-400">Bị khóa</p></div></section><div className="admin-card rounded-3xl p-5"><div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]"><div className="relative"><Search className="absolute left-3 top-3.5 text-slate-500" size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} className="admin-input w-full pl-10" placeholder="Tìm tên, email, số điện thoại" /></div><select value={role} onChange={(e) => setRole(e.target.value)} className="admin-input"><option value="all">Tất cả vai trò</option><option value="customer">Khách hàng</option><option value="admin">Admin</option></select></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs uppercase text-slate-500"><tr><th className="p-3">Thành viên</th><th className="p-3">Liên hệ</th><th className="p-3">Vai trò</th><th className="p-3">Chi tiêu</th><th className="p-3">Trạng thái</th><th className="p-3 text-right">Thao tác</th></tr></thead><tbody className="divide-y divide-white/10">{filtered.map((user) => <tr key={user.id} className="hover:bg-white/5"><td className="p-3"><p className="font-black text-white">{user.fullName}</p><p className="text-xs text-slate-500">{user.id}</p></td><td className="p-3"><p className="text-slate-300">{user.email}</p><p className="text-xs text-slate-500">{user.phone}</p></td><td className="p-3"><span className="status-pill bg-blue-400/10 text-blue-300">{user.role}</span></td><td className="p-3 font-bold text-orange-300">{formatCurrency(spent(user))}</td><td className="p-3"><span className={"status-pill " + (user.status === "Hoạt động" ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300")}>{user.status}</span></td><td className="p-3 text-right"><button onClick={() => toggle(user.id)} className={"rounded-xl p-2 " + (user.status === "Hoạt động" ? "text-rose-300 hover:bg-rose-400/10" : "text-emerald-300 hover:bg-emerald-400/10")}>{user.status === "Hoạt động" ? <Lock size={16} /> : <Unlock size={16} />}</button></td></tr>)}</tbody></table></div></div></div>;
 }

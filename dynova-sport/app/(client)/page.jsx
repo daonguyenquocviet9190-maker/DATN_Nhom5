@@ -1,15 +1,6 @@
 import HomeClient from "@/components/home/HomeClient";
-import { getProducts } from "@/services/product.service";
+import { products } from "@/data/shop";
 
-export default async function HomePage() {
-
-    const products = await getProducts();
-
-    console.log(products);
-
-    return (
-        <HomeClient
-            products={products}
-        />
-    );
+export default function HomePage() {
+  return <HomeClient products={products} />;
 }
