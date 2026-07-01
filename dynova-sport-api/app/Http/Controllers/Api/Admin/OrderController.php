@@ -3,47 +3,46 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+    // Lấy danh sách đơn hàng
     public function index()
     {
-        //
+        return response()->json(Order::with('user')->orderBy('id', 'asc')->get(), 200);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    // Chi tiết đơn hàng (Load đầy đủ thông tin khách hàng và sản phẩm đã mua)
+    public function show($id)
     {
-        //
+        $order = Order::with(['user', 'items.product'])->find($id);
+        if (!$order) {
+            return response()->json(['message' => 'Không tìm thấy đơn hàng'], 404);
+        }
+        return response()->json($order, 200);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
+    // Cập nhật trạng thái đơn hàng
+    public function update(Request $request, $id)
     {
-        //
+        $order = Order::find($id);
+        if (!$order) {
+            return response()->json(['message' => 'Không tìm thấy đơn hàng'], 404);
+        }
+        $order->update($request->all());
+        return response()->json($order, 200);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
+    // Xóa đơn hàng
+    public function destroy($id)
     {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        $order = Order::find($id);
+        if (!$order) {
+            return response()->json(['message' => 'Không tìm thấy đơn hàng'], 404);
+        }
+        $order->delete();
+        return response()->json(['success' => true], 200);
     }
 }

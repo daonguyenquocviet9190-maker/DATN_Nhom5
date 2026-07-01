@@ -18,7 +18,6 @@ use App\Http\Controllers\Api\Admin\SettingController;
 |--------------------------------------------------------------------------
 */
 
-// Nhóm các Route Admin (Tự động có tiền tố /api/admin)
 Route::prefix('admin')->group(function () {
     
     // Module cốt lõi
@@ -26,15 +25,19 @@ Route::prefix('admin')->group(function () {
     Route::apiResource('brands', BrandController::class);
     Route::apiResource('categories', CategoryController::class);
     Route::apiResource('products', ProductController::class);
-    
-    // Module mới bổ sung (Đã kết nối trực tiếp qua Controller)
     Route::apiResource('users', UserController::class);
     Route::apiResource('orders', OrderController::class);
-    Route::apiResource('inventory', InventoryController::class);
     Route::apiResource('promotions', PromotionController::class);
     Route::apiResource('ratings', RatingController::class);
     
-    // Cấu hình hệ thống (Settings)
+    // Module Kho hàng (Inventory) - Tối ưu hóa cho tính năng Lịch sử
+    // Loại bỏ các route không dùng (show, destroy, store) để bảo mật
+    Route::apiResource('inventory', InventoryController::class)->except(['show', 'destroy', 'store']);
+    
+    // Route riêng để xem lịch sử xuất nhập kho (Khắc phục lỗi 404 trước đó)
+    Route::get('inventory/{productId}/history', [InventoryController::class, 'getHistory']);
+    
+    // Cấu hình hệ thống
     Route::get('settings', [SettingController::class, 'index']);
     Route::post('settings', [SettingController::class, 'store']);
 });

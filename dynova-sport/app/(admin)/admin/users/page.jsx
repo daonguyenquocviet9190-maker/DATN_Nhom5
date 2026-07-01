@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { Lock, Search, ShieldCheck, Unlock, Users, Trash2 } from "lucide-react";
+import { Lock, Search, Unlock, Users, Trash2 } from "lucide-react";
 import { userService } from "../../../../services/user.service";
 
 export default function CustomersAdmin() {
@@ -25,20 +25,39 @@ export default function CustomersAdmin() {
     fetchUsers();
   }, []);
 
+  // FIX: Thay u.name bằng u.full_name để khớp với database của bạn
   const filteredUsers = users.filter((u) => {
-    const name = u.name || "";
+    const name = u.full_name || "";
     const email = u.email || "";
     return name.toLowerCase().includes(query.toLowerCase()) || email.toLowerCase().includes(query.toLowerCase());
   });
 
+  // FIX: Chuyển đổi trạng thái bằng 'active' và 'blocked' đồng bộ với MySQL Enum
   const handleToggleStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === "Hoạt động" ? "Bị khóa" : "Hoạt động";
+    const newStatus = currentStatus === "active" ? "blocked" : "active";
+    const confirmMsg = currentStatus === "active" ? "Bạn có chắc chắn muốn KHÓA tài khoản này?" : "Bạn có muốn MỞ KHÓA tài khoản này?";
+    
+    if (!confirm(confirmMsg)) return;
+
     try {
       await userService.update(id, { status: newStatus });
       alert("Cập nhật trạng thái thành viên thành công!");
-      fetchUsers();
+      fetchUsers(); // Tải lại danh sách sau khi update thành công
     } catch (error) {
       alert("Cập nhật thất bại!");
+    }
+  };
+
+  // BỔ SUNG: Tính năng xóa thành viên kết nối trực tiếp với hàm destroy ở Back-end
+  const handleDeleteUser = async (id, fullName) => {
+    if (!confirm(`Bạn có chắc chắn muốn XÓA thành viên [${fullName}] không? Hành động này không thể hoàn tác.`)) return;
+    
+    try {
+      await userService.delete(id); // Gọi đến route API Delete của Laravel
+      alert("Xóa thành viên thành công!");
+      fetchUsers();
+    } catch (error) {
+      alert("Xóa thành viên thất bại hoặc tài khoản không tồn tại!");
     }
   };
 
@@ -78,19 +97,32 @@ export default function CustomersAdmin() {
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-white/5">
-                    <td className="p-3 font-bold text-white">{u.name}</td>
+                    {/* FIX: Hiển thị đúng trường full_name */}
+                    <td className="p-3 font-bold text-white">{u.full_name}</td>
                     <td className="p-3 font-mono">{u.email}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-xs ${u.status === 'Bị khóa' ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                        {u.status || 'Hoạt động'}
+                      {/* FIX: So sánh trạng thái 'blocked' theo DB */}
+                      <span className={`px-2 py-0.5 rounded text-xs ${u.status === 'blocked' ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                        {u.status === 'blocked' ? 'Bị khóa' : 'Hoạt động'}
                       </span>
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="p-3 text-right space-x-1">
+                      {/* Nút Khóa / Mở khóa tài khoản */}
                       <button 
                         onClick={() => handleToggleStatus(u.id, u.status)}
-                        className={`p-2 rounded-xl transition-all ${u.status === 'Bị khóa' ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-rose-400 hover:bg-rose-500/10'}`}
+                        className={`p-2 rounded-xl transition-all ${u.status === 'blocked' ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-rose-400 hover:bg-rose-500/10'}`}
+                        title={u.status === 'blocked' ? "Mở khóa tài khoản" : "Khóa tài khoản"}
                       >
-                        {u.status === 'Bị khóa' ? <Unlock size={16}/> : <Lock size={16}/>}
+                        {u.status === 'blocked' ? <Unlock size={16}/> : <Lock size={16}/>}
+                      </button>
+
+                      {/* Nút Xóa tài khoản hoàn chỉnh */}
+                      <button 
+                        onClick={() => handleDeleteUser(u.id, u.full_name)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+                        title="Xóa thành viên"
+                      >
+                        <Trash2 size={16}/>
                       </button>
                     </td>
                   </tr>

@@ -44,18 +44,14 @@ class BrandController extends Controller
         return response()->json($brand);
     }
 
-    public function update(Request $request, $id)
-    {
-        try {
-            DB::table('brands')->where('id', $id)->update([
-                'name' => $request->input('name'),
-                'updated_at' => now()
-            ]);
-            return response()->json(['message' => 'Cập nhật thành công']);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
+    public function update(Request $request, $id) {
+    $brand = Brand::findOrFail($id);
+    
+    // Đảm bảo dữ liệu từ request được gán vào model
+    $brand->update($request->only(['name', 'status', 'logo', 'slug']));
+    
+    return response()->json(['message' => 'Cập nhật thành công']);
+}
 
     public function destroy($id)
     {

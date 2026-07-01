@@ -20,7 +20,7 @@ export default function AdminLayout({ children }) {
       { name: "Danh mục", href: "/admin/categories", icon: Tags },
       { name: "Đơn hàng", href: "/admin/orders", icon: ClipboardList },
       { name: "Mã giảm giá", href: "/admin/promotions", icon: Percent },
-      { name: "Thành viên", href: "/admin/customers", icon: Users },
+      { name: "Khách hàng", href: "/admin/users", icon: Users },
       { name: "Tồn kho", href: "/admin/inventory", icon: Boxes },
       { name: "Banner", href: "/admin/banners", icon: SquareMenu },
       { name: "Thương hiệu", href: "/admin/brands", icon: Briefcase },

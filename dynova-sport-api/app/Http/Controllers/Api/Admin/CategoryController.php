@@ -8,31 +8,48 @@ use Illuminate\Http\Request;
 
 class CategoryController extends Controller
 {
+    // Lấy danh sách danh mục sản phẩm
     public function index()
     {
-        return response()->json(Category::latest()->get(), 200);
+        return response()->json(Category::orderBy('id', 'desc')->get(), 200);
     }
 
+    // Thêm danh mục
     public function store(Request $request)
     {
         $category = Category::create($request->all());
-        return response()->json(['message' => 'Tạo danh mục thành công!', 'data' => $category], 201);
+        return response()->json($category, 201);
     }
 
-    public function show(Category $category)
+    // Chi tiết danh mục
+    public function show($id)
     {
+        $category = Category::find($id);
+        if (!$category) {
+            return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
+        }
         return response()->json($category, 200);
     }
 
-    public function update(Request $request, Category $category)
+    // Cập nhật danh mục
+    public function update(Request $request, $id)
     {
+        $category = Category::find($id);
+        if (!$category) {
+            return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
+        }
         $category->update($request->all());
-        return response()->json(['message' => 'Cập nhật danh mục thành công!', 'data' => $category], 200);
+        return response()->json($category, 200);
     }
 
-    public function destroy(Category $category)
+    // Xóa danh mục
+    public function destroy($id)
     {
+        $category = Category::find($id);
+        if (!$category) {
+            return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
+        }
         $category->delete();
-        return response()->json(['message' => 'Xóa danh mục thành công!'], 200);
+        return response()->json(['success' => true], 200);
     }
 }

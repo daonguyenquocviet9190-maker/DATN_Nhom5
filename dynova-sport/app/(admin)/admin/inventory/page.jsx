@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Package, RefreshCw, AlertTriangle } from "lucide-react";
+import { Search, Package, RefreshCw, AlertTriangle, CheckCircle, Eye, History } from "lucide-react";
 import { inventoryService } from "@/services/inventory.service";
 
 export default function InventoryAdmin() {
@@ -9,6 +9,11 @@ export default function InventoryAdmin() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [stockFilter, setStockFilter] = useState("all");
+  
+  // State cho Modal lịch sử
+  const [history, setHistory] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
@@ -26,17 +31,27 @@ export default function InventoryAdmin() {
     }
   };
 
-  useEffect(() => {
-    fetchInventory();
-  }, []);
+  useEffect(() => { fetchInventory(); }, []);
+
+  // Mở modal lịch sử
+  const openHistory = async (item) => {
+    setSelectedProduct(item.product?.name);
+    try {
+      const logs = await inventoryService.getHistory(item.product_id);
+      setHistory(logs);
+      setShowModal(true);
+    } catch (error) {
+      alert("Không thể tải lịch sử!");
+    }
+  };
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-      const name = item.name || "";
-      const stock = item.stock ?? 0;
-      const matchesQuery = name.toLowerCase().includes(query.toLowerCase());
+      const name = item.product?.name?.toLowerCase() || "";
+      const stock = item.quantity_on_hand ?? 0;
+      const matchesQuery = name.includes(query.toLowerCase());
       
-      if (stockFilter === "low") return matchesQuery && stock <= 5;
+      if (stockFilter === "low") return matchesQuery && stock <= 5 && stock > 0;
       if (stockFilter === "out") return matchesQuery && stock === 0;
       return matchesQuery;
     });
@@ -49,114 +64,81 @@ export default function InventoryAdmin() {
     if (isNaN(newStock) || newStock < 0) return alert("Số lượng không hợp lệ!");
 
     try {
-      await inventoryService.updateStock(id, newStock);
-      alert("Cập nhật số lượng tồn kho thành công!");
+      await inventoryService.updateStock(id, { quantity_on_hand: newStock });
       fetchInventory();
-    } catch (error) {
-      alert("Cập nhật thất bại!");
-    }
+    } catch (error) { alert("Cập nhật thất bại!"); }
   };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-gray-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500 mb-4"></div>
-        <p className="text-xs uppercase tracking-widest">Đang tải dữ liệu kho hàng...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 p-2">
       <div>
         <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Inventory</p>
         <h2 className="mt-2 text-3xl font-black uppercase text-white">Quản lý kho hàng</h2>
-        <p className="mt-2 text-sm text-slate-400">Theo dõi hàng tồn kho, cập nhật số lượng sản phẩm nhanh chóng.</p>
       </div>
 
       <div className="admin-card rounded-3xl p-5 bg-[#161616] border border-[#222222]">
+        {/* Thanh tìm kiếm và bộ lọc */}
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]">
           <div className="relative">
             <Search className="absolute left-3 top-3.5 text-slate-500" size={16} />
             <input 
-              value={query} 
-              onChange={(e) => setQuery(e.target.value)} 
-              className="admin-input w-full pl-10 bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl py-2.5 text-sm text-white outline-none focus:border-orange-500" 
-              placeholder="Tìm kiếm tên sản phẩm trong kho..." 
+              value={query} onChange={(e) => setQuery(e.target.value)} 
+              className="w-full pl-10 bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl py-2.5 text-sm text-white outline-none" 
+              placeholder="Tìm kiếm sản phẩm..." 
             />
           </div>
-          <select 
-            value={stockFilter} 
-            onChange={(e) => setStockFilter(e.target.value)} 
-            className="admin-input bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-orange-500 cursor-pointer"
-          >
+          <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} className="bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl px-4 py-2.5 text-sm text-white">
             <option value="all">Tất cả sản phẩm</option>
             <option value="low">Sắp hết hàng (≤ 5)</option>
             <option value="out">Đã hết hàng (0)</option>
           </select>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-400">
-            <thead className="text-xs uppercase text-slate-500 bg-[#1c1c1c]">
-              <tr>
-                <th className="p-3">Sản phẩm</th>
-                <th className="p-3">Giá bán</th>
-                <th className="p-3">Số lượng tồn</th>
-                <th className="p-3">Trạng thái</th>
-                <th className="p-3 text-right">Hành động</th>
+        {/* Bảng dữ liệu */}
+        <table className="w-full text-left text-sm text-gray-400">
+          <thead className="text-xs uppercase text-slate-500 bg-[#1c1c1c]">
+            <tr>
+              <th className="p-3">Sản phẩm</th>
+              <th className="p-3">Số lượng tồn</th>
+              <th className="p-3">Trạng thái</th>
+              <th className="p-3 text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {filtered.map((item) => (
+              <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                <td className="p-3 font-bold text-white">{item.product?.name}</td>
+                <td className="p-3 font-mono font-bold text-white">{item.quantity_on_hand}</td>
+                <td className="p-3">
+                  {item.quantity_on_hand === 0 ? <span className="text-rose-400 text-xs">Hết hàng</span> : <span className="text-emerald-400 text-xs">Còn hàng</span>}
+                </td>
+                <td className="p-3 text-right flex justify-end gap-2">
+                  <button onClick={() => openHistory(item)} className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-xl" title="Xem lịch sử"><History size={16}/></button>
+                  <button onClick={() => handleUpdateStock(item.id, item.quantity_on_hand)} className="p-2 text-orange-400 hover:bg-orange-500/10 rounded-xl" title="Cập nhật kho"><RefreshCw size={16}/></button>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-white/10">
-              {filtered.length > 0 ? (
-                filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                    <td className="p-3 flex items-center gap-3">
-                      {item.image && (
-                        <img src={item.image} alt="" className="w-10 h-10 object-cover rounded-lg bg-neutral-800" />
-                      )}
-                      <div>
-                        <p className="font-bold text-white line-clamp-1">{item.name}</p>
-                        <p className="text-xs text-slate-500 font-mono">ID: {item.id}</p>
-                      </div>
-                    </td>
-                    <td className="p-3 font-mono text-orange-300">{formatCurrency(item.price || 0)}</td>
-                    <td className="p-3 font-mono">
-                      <span className={`font-bold ${
-                        (item.stock ?? 0) === 0 ? "text-rose-400" : (item.stock ?? 0) <= 5 ? "text-amber-400" : "text-white"
-                      }`}>
-                        {item.stock ?? 0}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      {(item.stock ?? 0) === 0 ? (
-                        <span className="px-2 py-0.5 rounded text-xs bg-rose-500/10 text-rose-400 flex items-center gap-1 w-fit"><AlertTriangle size={12}/> Hết hàng</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Còn hàng</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <button 
-                        onClick={() => handleUpdateStock(item.id, item.stock ?? 0)}
-                        className="rounded-xl bg-orange-500/10 p-2 text-orange-400 hover:bg-orange-500/20 transition-all"
-                        title="Điều chỉnh kho"
-                      >
-                        <RefreshCw size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="p-8 text-center text-slate-500">
-                    <Package className="mx-auto mb-2 opacity-30" size={24} /> Kho hàng trống.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      {/* Modal Lịch sử */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1c1c1c] p-6 rounded-2xl w-full max-w-md border border-[#333]">
+            <h3 className="text-lg font-bold text-white mb-4">Lịch sử: {selectedProduct}</h3>
+            <div className="max-h-[300px] overflow-y-auto pr-2">
+              {history.map((log) => (
+                <div key={log.id} className="flex justify-between py-2 border-b border-white/5 text-xs">
+                  <span className={log.type === 'import' ? 'text-emerald-400' : 'text-rose-400'}>{log.type === 'import' ? 'Nhập' : 'Xuất'} {Math.abs(log.change_quantity)}</span>
+                  <span className="text-slate-500">{new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowModal(false)} className="mt-6 w-full py-2 bg-white/10 rounded-xl text-white">Đóng</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
