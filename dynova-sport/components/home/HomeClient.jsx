@@ -52,9 +52,9 @@ export default function HomeClient({
   const safeProducts = Array.isArray(products) ? products : [];
 
   const safeCategories =
-    Array.isArray(apiCategories) && apiCategories.length > 0
-      ? apiCategories
-      : categories;
+  Array.isArray(apiCategories) && apiCategories.length > 0
+    ? apiCategories
+    : [];
 
   const safeBrands =
     Array.isArray(apiBrands) && apiBrands.length > 0 ? apiBrands : [];
@@ -76,59 +76,11 @@ export default function HomeClient({
       .slice(0, 4);
   }, [safeProducts]);
 
-  const heroBanners = useMemo(() => {
-    const source =
-      Array.isArray(banners) && banners.length > 0
-        ? banners
-        : Array.isArray(heroSlides) && heroSlides.length > 0
-          ? heroSlides
-          : [DEFAULT_BANNER];
-
-    const normalized = [...source]
-      .filter((banner) => banner?.isActive !== false && banner?.is_active !== 0)
-      .sort(
-        (a, b) =>
-          Number(a?.sortOrder || a?.sort_order || 0) -
-          Number(b?.sortOrder || b?.sort_order || 0)
-      )
-      .map((banner, index) => ({
-        id: banner.id || index + 1,
-        title:
-          banner.title ||
-          banner.name ||
-          "Trang bị thể thao cho phong cách sống năng động",
-        subtitle:
-          banner.subtitle || banner.tagline || "Sport Collection 2026",
-        description:
-          banner.description ||
-"Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
-        image:
-          banner.image ||
-          banner.imageUrl ||
-          banner.image_url ||
-          DEFAULT_BANNER.image,
-        buttonText:
-          banner.buttonText ||
-          banner.ctaText ||
-          banner.cta_text ||
-          "Mua sắm ngay",
-        buttonLink:
-          banner.buttonLink ||
-          banner.ctaLink ||
-          banner.cta_link ||
-          "/shop",
-        secondaryText:
-          banner.secondaryText ||
-          banner.secondary_text ||
-          "Xem bộ sưu tập",
-        secondaryLink:
-          banner.secondaryLink ||
-          banner.secondary_link ||
-          "/collections",
-      }));
-
-    return normalized.length > 0 ? normalized : [DEFAULT_BANNER];
-  }, [banners]);
+ const heroBanners = useMemo(() => {
+  return Array.isArray(banners) && banners.length > 0
+    ? banners
+    : [DEFAULT_BANNER];
+}, [banners]);
 
   const currentBanner = heroBanners[activeBanner] || heroBanners[0];
 
