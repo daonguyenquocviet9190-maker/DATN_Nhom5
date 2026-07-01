@@ -1,8 +1,3 @@
-'encrypt_cookies' => EncryptCookies::class,
-        'validate_csrf_token' => ValidateCsrfToken::class,
-    ],
-
-];
 <?php
 
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -83,9 +78,10 @@ return [
     |
     */
 
-'middleware' => [
+    'middleware' => [
         'authenticate_session' => AuthenticateSession::class,
         'encrypt_cookies' => EncryptCookies::class,
         'validate_csrf_token' => ValidateCsrfToken::class,
     ],
+
 ];
