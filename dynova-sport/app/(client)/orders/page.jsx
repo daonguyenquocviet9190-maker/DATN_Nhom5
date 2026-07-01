@@ -1,0 +1,16 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Clock3, PackageCheck, Truck } from "lucide-react";
+import { formatCurrency } from "@/data/shop";
+import { getOrders } from "@/utils/shopStorage";
+
+const steps = ["Đã tiếp nhận", "Đã đóng gói", "Đang giao", "Hoàn thành"];
+const statusIcon = { "Chờ xác nhận": Clock3, "Chờ chuyển khoản": Clock3, "Đã thanh toán": CheckCircle2, "Đang giao": Truck, "Hoàn thành": PackageCheck };
+
+export default function OrdersPage() {
+  const [orders, setOrders] = useState([]);
+  useEffect(() => { setOrders(getOrders()); }, []);
+  return <div className="min-h-screen bg-[#f7f8fb] py-10"><div className="container-page"><div className="mb-8"><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-500">Order tracking</p><h1 className="mt-2 text-4xl font-black text-slate-950">Lịch sử mua hàng</h1><p className="mt-2 text-sm text-slate-500">Theo dõi trạng thái đơn hàng, phương thức thanh toán và sản phẩm đã mua.</p></div>{orders.length === 0 ? <div className="surface rounded-3xl p-10 text-center"><PackageCheck className="mx-auto text-orange-500" size={42} /><h2 className="mt-4 text-2xl font-black text-slate-950">Chưa có đơn hàng</h2><Link href="/shop" className="btn-primary mt-6 inline-block rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-wider">Mua sắm ngay</Link></div> : <div className="space-y-5">{orders.map((order) => { const Icon = statusIcon[order.status] || Clock3; return <article key={order.id} className="surface rounded-3xl p-5 md:p-6"><div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-orange-500">#{order.id}</p><h2 className="mt-1 text-xl font-black text-slate-950">{order.customerName}</h2><p className="mt-1 text-sm font-bold text-slate-500">{new Date(order.createdAt).toLocaleString("vi-VN")} - {order.paymentMethod} - {order.paymentStatus}</p></div><span className="status-pill bg-orange-50 text-orange-600"><Icon size={15} /> {order.status}</span></div><div className="mt-5 grid gap-3 md:grid-cols-[1fr_280px]"><div className="space-y-3">{order.items.map((item, index) => <div key={index} className="flex gap-3 rounded-2xl bg-slate-50 p-3"><img src={item.image} alt={item.name} className="h-16 w-16 rounded-xl object-cover" /><div className="min-w-0"><p className="line-clamp-2 text-sm font-black text-slate-950">{item.name}</p><p className="text-xs font-bold text-slate-500">{item.quantity} x {item.size} / {item.color}</p></div></div>)}</div><div className="rounded-2xl bg-slate-950 p-5 text-white"><p className="text-sm text-slate-300">Tổng thanh toán</p><p className="mt-1 text-2xl font-black text-orange-300">{formatCurrency(order.total)}</p><p className="mt-3 text-xs leading-5 text-slate-300">Giao tới: {order.address}</p></div></div><div className="mt-5 grid gap-2 sm:grid-cols-4">{steps.map((step, index) => { const done = order.timeline?.includes(step) || order.status === step || order.status === "Hoàn thành"; return <div key={step} className={"rounded-2xl p-3 text-xs font-black " + (done ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400")}>{index + 1}. {step}</div>; })}</div></article>; })}</div>}</div></div>;
+}

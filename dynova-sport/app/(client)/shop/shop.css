@@ -1,142 +1,169 @@
-/* ==========================================================================
-   A. SCROLL REVEAL ANIMATIONS (HIỆU ỨNG LƯỚT TỚI ĐÂU HIỆN TỚI ĐÓ)
-   ========================================================================== */
-
-/* Trạng thái ban đầu ẩn mờ, đẩy nhẹ xuống 35px và làm nhòe ảo nhẹ */
-.reveal-hidden {
-  opacity: 0;
-  transform: translateY(35px);
-  filter: blur(4px);
-  transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 1.2s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, opacity, filter;
+.shop-page {
+  background:
+    radial-gradient(circle at 90% 8%, rgba(249, 115, 22, 0.055), transparent 30%),
+    radial-gradient(circle at 8% 70%, rgba(15, 23, 42, 0.04), transparent 32%),
+    #f7f8fb;
 }
 
-/* Kích hoạt hiển thị khi lọt vào tầm mắt */
-.reveal-visible {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
+/* ===============================
+   FILTER SIDEBAR
+================================ */
+
+.shop-filter {
+  border-radius: 28px;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
 }
 
-/* ==========================================================================
-   1. GLOBAL SHOP LAYOUT
-   ========================================================================== */
-.shop-wrapper {
-  background: radial-gradient(circle at 90% 10%, rgba(249, 115, 22, 0.015) 0%, transparent 45%),
-              radial-gradient(circle at 10% 80%, rgba(29, 36, 56, 0.012) 0%, transparent 50%),
-              #fdfdfd;
+.shop-filter:hover {
+  border-color: rgba(249, 115, 22, 0.22);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
 }
 
-/* ==========================================================================
-   2. BỘ LỌC BÊN TRÁI (PREMIUM SIDEBAR & SLIDER)
-   ========================================================================== */
-.filter-sidebar-premium {
-  background: #ffffff;
-  border: 1px solid rgba(230, 233, 238, 0.7);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 0 15px 40px -10px rgba(29, 36, 56, 0.02);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+.category-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  border-radius: 16px;
+  padding: 0.78rem 0.95rem;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1.35;
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease,
+    transform 0.22s ease,
+    padding-left 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
-.filter-sidebar-premium:hover {
-  border-color: rgba(249, 115, 22, 0.15);
-  box-shadow: 0 20px 45px -15px rgba(29, 36, 56, 0.04);
+.category-filter-normal {
+  background: #f8fafc;
+  color: #475569;
 }
 
-/* Nút chọn danh mục Premium */
-.category-btn-premium {
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+.category-filter-normal:hover {
+  background: #fff7ed;
+  color: #ea580c;
+  padding-left: 1.15rem;
 }
 
-.category-btn-premium:not(.bg-orange-500):hover {
-  background-color: rgba(243, 244, 246, 0.7);
-  color: #f97316;
-  padding-left: 1.25rem; /* Hiệu ứng nhích nhẹ sang phải khi di chuột */
+.category-filter-active {
+  background: #f97316;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.22);
 }
 
-/* Thanh kéo giá Custom dạng dải màu mượt */
+/* ===============================
+   PRICE SLIDER
+================================ */
+
 .custom-slider {
   -webkit-appearance: none;
   appearance: none;
-  height: 5px;
-  border-radius: 9999px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f97316, #fed7aa);
   outline: none;
 }
 
 .custom-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
   background: #f97316;
   border: 3px solid #ffffff;
-  box-shadow: 0 3px 8px rgba(249, 115, 22, 0.4);
+  box-shadow: 0 5px 14px rgba(249, 115, 22, 0.38);
   cursor: pointer;
-  transition: transform 0.2s ease, background-color 0.2s ease;
 }
 
-.custom-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-}
-
-/* ==========================================================================
-   3. THANH ĐIỀU HƯỚNG TRÊN (GLASSMORPHISM TOPBAR)
-   ========================================================================== */
-.shop-topbar-glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(229, 231, 235, 0.7);
-  box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.01), 0 10px 30px -10px rgba(29, 36, 56, 0.02);
-}
-
-/* ==========================================================================
-   4. THẺ SẢN PHẨM CỬA HÀNG (LUXURY INTERACTION)
-   ========================================================================== */
-.product-card-premium {
-  background: #ffffff;
-  border: 1px solid rgba(230, 233, 238, 0.6);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 0 15px 40px -10px rgba(29, 36, 56, 0.02);
-  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.product-card-premium:hover {
-  border-color: rgba(249, 115, 22, 0.2);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.01), 
-              0 25px 50px -12px rgba(29, 36, 56, 0.05),
-              0 15px 30px -10px rgba(249, 115, 22, 0.02);
-  transform: translateY(-6px);
-}
-
-/* Nút chức năng phủ gương mờ (Glassmorphism Quick Actions) */
-.action-button-premium {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(229, 231, 235, 0.6);
-  color: #1f2937;
-  opacity: 0;
-  transform: translateY(15px);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Hover thẻ thì các nút tương tác trồi lên mềm mại */
-.product-card-premium:hover .action-button-premium {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Tạo độ trễ hiệu ứng xuất hiện cho từng nút hành động */
-.product-card-premium .action-button-premium:nth-child(1) { transition-delay: 0ms; }
-.product-card-premium .action-button-premium:nth-child(2) { transition-delay: 50ms; }
-.product-card-premium .action-button-premium:nth-child(3) { transition-delay: 100ms; }
-
-.action-button-premium:hover {
+.custom-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
   background: #f97316;
-  color: #ffffff;
-  border-color: #f97316;
-  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.25);
-  transform: scale(1.05) !important;
+  border: 3px solid #ffffff;
+  box-shadow: 0 5px 14px rgba(249, 115, 22, 0.38);
+  cursor: pointer;
+}
+
+/* ===============================
+   PRODUCT CARD
+================================ */
+
+.product-card-shop {
+  min-height: 100%;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+  transition:
+    transform 0.28s ease,
+    box-shadow 0.28s ease,
+    border-color 0.28s ease;
+}
+
+.product-card-shop:hover {
+  transform: translateY(-5px);
+  border-color: rgba(249, 115, 22, 0.28);
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.085);
+}
+
+.product-card-shop img {
+  display: block;
+}
+
+.product-card-shop h3 {
+  letter-spacing: -0.015em;
+}
+
+/* ===============================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 1023px) {
+  .shop-filter {
+    margin-bottom: 1.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .shop-page {
+    padding-bottom: 2rem;
+  }
+
+  .product-card-shop {
+    border-radius: 24px;
+  }
+}
+.shop-search-input {
+  width: 100%;
+  height: 48px;
+  border-radius: 18px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  padding-left: 46px;
+  padding-right: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+  transition:
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    background-color 0.22s ease;
+}
+
+.shop-search-input::placeholder {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.shop-search-input:focus {
+  border-color: #fb923c;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.12);
 }

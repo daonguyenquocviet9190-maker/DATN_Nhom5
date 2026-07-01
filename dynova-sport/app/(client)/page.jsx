@@ -1,15 +1,28 @@
 import HomeClient from "@/components/home/HomeClient";
-import { getProducts } from "@/services/product.service";
+import { getHomeData } from "@/services/home.service";
 
 export default async function HomePage() {
-
-    const products = await getProducts();
-
-    console.log(products);
+  try {
+    const data = await getHomeData();
 
     return (
-        <HomeClient
-            products={products}
-        />
+      <HomeClient
+        products={data.products}
+        banners={data.banners}
+        apiCategories={data.categories}
+        apiBrands={data.brands}
+      />
     );
+  } catch (error) {
+    console.log("Home API error:", error.message);
+
+    return (
+      <HomeClient
+        products={[]}
+        banners={[]}
+        apiCategories={[]}
+        apiBrands={[]}
+      />
+    );
+  }
 }

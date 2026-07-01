@@ -6,7 +6,21 @@ use Illuminate\Database\Eloquent\Model;
 
 class Brand extends Model
 {
-    protected $table = 'brands';
+    protected $fillable = [
+        'name',
+        'slug',
+        'logo',
+        'description',
+        'is_active',
+        'sort_order',
+    ];
 
-    protected $guarded = [];
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
+    public function products()
+    {
+        return $this->hasMany(Product::class);
+    }
 }

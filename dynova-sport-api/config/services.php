@@ -34,5 +34,16 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'ghtk' => [
+    'base_url' => env('GHTK_BASE_URL', 'https://services.giaohangtietkiem.vn'),
+    'token' => env('GHTK_TOKEN'),
+    'partner_code' => env('GHTK_PARTNER_CODE'),
+    'pick_province' => env('GHTK_PICK_PROVINCE', 'Hồ Chí Minh'),
+    'pick_district' => env('GHTK_PICK_DISTRICT', 'Quận 12'),
+    ],
+
+    'payment' => [
+        'online_enabled' => env('PAYMENT_ONLINE_ENABLED', false),
+    ],
 
 ];
