@@ -7,10 +7,10 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\BannerController;
 use App\Http\Controllers\Api\BrandController;
-use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ShippingController;
 use App\Http\Controllers\Api\AuthController;
+<<<<<<< Updated upstream
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\WishlistController;
@@ -20,6 +20,11 @@ use App\Http\Controllers\Api\WishlistController;
 | AUTH
 |--------------------------------------------------------------------------
 */
+=======
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\WishlistController;
+>>>>>>> Stashed changes
 
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -49,6 +54,7 @@ Route::get('/brands', [BrandController::class, 'index']);
 Route::get('/reviews', [ReviewController::class, 'index']);
 
 Route::post('/shipping/fee', [ShippingController::class, 'fee']);
+<<<<<<< Updated upstream
 Route::post('/payments/create', [PaymentController::class, 'create']);
 
 /*
@@ -63,11 +69,25 @@ Route::middleware('auth:sanctum')->group(function () {
     | PROFILE
     |--------------------------------------------------------------------------
     */
+=======
+Route::middleware('auth:sanctum')->post('/orders', [OrderController::class, 'store']);
+Route::post('/payments/create', [PaymentController::class, 'create']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
+    Route::post('/orders/{id}/reorder', [OrderController::class, 'reorder']);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+>>>>>>> Stashed changes
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
     Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
 
+<<<<<<< Updated upstream
     /*
     |--------------------------------------------------------------------------
     | ORDERS
@@ -89,6 +109,8 @@ Route::middleware('auth:sanctum')->group(function () {
     | WISHLIST
     |--------------------------------------------------------------------------
     */
+=======
+>>>>>>> Stashed changes
     Route::get('/wishlist', [WishlistController::class, 'index']);
     Route::post('/wishlist', [WishlistController::class, 'store']);
     Route::post('/wishlist/toggle', [WishlistController::class, 'toggle']);

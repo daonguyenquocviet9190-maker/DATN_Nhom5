@@ -3,11 +3,13 @@
 import "./shop.css";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   Check,
   ChevronDown,
   Heart,
+  Loader2,
   PackageSearch,
   Search,
   ShoppingBag,
@@ -25,14 +27,18 @@ import {
 import {
   addToCart,
   getProducts as getLocalProducts,
-  getWishlist,
-  toggleWishlist,
 } from "@/utils/shopStorage";
 
 import { getProducts } from "@/services/product.service";
 import { getCategories } from "@/services/category.service";
 
+import {
+  getWishlist as getWishlistApi,
+  toggleWishlistApi,
+} from "@/services/wishlist.service";
+
 export default function ShopPage() {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [apiCategories, setApiCategories] = useState([]);
 
@@ -43,46 +49,11 @@ export default function ShopPage() {
   const [sort, setSort] = useState("featured");
 
   const [wishlist, setWishlist] = useState([]);
+  const [wishlistLoadingId, setWishlistLoadingId] = useState(null);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  useEffect(() => {
-    async function loadShopData() {
-      try {
-        setLoading(true);
-
-        const params = new URLSearchParams(window.location.search);
-        const categoryParam = params.get("category");
-        const q = params.get("q");
-
-        if (categoryParam) setCategory(categoryParam);
-        if (q) setQuery(q);
-
-        const [productResponse, categoryResponse] = await Promise.all([
-          getProducts({ per_page: 100 }),
-          getCategories(),
-        ]);
-
-        const apiProducts = productResponse?.data || [];
-
-        setItems(apiProducts.length > 0 ? apiProducts : getLocalProducts());
-        setApiCategories(
-          categoryResponse.length > 0 ? categoryResponse : localCategories
-        );
-      } catch (error) {
-        console.log("Shop API error:", error.message);
-
-        setItems(getLocalProducts());
-        setApiCategories(localCategories);
-      } finally {
-        setWishlist(getWishlist().map(Number));
-        setLoading(false);
-      }
-    }
-
-    loadShopData();
-  }, []);
 
   const safeCategories =
     Array.isArray(apiCategories) && apiCategories.length > 0
@@ -109,34 +80,48 @@ export default function ShopPage() {
     );
   };
 
+  const getProductBrandName = (product) => {
+    if (typeof product?.brand === "string") return product.brand;
+
+    return (
+      product?.brand?.name ||
+      product?.brand_name ||
+      product?.brandName ||
+      "Dynova"
+    );
+  };
+
   const getProductCategoryId = (product) => {
     return String(
       product?.category_id ||
-        product?.categoryId ||
-        product?.category?.id ||
-        ""
+      product?.categoryId ||
+      product?.category?.id ||
+      ""
     );
   };
 
   const normalizeProductForStorage = (product) => {
     return {
       ...product,
+      id: product.id,
+      product_id: product.id,
       image: getProductImage(product),
       category: getProductCategoryName(product),
       categoryId: getProductCategoryId(product),
-      oldPrice: product.oldPrice || product.compare_price,
+      brand: getProductBrandName(product),
+      oldPrice: product.oldPrice || product.compare_price || product.old_price,
     };
   };
 
   const brands = useMemo(() => {
-    return Array.from(
-      new Set(
-        items
-          .map((item) => item?.brand)
-          .filter(Boolean)
-      )
-    );
-  }, [items]);
+  return Array.from(
+    new Set(
+      items
+        .map((item) => getProductBrandName(item))
+        .filter(Boolean)
+    )
+  );
+}, [items]);
 
   const highestPrice = useMemo(() => {
     const prices = items.map((item) => Number(item?.price || 0));
@@ -156,7 +141,7 @@ export default function ShopPage() {
       .filter((product) => {
         if (brand === "all") return true;
 
-        return product?.brand === brand;
+        return getProductBrandName(product) === brand;
       })
       .filter((product) => Number(product?.price || 0) <= maxPrice)
       .filter((product) => {
@@ -168,7 +153,7 @@ export default function ShopPage() {
 
         const text = [
           product?.name,
-          product?.brand,
+          getProductBrandName(product),
           product?.short_description,
           product?.description,
           getProductCategoryName(product),
@@ -229,13 +214,51 @@ export default function ShopPage() {
     showNotice("Đã thêm sản phẩm vào giỏ hàng.");
   };
 
-  const handleWishlist = (product) => {
-    const next = toggleWishlist(product.id).map(Number);
+  const handleWishlist = async (product) => {
+    const productId = product?.id || product?.product_id;
 
-    setWishlist(next);
+    if (!productId) {
+      showNotice("Sản phẩm này chưa có ID nên chưa thể lưu yêu thích.");
+      return;
+    }
 
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("dynova:storage"));
+    setWishlistLoadingId(productId);
+
+    try {
+      const result = await toggleWishlistApi(productId);
+
+      setWishlist((prev) => {
+        const cleanPrev = prev.map(Number);
+        const numericId = Number(productId);
+
+        if (result?.wishlisted) {
+          return cleanPrev.includes(numericId)
+            ? cleanPrev
+            : [...cleanPrev, numericId];
+        }
+
+        return cleanPrev.filter((id) => id !== numericId);
+      });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("dynova:wishlist"));
+        window.dispatchEvent(new Event("dynova:storage"));
+      }
+
+      showNotice(
+        result?.wishlisted
+          ? "Đã thêm vào danh sách yêu thích."
+          : "Đã xóa khỏi danh sách yêu thích."
+      );
+    } catch (err) {
+      if (err.status === 401) {
+        router.push("/login?redirect=/wishlist");
+        return;
+      }
+
+      showNotice(err.message || "Không thể cập nhật yêu thích.");
+    } finally {
+      setWishlistLoadingId(null);
     }
   };
 
@@ -517,19 +540,25 @@ export default function ShopPage() {
                         </span>
 
                         <button
+                          type="button"
                           onClick={() => handleWishlist(product)}
+                          disabled={wishlistLoadingId === product.id}
                           className={
-                            "absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition " +
+                            "absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition disabled:cursor-not-allowed disabled:opacity-70 " +
                             (liked
                               ? "bg-rose-500 text-white"
                               : "bg-white text-slate-600 hover:bg-rose-50 hover:text-rose-500")
                           }
                           aria-label="Yêu thích"
                         >
-                          <Heart
-                            size={17}
-                            className={liked ? "fill-current" : ""}
-                          />
+                          {wishlistLoadingId === product.id ? (
+                            <Loader2 size={17} className="animate-spin" />
+                          ) : (
+                            <Heart
+                              size={17}
+                              className={liked ? "fill-current" : ""}
+                            />
+                          )}
                         </button>
                       </div>
 
@@ -582,14 +611,14 @@ export default function ShopPage() {
                         </div>
 
                         <div className="mt-auto pt-5">
-                        <button
-                          onClick={() => handleAdd(product)}
-                          className="btn-primary flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black uppercase tracking-wider"
-                        >
-                          <ShoppingBag size={15} />
-                          Thêm vào giỏ
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => handleAdd(product)}
+                            className="btn-primary flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black uppercase tracking-wider"
+                          >
+                            <ShoppingBag size={15} />
+                            Thêm vào giỏ
+                          </button>
+                        </div>
                       </div>
                     </article>
                   );

@@ -13,17 +13,17 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     private function userResource(User $user): array
-    {
-        return [
-            'id' => $user->id,
-            'name' => $user->name,
-            'fullName' => $user->name,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'role' => $user->role ?: 'customer',
-            'created_at' => $user->created_at,
-        ];
-    }
+{
+    return [
+        'id' => $user->id,
+        'name' => $user->name ?: $user->full_name,
+        'fullName' => $user->full_name ?: $user->name,
+        'email' => $user->email,
+        'phone' => $user->phone,
+        'role' => $user->role ?: 'customer',
+        'created_at' => $user->created_at,
+    ];
+}
 
     public function register(Request $request)
     {
@@ -38,13 +38,16 @@ class AuthController extends Controller
             'password.confirmed' => 'Mật khẩu xác nhận không khớp.',
         ]);
 
-        $user = User::create([
-            'name' => $validated['fullName'] ?? $validated['name'] ?? 'Khách hàng',
-            'email' => $validated['email'],
-            'phone' => $validated['phone'],
-            'role' => 'customer',
-            'password' => Hash::make($validated['password']),
-        ]);
+       $displayName = $validated['fullName'] ?? $validated['name'] ?? 'Khách hàng';
+
+            $user = User::create([
+                'name' => $displayName,
+                'full_name' => $displayName,
+                'email' => $validated['email'],
+                'phone' => $validated['phone'],
+                'role' => 'customer',
+                'password' => Hash::make($validated['password']),
+            ]);
 
         $token = $user->createToken('dynova-web-token')->plainTextToken;
 

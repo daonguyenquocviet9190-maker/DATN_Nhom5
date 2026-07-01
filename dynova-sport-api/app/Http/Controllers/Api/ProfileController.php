@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+<<<<<<< Updated upstream
 use Illuminate\Support\Facades\Validator;
 
 class ProfileController extends Controller
@@ -15,10 +16,34 @@ class ProfileController extends Controller
     {
         if (!$user) {
             return null;
+=======
+use Illuminate\Validation\Rule;
+
+class ProfileController extends Controller
+{
+    private function currentUser(Request $request)
+    {
+        $authUser = $request->user();
+
+        if (!$authUser) {
+            return null;
+        }
+
+        return DB::table('users')
+            ->where('id', $authUser->id)
+            ->first();
+    }
+
+    private function userResource($user): array
+    {
+        if (!$user) {
+            return [];
+>>>>>>> Stashed changes
         }
 
         return [
             'id' => $user->id,
+<<<<<<< Updated upstream
             'name' => $user->name ?? '',
             'fullName' => $user->name ?? '',
             'full_name' => $user->name ?? '',
@@ -29,11 +54,27 @@ class ProfileController extends Controller
             'ward' => $user->ward ?? '',
             'avatar_url' => $user->avatar_url ?? null,
             'role' => $user->role ?? 'customer',
+=======
+            'name' => $user->name ?? $user->full_name ?? null,
+            'fullName' => $user->full_name ?? $user->name ?? null,
+            'full_name' => $user->full_name ?? $user->name ?? null,
+            'email' => $user->email ?? null,
+            'phone' => $user->phone ?? null,
+            'role' => $user->role ?? 'customer',
+            'address' => $user->address ?? null,
+            'province' => $user->province ?? null,
+            'ward' => $user->ward ?? null,
+            'avatar_url' => $user->avatar_url ?? null,
+>>>>>>> Stashed changes
             'created_at' => $user->created_at ?? null,
         ];
     }
 
+<<<<<<< Updated upstream
     private function profileData($user)
+=======
+    private function getProfileData($user): array
+>>>>>>> Stashed changes
     {
         $stats = [
             'total_orders' => 0,
@@ -46,6 +87,7 @@ class ProfileController extends Controller
 
         $recentOrders = [];
 
+<<<<<<< Updated upstream
         if (Schema::hasTable('orders')) {
             $ordersQuery = DB::table('orders')->where('user_id', $user->id);
 
@@ -67,6 +109,30 @@ class ProfileController extends Controller
 
             $recentOrders = (clone $ordersQuery)
                 ->orderByDesc('id')
+=======
+        if (
+            $user &&
+            Schema::hasTable('orders') &&
+            Schema::hasColumn('orders', 'user_id')
+        ) {
+            $orders = DB::table('orders')
+                ->where('user_id', $user->id)
+                ->get();
+
+            $stats = [
+                'total_orders' => $orders->count(),
+                'pending_orders' => $orders->where('status', 'pending')->count(),
+                'shipping_orders' => $orders->where('status', 'shipping')->count(),
+                'completed_orders' => $orders->where('status', 'completed')->count(),
+                'cancelled_orders' => $orders->where('status', 'cancelled')->count(),
+                'total_spent' => $orders->where('status', 'completed')->sum('grand_total')
+                    ?: $orders->where('status', 'completed')->sum('total'),
+            ];
+
+            $recentOrders = DB::table('orders')
+                ->where('user_id', $user->id)
+                ->orderByDesc('created_at')
+>>>>>>> Stashed changes
                 ->limit(5)
                 ->get();
         }
@@ -80,7 +146,11 @@ class ProfileController extends Controller
 
     public function show(Request $request)
     {
+<<<<<<< Updated upstream
         $user = $request->user();
+=======
+        $user = $this->currentUser($request);
+>>>>>>> Stashed changes
 
         if (!$user) {
             return response()->json([
@@ -92,13 +162,21 @@ class ProfileController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Lấy hồ sơ thành công.',
+<<<<<<< Updated upstream
             'data' => $this->profileData($user),
+=======
+            'data' => $this->getProfileData($user),
+>>>>>>> Stashed changes
         ]);
     }
 
     public function update(Request $request)
     {
+<<<<<<< Updated upstream
         $user = $request->user();
+=======
+        $user = $this->currentUser($request);
+>>>>>>> Stashed changes
 
         if (!$user) {
             return response()->json([
@@ -107,6 +185,7 @@ class ProfileController extends Controller
             ], 401);
         }
 
+<<<<<<< Updated upstream
         $validator = Validator::make($request->all(), [
             'fullName' => ['nullable', 'string', 'max:255'],
             'full_name' => ['nullable', 'string', 'max:255'],
@@ -150,24 +229,87 @@ class ProfileController extends Controller
             if (Schema::hasColumn('users', $column)) {
                 $payload[$column] = $request->input($column, $user->{$column} ?? null);
             }
+=======
+        $validated = $request->validate([
+            'fullName' => ['required', 'string', 'max:255'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
+            'phone' => ['required', 'string', 'max:20'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'province' => ['nullable', 'string', 'max:255'],
+            'ward' => ['nullable', 'string', 'max:255'],
+            'avatar_url' => ['nullable', 'string'],
+        ], [
+            'email.unique' => 'Email này đã được tài khoản khác sử dụng.',
+        ]);
+
+        $updates = [
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('users', 'name')) {
+            $updates['name'] = $validated['fullName'];
+        }
+
+        if (Schema::hasColumn('users', 'full_name')) {
+            $updates['full_name'] = $validated['fullName'];
+        }
+
+        if (Schema::hasColumn('users', 'address')) {
+            $updates['address'] = $validated['address'] ?? null;
+        }
+
+        if (Schema::hasColumn('users', 'province')) {
+            $updates['province'] = $validated['province'] ?? null;
+        }
+
+        if (Schema::hasColumn('users', 'ward')) {
+            $updates['ward'] = $validated['ward'] ?? null;
+        }
+
+        if (Schema::hasColumn('users', 'avatar_url')) {
+            $updates['avatar_url'] = $validated['avatar_url'] ?? null;
+>>>>>>> Stashed changes
         }
 
         DB::table('users')
             ->where('id', $user->id)
+<<<<<<< Updated upstream
             ->update($payload);
 
         $freshUser = DB::table('users')->where('id', $user->id)->first();
+=======
+            ->update($updates);
+
+        $updatedUser = DB::table('users')
+            ->where('id', $user->id)
+            ->first();
+>>>>>>> Stashed changes
 
         return response()->json([
             'success' => true,
             'message' => 'Cập nhật hồ sơ thành công.',
+<<<<<<< Updated upstream
             'data' => $this->profileData($freshUser),
+=======
+            'data' => $this->getProfileData($updatedUser),
+>>>>>>> Stashed changes
         ]);
     }
 
     public function updatePassword(Request $request)
     {
+<<<<<<< Updated upstream
         $user = $request->user();
+=======
+        $user = $this->currentUser($request);
+>>>>>>> Stashed changes
 
         if (!$user) {
             return response()->json([
@@ -179,6 +321,11 @@ class ProfileController extends Controller
         $validated = $request->validate([
             'current_password' => ['required', 'string'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
+<<<<<<< Updated upstream
+=======
+        ], [
+            'password.confirmed' => 'Mật khẩu xác nhận không khớp.',
+>>>>>>> Stashed changes
         ]);
 
         if (!Hash::check($validated['current_password'], $user->password)) {
@@ -188,10 +335,19 @@ class ProfileController extends Controller
             ], 422);
         }
 
+<<<<<<< Updated upstream
         DB::table('users')->where('id', $user->id)->update([
             'password' => Hash::make($validated['password']),
             'updated_at' => now(),
         ]);
+=======
+        DB::table('users')
+            ->where('id', $user->id)
+            ->update([
+                'password' => Hash::make($validated['password']),
+                'updated_at' => now(),
+            ]);
+>>>>>>> Stashed changes
 
         return response()->json([
             'success' => true,
@@ -201,7 +357,11 @@ class ProfileController extends Controller
 
     public function uploadAvatar(Request $request)
     {
+<<<<<<< Updated upstream
         $user = $request->user();
+=======
+        $user = $this->currentUser($request);
+>>>>>>> Stashed changes
 
         if (!$user) {
             return response()->json([
@@ -210,6 +370,7 @@ class ProfileController extends Controller
             ], 401);
         }
 
+<<<<<<< Updated upstream
         if (!Schema::hasColumn('users', 'avatar_url')) {
             return response()->json([
                 'success' => false,
@@ -230,11 +391,44 @@ class ProfileController extends Controller
         ]);
 
         $freshUser = DB::table('users')->where('id', $user->id)->first();
+=======
+        $request->validate([
+            'avatar' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ], [
+            'avatar.required' => 'Vui lòng chọn ảnh đại diện.',
+            'avatar.image' => 'File tải lên phải là hình ảnh.',
+            'avatar.mimes' => 'Ảnh chỉ hỗ trợ jpg, jpeg, png hoặc webp.',
+            'avatar.max' => 'Ảnh không được vượt quá 2MB.',
+        ]);
+
+        $path = $request->file('avatar')->store('avatars', 'public');
+
+        $avatarUrl = asset('storage/' . $path);
+
+        if (Schema::hasColumn('users', 'avatar_url')) {
+            DB::table('users')
+                ->where('id', $user->id)
+                ->update([
+                    'avatar_url' => $avatarUrl,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        $updatedUser = DB::table('users')
+            ->where('id', $user->id)
+            ->first();
+>>>>>>> Stashed changes
 
         return response()->json([
             'success' => true,
             'message' => 'Cập nhật ảnh đại diện thành công.',
+<<<<<<< Updated upstream
             'data' => $this->profileData($freshUser),
+=======
+            'data' => [
+                'user' => $this->userResource($updatedUser),
+            ],
+>>>>>>> Stashed changes
         ]);
     }
 }
