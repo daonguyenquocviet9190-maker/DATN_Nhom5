@@ -101,7 +101,7 @@ export default function HomeClient({
           banner.subtitle || banner.tagline || "Sport Collection 2026",
         description:
           banner.description ||
-          "Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
+"Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
         image:
           banner.image ||
           banner.imageUrl ||
@@ -211,8 +211,7 @@ export default function HomeClient({
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dynova:storage"));
     }
-
-    showNotice("Đã cập nhật danh sách yêu thích.");
+showNotice("Đã cập nhật danh sách yêu thích.");
   };
 
   const handleSearch = (event) => {
@@ -294,7 +293,7 @@ export default function HomeClient({
 
             <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
               <button
-                onClick={() => handleAdd(product)}
+onClick={() => handleAdd(product)}
                 className="btn-primary rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider"
               >
                 Thêm giỏ
@@ -370,7 +369,7 @@ export default function HomeClient({
             onChange={(e) => setKeyword(e.target.value)}
             onFocus={() => setPauseBanner(true)}
             onBlur={() => setPauseBanner(false)}
-            className="h-12 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+className="h-12 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
             placeholder="Tìm sản phẩm, thương hiệu..."
           />
         </div>
@@ -438,8 +437,7 @@ export default function HomeClient({
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-500">
                   Dynova Collection
                 </p>
-
-                <h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
+<h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
                   {currentBanner.title}
                 </h3>
 
@@ -520,7 +518,7 @@ export default function HomeClient({
             {
               icon: PackageCheck,
               title: "Sản phẩm rõ biến thể",
-              text: "Có size, màu sắc, giá bán và tồn kho.",
+text: "Có size, màu sắc, giá bán và tồn kho.",
             },
             {
               icon: Headphones,
@@ -599,7 +597,7 @@ export default function HomeClient({
           </div>
 
           <Link
-            href="/shop"
+href="/shop"
             className="inline-flex items-center gap-2 text-sm font-black text-orange-600 hover:text-orange-700"
           >
             Xem tất cả
@@ -670,7 +668,7 @@ export default function HomeClient({
               ))}
             </div>
           ) : (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+<div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
               <p className="text-lg font-black text-slate-950">
                 Chưa có sản phẩm để hiển thị
               </p>
@@ -744,7 +742,7 @@ export default function HomeClient({
                 href={"/shop/product/" + product.id}
                 className="group flex h-full gap-4 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
               >
-                <img
+<img
                   src={getProductImage(product)}
                   alt={product.name}
                   className="h-28 w-28 shrink-0 rounded-2xl object-cover"
