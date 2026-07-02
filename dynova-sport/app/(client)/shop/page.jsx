@@ -37,8 +37,36 @@ import {
   toggleWishlistApi,
 } from "@/services/wishlist.service";
 
+const API_HOST = "http://127.0.0.1:8000";
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
+
+function extractProducts(response) {
+  return (
+    response?.data?.products ||
+    response?.data?.data ||
+    response?.data ||
+    response?.products ||
+    response ||
+    []
+  );
+}
+
+function extractCategories(response) {
+  return (
+    response?.data?.categories ||
+    response?.data?.data ||
+    response?.data ||
+    response?.categories ||
+    response ||
+    []
+  );
+}
+
 export default function ShopPage() {
   const router = useRouter();
+
   const [items, setItems] = useState([]);
   const [apiCategories, setApiCategories] = useState([]);
 
@@ -50,10 +78,100 @@ export default function ShopPage() {
 
   const [wishlist, setWishlist] = useState([]);
   const [wishlistLoadingId, setWishlistLoadingId] = useState(null);
+
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
 
+  useEffect(() => {
+    async function loadShopData() {
+      try {
+        setLoading(true);
+
+        const params =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search)
+            : new URLSearchParams();
+
+        const categoryParam = params.get("category");
+        const q = params.get("q");
+
+        if (categoryParam) {
+          setCategory(categoryParam);
+        }
+
+        if (q) {
+          setQuery(q);
+        }
+
+        const [productResponse, categoryResponse] = await Promise.all([
+          getProducts({ per_page: 100 }),
+          getCategories(),
+        ]);
+
+        console.log("SHOP PRODUCTS RESPONSE:", productResponse);
+        console.log("SHOP CATEGORIES RESPONSE:", categoryResponse);
+
+        const apiProducts = extractProducts(productResponse);
+        const apiCategoryList = extractCategories(categoryResponse);
+
+        const finalProducts = Array.isArray(apiProducts)
+          ? apiProducts
+          : [];
+
+        const finalCategories = Array.isArray(apiCategoryList)
+          ? apiCategoryList
+          : [];
+
+        if (finalProducts.length > 0) {
+          setItems(finalProducts);
+        } else {
+          setItems(getLocalProducts());
+        }
+
+        if (finalCategories.length > 0) {
+          setApiCategories(finalCategories);
+        } else {
+          setApiCategories(localCategories);
+        }
+
+        const prices = finalProducts.map((item) => Number(item?.price || 0));
+        const max = prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
+
+        setMaxPrice(max);
+      } catch (error) {
+        console.log("Shop API error:", error);
+
+        const fallbackProducts = getLocalProducts();
+
+        setItems(fallbackProducts);
+        setApiCategories(localCategories);
+
+        const prices = fallbackProducts.map((item) => Number(item?.price || 0));
+        const max = prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
+
+        setMaxPrice(max);
+      } finally {
+        setLoading(false);
+      }
+
+      try {
+        const wishlistData = await getWishlistApi();
+
+        const ids = (wishlistData?.items || [])
+          .map((item) => item.product_id || item.product?.id)
+          .filter(Boolean)
+          .map(Number);
+
+        setWishlist(ids);
+      } catch (error) {
+        console.log("Wishlist API error:", error);
+        setWishlist([]);
+      }
+    }
+
+    loadShopData();
+  }, []);
 
   const safeCategories =
     Array.isArray(apiCategories) && apiCategories.length > 0
@@ -61,16 +179,48 @@ export default function ShopPage() {
       : localCategories;
 
   const getProductImage = (product) => {
-    return (
-      product?.image ||
+    const image =
       product?.image_url ||
+      product?.image ||
       product?.imageUrl ||
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
-    );
+      product?.thumbnail ||
+      product?.thumbnail_url ||
+      "";
+
+    if (!image) {
+      return FALLBACK_IMAGE;
+    }
+
+    if (
+      image.includes("product-placeholder.jpg") ||
+      image.includes("placeholder")
+    ) {
+      return FALLBACK_IMAGE;
+    }
+
+    if (image.startsWith("http://") || image.startsWith("https://")) {
+      return image;
+    }
+
+    if (image.startsWith("/storage")) {
+      return API_HOST + image;
+    }
+
+    if (image.startsWith("storage/")) {
+      return API_HOST + "/" + image;
+    }
+
+    if (image.startsWith("/")) {
+      return image;
+    }
+
+    return API_HOST + "/storage/" + image;
   };
 
   const getProductCategoryName = (product) => {
-    if (typeof product?.category === "string") return product.category;
+    if (typeof product?.category === "string") {
+      return product.category;
+    }
 
     return (
       product?.category?.name ||
@@ -81,7 +231,9 @@ export default function ShopPage() {
   };
 
   const getProductBrandName = (product) => {
-    if (typeof product?.brand === "string") return product.brand;
+    if (typeof product?.brand === "string") {
+      return product.brand;
+    }
 
     return (
       product?.brand?.name ||
@@ -94,9 +246,9 @@ export default function ShopPage() {
   const getProductCategoryId = (product) => {
     return String(
       product?.category_id ||
-      product?.categoryId ||
-      product?.category?.id ||
-      ""
+        product?.categoryId ||
+        product?.category?.id ||
+        ""
     );
   };
 
@@ -109,23 +261,22 @@ export default function ShopPage() {
       category: getProductCategoryName(product),
       categoryId: getProductCategoryId(product),
       brand: getProductBrandName(product),
-      oldPrice: product.oldPrice || product.compare_price || product.old_price,
+      oldPrice:
+        product.oldPrice ||
+        product.compare_price ||
+        product.old_price ||
+        product.original_price,
     };
   };
 
   const brands = useMemo(() => {
-  return Array.from(
-    new Set(
-      items
-        .map((item) => getProductBrandName(item))
-        .filter(Boolean)
-    )
-  );
-}, [items]);
+    return Array.from(
+      new Set(items.map((item) => getProductBrandName(item)).filter(Boolean))
+    );
+  }, [items]);
 
   const highestPrice = useMemo(() => {
     const prices = items.map((item) => Number(item?.price || 0));
-
     return prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
   }, [items]);
 
@@ -135,12 +286,10 @@ export default function ShopPage() {
     const result = items
       .filter((product) => {
         if (category === "all") return true;
-
         return getProductCategoryId(product) === String(category);
       })
       .filter((product) => {
         if (brand === "all") return true;
-
         return getProductBrandName(product) === brand;
       })
       .filter((product) => Number(product?.price || 0) <= maxPrice)
@@ -531,6 +680,9 @@ export default function ShopPage() {
                           <img
                             src={getProductImage(product)}
                             alt={product.name}
+                            onError={(event) => {
+                              event.currentTarget.src = FALLBACK_IMAGE;
+                            }}
                             className="aspect-[4/4.35] w-full object-cover transition duration-500 group-hover:scale-105"
                           />
                         </Link>
@@ -595,10 +747,14 @@ export default function ShopPage() {
                               {formatCurrency(product.price || 0)}
                             </p>
 
-                            {(product.oldPrice || product.compare_price) && (
+                            {(product.oldPrice ||
+                              product.compare_price ||
+                              product.old_price) && (
                               <p className="text-xs font-bold text-slate-400 line-through">
                                 {formatCurrency(
-                                  product.oldPrice || product.compare_price
+                                  product.oldPrice ||
+                                    product.compare_price ||
+                                    product.old_price
                                 )}
                               </p>
                             )}

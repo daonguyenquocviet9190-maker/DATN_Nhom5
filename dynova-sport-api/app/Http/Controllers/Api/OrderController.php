@@ -12,6 +12,10 @@ class OrderController extends Controller
 {
     private function onlyExistingOrderColumns(array $data): array
     {
+        if (!Schema::hasTable('orders')) {
+            return [];
+        }
+
         return collect($data)
             ->filter(function ($value, $key) {
                 return Schema::hasColumn('orders', $key);
@@ -21,6 +25,10 @@ class OrderController extends Controller
 
     private function onlyExistingOrderItemColumns(array $data): array
     {
+        if (!Schema::hasTable('order_items')) {
+            return [];
+        }
+
         return collect($data)
             ->filter(function ($value, $key) {
                 return Schema::hasColumn('order_items', $key);
@@ -37,17 +45,131 @@ class OrderController extends Controller
         return is_numeric($value) ? (int) $value : null;
     }
 
+    private function getOrderByColumn(): string
+    {
+        if (Schema::hasColumn('orders', 'created_at')) {
+            return 'created_at';
+        }
+
+        return 'id';
+    }
+
+    private function getOrderItems($orderId)
+    {
+        if (
+            !Schema::hasTable('order_items') ||
+            !Schema::hasColumn('order_items', 'order_id')
+        ) {
+            return collect();
+        }
+
+        return DB::table('order_items')
+            ->where('order_id', $orderId)
+            ->get();
+    }
+
     private function getOrderWithItems($orderId)
     {
-        $order = DB::table('orders')->where('id', $orderId)->first();
+        if (!Schema::hasTable('orders')) {
+            return null;
+        }
+
+        $order = DB::table('orders')
+            ->where('id', $orderId)
+            ->first();
 
         if ($order) {
-            $order->items = DB::table('order_items')
-                ->where('order_id', $order->id)
-                ->get();
+            $order->items = $this->getOrderItems($order->id);
         }
 
         return $order;
+    }
+
+    private function getOrderTotal($order): float
+    {
+        return (float) (
+            $order->grand_total
+            ?? $order->total
+            ?? $order->total_price
+            ?? $order->subtotal
+            ?? 0
+        );
+    }
+
+    private function normalizeOrder($order)
+    {
+        $items = $this->getOrderItems($order->id);
+
+        return [
+            'id' => $order->id,
+            'order_code' => $order->order_code
+                ?? ('DH' . str_pad($order->id, 6, '0', STR_PAD_LEFT)),
+
+            'status' => $order->status ?? 'pending',
+
+            'payment_method' => $order->payment_method ?? 'cod',
+            'payment_status' => $order->payment_status ?? 'unpaid',
+
+            'customer_name' => $order->customer_name
+                ?? $order->name
+                ?? null,
+
+            'customer_email' => $order->customer_email
+                ?? $order->email
+                ?? null,
+
+            'customer_phone' => $order->customer_phone
+                ?? $order->phone
+                ?? null,
+
+            'shipping_address' => $order->shipping_address
+                ?? $order->address
+                ?? null,
+
+            'address' => $order->address ?? null,
+            'province' => $order->province ?? null,
+            'district' => $order->district ?? null,
+            'ward' => $order->ward ?? null,
+            'note' => $order->note ?? null,
+
+            'subtotal' => (float) ($order->subtotal ?? $order->total_price ?? 0),
+            'discount' => (float) ($order->discount ?? $order->discount_amount ?? 0),
+            'shipping_fee' => (float) ($order->shipping_fee ?? 0),
+
+            'total' => $this->getOrderTotal($order),
+            'grand_total' => $this->getOrderTotal($order),
+
+            'items_count' => $items->count(),
+            'items' => $items,
+
+            'created_at' => $order->created_at ?? null,
+            'updated_at' => $order->updated_at ?? null,
+        ];
+    }
+
+    private function getStats($userId): array
+    {
+        if (!Schema::hasTable('orders') || !Schema::hasColumn('orders', 'user_id')) {
+            return [
+                'total' => 0,
+                'pending' => 0,
+                'shipping' => 0,
+                'completed' => 0,
+                'cancelled' => 0,
+            ];
+        }
+
+        $orders = DB::table('orders')
+            ->where('user_id', $userId)
+            ->get();
+
+        return [
+            'total' => $orders->count(),
+            'pending' => $orders->where('status', 'pending')->count(),
+            'shipping' => $orders->whereIn('status', ['shipping', 'delivering'])->count(),
+            'completed' => $orders->whereIn('status', ['completed', 'success'])->count(),
+            'cancelled' => $orders->whereIn('status', ['cancelled', 'canceled'])->count(),
+        ];
     }
 
     public function store(Request $request)
@@ -59,6 +181,13 @@ class OrderController extends Controller
                 'success' => false,
                 'message' => 'Bạn cần đăng nhập để đặt hàng.',
             ], 401);
+        }
+
+        if (!Schema::hasTable('orders')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bảng orders chưa tồn tại.',
+            ], 500);
         }
 
         $validated = $request->validate([
@@ -166,60 +295,64 @@ class OrderController extends Controller
 
             $orderId = DB::table('orders')->insertGetId($orderPayload);
 
-            foreach ($validated['items'] as $item) {
-                $quantity = (int) ($item['quantity'] ?? 1);
-                $price = (float) ($item['price'] ?? 0);
-                $lineTotal = $price * $quantity;
+            if (Schema::hasTable('order_items')) {
+                foreach ($validated['items'] as $item) {
+                    $quantity = (int) ($item['quantity'] ?? 1);
+                    $price = (float) ($item['price'] ?? 0);
+                    $lineTotal = $price * $quantity;
 
-                $productName = $item['name']
-                    ?? $item['product_name']
-                    ?? 'Sản phẩm';
+                    $productName = $item['name']
+                        ?? $item['product_name']
+                        ?? 'Sản phẩm';
 
-                $productId = $this->toNullableInt(
-                    $item['product_id']
-                    ?? $item['productId']
-                    ?? $item['id']
-                    ?? null
-                );
+                    $productId = $this->toNullableInt(
+                        $item['product_id']
+                        ?? $item['productId']
+                        ?? $item['id']
+                        ?? null
+                    );
 
-                $variantId = $this->toNullableInt(
-                    $item['product_variant_id']
-                    ?? $item['variantId']
-                    ?? $item['variant_id']
-                    ?? null
-                );
+                    $variantId = $this->toNullableInt(
+                        $item['product_variant_id']
+                        ?? $item['variantId']
+                        ?? $item['variant_id']
+                        ?? null
+                    );
 
-                $orderItemPayload = $this->onlyExistingOrderItemColumns([
-                    'order_id' => $orderId,
+                    $orderItemPayload = $this->onlyExistingOrderItemColumns([
+                        'order_id' => $orderId,
 
-                    'product_id' => $productId,
-                    'product_variant_id' => $variantId,
-                    'variant_id' => $variantId,
+                        'product_id' => $productId,
+                        'product_variant_id' => $variantId,
+                        'variant_id' => $variantId,
 
-                    'product_name' => $productName,
-                    'name' => $productName,
+                        'product_name' => $productName,
+                        'name' => $productName,
 
-                    'image' => $item['image'] ?? null,
-                    'product_image' => $item['image'] ?? null,
+                        'image' => $item['image'] ?? null,
+                        'product_image' => $item['image'] ?? null,
 
-                    'size' => $item['size'] ?? null,
-                    'color' => $item['color'] ?? null,
+                        'size' => $item['size'] ?? null,
+                        'color' => $item['color'] ?? null,
 
-                    'quantity' => $quantity,
-                    'qty' => $quantity,
+                        'quantity' => $quantity,
+                        'qty' => $quantity,
 
-                    'price' => $price,
-                    'unit_price' => $price,
+                        'price' => $price,
+                        'unit_price' => $price,
 
-                    'total' => $lineTotal,
-                    'subtotal' => $lineTotal,
-                    'line_total' => $lineTotal,
+                        'total' => $lineTotal,
+                        'subtotal' => $lineTotal,
+                        'line_total' => $lineTotal,
 
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
 
-                DB::table('order_items')->insert($orderItemPayload);
+                    if (!empty($orderItemPayload)) {
+                        DB::table('order_items')->insert($orderItemPayload);
+                    }
+                }
             }
 
             return $orderId;
@@ -245,11 +378,51 @@ class OrderController extends Controller
             ], 401);
         }
 
+        if (!Schema::hasTable('orders')) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Chưa có bảng đơn hàng.',
+                'data' => [
+                    'orders' => [],
+                    'total' => 0,
+                    'stats' => [
+                        'total' => 0,
+                        'pending' => 0,
+                        'shipping' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                    ],
+                ],
+            ]);
+        }
+
+        if (!Schema::hasColumn('orders', 'user_id')) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Bảng orders chưa có cột user_id.',
+                'data' => [
+                    'orders' => [],
+                    'total' => 0,
+                    'stats' => [
+                        'total' => 0,
+                        'pending' => 0,
+                        'shipping' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                    ],
+                ],
+            ]);
+        }
+
         $query = DB::table('orders')
             ->where('user_id', $user->id)
-            ->orderByDesc('created_at');
+            ->orderByDesc($this->getOrderByColumn());
 
-        if ($request->filled('status') && $request->status !== 'all') {
+        if (
+            $request->filled('status') &&
+            $request->status !== 'all' &&
+            Schema::hasColumn('orders', 'status')
+        ) {
             $query->where('status', $request->status);
         }
 
@@ -257,7 +430,9 @@ class OrderController extends Controller
             $search = $request->search;
 
             $query->where(function ($q) use ($search) {
-                $q->where('order_code', 'like', "%{$search}%");
+                if (Schema::hasColumn('orders', 'order_code')) {
+                    $q->where('order_code', 'like', "%{$search}%");
+                }
 
                 if (Schema::hasColumn('orders', 'phone')) {
                     $q->orWhere('phone', 'like', "%{$search}%");
@@ -266,44 +441,31 @@ class OrderController extends Controller
                 if (Schema::hasColumn('orders', 'customer_phone')) {
                     $q->orWhere('customer_phone', 'like', "%{$search}%");
                 }
+
+                if (Schema::hasColumn('orders', 'customer_name')) {
+                    $q->orWhere('customer_name', 'like', "%{$search}%");
+                }
             });
         }
 
-        $orders = $query->get();
-        $orderIds = $orders->pluck('id')->toArray();
-
-        $items = collect();
-
-        if (count($orderIds) > 0) {
-            $items = DB::table('order_items')
-                ->whereIn('order_id', $orderIds)
-                ->get()
-                ->groupBy('order_id');
-        }
-
-        $mappedOrders = $orders->map(function ($order) use ($items) {
-            $order->items = $items->get($order->id, collect())->values();
-            return $order;
+        $orders = $query->get()->map(function ($order) {
+            return $this->normalizeOrder($order);
         });
-
-        $allOrders = DB::table('orders')
-            ->where('user_id', $user->id)
-            ->get();
 
         return response()->json([
             'success' => true,
             'message' => 'Lấy lịch sử đơn hàng thành công.',
             'data' => [
-                'orders' => $mappedOrders,
-                'stats' => [
-                    'total' => $allOrders->count(),
-                    'pending' => $allOrders->where('status', 'pending')->count(),
-                    'shipping' => $allOrders->where('status', 'shipping')->count(),
-                    'completed' => $allOrders->where('status', 'completed')->count(),
-                    'cancelled' => $allOrders->where('status', 'cancelled')->count(),
-                ],
+                'orders' => $orders,
+                'total' => $orders->count(),
+                'stats' => $this->getStats($user->id),
             ],
         ]);
+    }
+
+    public function myOrders(Request $request)
+    {
+        return $this->index($request);
     }
 
     public function show(Request $request, $id)
@@ -315,6 +477,13 @@ class OrderController extends Controller
                 'success' => false,
                 'message' => 'Bạn cần đăng nhập để xem đơn hàng.',
             ], 401);
+        }
+
+        if (!Schema::hasTable('orders')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bảng orders chưa tồn tại.',
+            ], 404);
         }
 
         $order = DB::table('orders')
@@ -329,14 +498,10 @@ class OrderController extends Controller
             ], 404);
         }
 
-        $order->items = DB::table('order_items')
-            ->where('order_id', $order->id)
-            ->get();
-
         return response()->json([
             'success' => true,
             'message' => 'Lấy chi tiết đơn hàng thành công.',
-            'data' => $order,
+            'data' => $this->normalizeOrder($order),
         ]);
     }
 
@@ -351,6 +516,13 @@ class OrderController extends Controller
             ], 401);
         }
 
+        if (!Schema::hasTable('orders')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bảng orders chưa tồn tại.',
+            ], 404);
+        }
+
         $order = DB::table('orders')
             ->where('user_id', $user->id)
             ->where('id', $id)
@@ -363,19 +535,30 @@ class OrderController extends Controller
             ], 404);
         }
 
-        if (!in_array($order->status, ['pending', 'confirmed'])) {
+        $status = $order->status ?? 'pending';
+
+        if (!in_array($status, ['pending', 'confirmed', 'processing'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Đơn hàng này không thể hủy ở trạng thái hiện tại.',
             ], 422);
         }
 
-        DB::table('orders')
-            ->where('id', $id)
-            ->update([
-                'status' => 'cancelled',
-                'updated_at' => now(),
-            ]);
+        $updates = [];
+
+        if (Schema::hasColumn('orders', 'status')) {
+            $updates['status'] = 'cancelled';
+        }
+
+        if (Schema::hasColumn('orders', 'updated_at')) {
+            $updates['updated_at'] = now();
+        }
+
+        if (!empty($updates)) {
+            DB::table('orders')
+                ->where('id', $id)
+                ->update($updates);
+        }
 
         $updatedOrder = $this->getOrderWithItems($id);
 
@@ -397,6 +580,13 @@ class OrderController extends Controller
             ], 401);
         }
 
+        if (!Schema::hasTable('orders')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bảng orders chưa tồn tại.',
+            ], 404);
+        }
+
         $order = DB::table('orders')
             ->where('user_id', $user->id)
             ->where('id', $id)
@@ -409,14 +599,10 @@ class OrderController extends Controller
             ], 404);
         }
 
-        $order->items = DB::table('order_items')
-            ->where('order_id', $id)
-            ->get();
-
         return response()->json([
             'success' => true,
             'message' => 'Đã lấy dữ liệu mua lại đơn hàng.',
-            'data' => $order,
+            'data' => $this->normalizeOrder($order),
         ]);
     }
 }

@@ -36,9 +36,9 @@ import {
   getCurrentUser,
   getProducts,
   getSettings,
-  getWishlistProducts,
   logoutUser,
 } from "@/utils/shopStorage";
+import { getWishlist as getWishlistApi } from "@/services/wishlist.service";
 
 function SocialIcon({ type }) {
   if (type === "facebook") {
@@ -129,24 +129,66 @@ export default function ClientLayout({ children }) {
     },
   ];
 
+  //   const loadWishlistCount = async () => {
+  //   try {
+  //     const data = await getWishlistApi();
+
+  //     const total =
+  //       data?.total ??
+  //       data?.items?.length ??
+  //       0;
+
+  //     setWishlistCount(Number(total) || 0);
+  //   } catch (error) {
+  //     setWishlistCount(0);
+  //   }
+  // };
+
+  const loadWishlistCount = async () => {
+    try {
+      const data = await getWishlistApi();
+
+      const total =
+        data?.total ??
+        data?.items?.length ??
+        0;
+
+      setWishlistCount(Number(total) || 0);
+    } catch (error) {
+      setWishlistCount(0);
+    }
+  };
+
   const syncState = () => {
     setUser(getCurrentUser());
+
     setCartCount(
       getCart().reduce((sum, item) => sum + Number(item.quantity || 0), 0)
     );
-    setWishlistCount(getWishlistProducts().length);
+
     setSettings(getSettings());
-  };
+    loadWishlistCount();
+  };;
 
   useEffect(() => {
     syncState();
 
+    const handleFocus = () => {
+      syncState();
+    };
+
     window.addEventListener("storage", syncState);
     window.addEventListener("dynova:storage", syncState);
+    window.addEventListener("dynova:wishlist", syncState);
+    window.addEventListener("dynova:auth", syncState);
+    window.addEventListener("focus", handleFocus);
 
     return () => {
       window.removeEventListener("storage", syncState);
       window.removeEventListener("dynova:storage", syncState);
+      window.removeEventListener("dynova:wishlist", syncState);
+      window.removeEventListener("dynova:auth", syncState);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
@@ -227,8 +269,18 @@ export default function ClientLayout({ children }) {
 
   const handleLogout = () => {
     logoutUser();
+
+    setUser(null);
+    setCartCount(0);
+    setWishlistCount(0);
     setOpenUser(false);
-    syncState();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("dynova:auth"));
+      window.dispatchEvent(new Event("dynova:storage"));
+      window.dispatchEvent(new Event("dynova:wishlist"));
+    }
+
     router.push("/");
   };
 
@@ -356,11 +408,18 @@ export default function ClientLayout({ children }) {
               className="btn-ghost relative hidden h-10 w-10 items-center justify-center rounded-2xl sm:flex sm:h-11 sm:w-11"
               aria-label="Yêu thích"
             >
-              <Heart size={18} />
+              <Heart
+                size={18}
+                className={
+                  wishlistCount > 0
+                    ? ""
+                    : ""
+                }
+              />
 
               {wishlistCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-950 px-1 text-[10px] font-black text-white ring-2 ring-white">
-                  {wishlistCount}
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-black text-white ring-2 ring-white">
+                  {wishlistCount > 99 ? "99+" : wishlistCount}
                 </span>
               )}
             </Link>
