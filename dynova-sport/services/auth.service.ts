@@ -441,3 +441,127 @@ export async function fetchMeWithApi(): Promise<AuthUser | null> {
 
   return user;
 }
+export type ForgotPasswordPayload = {
+  email: string;
+};
+
+export type ResetPasswordPayload = {
+  email: string;
+  token?: string;
+  otp?: string;
+  code?: string;
+  password: string;
+  password_confirmation?: string;
+};
+
+function makePasswordApiError(
+  message: string,
+  status?: number,
+  data?: any
+): Error & { status?: number; data?: any } {
+  const error: Error & { status?: number; data?: any } = new Error(message);
+  error.status = status;
+  error.data = data;
+
+  return error;
+}
+
+function getPasswordErrorMessage(data: any, fallback: string): string {
+  return (
+    data?.message ||
+    data?.error ||
+    data?.errors?.email?.[0] ||
+    data?.errors?.token?.[0] ||
+    data?.errors?.otp?.[0] ||
+    data?.errors?.code?.[0] ||
+    data?.errors?.password?.[0] ||
+    data?.errors?.password_confirmation?.[0] ||
+    fallback
+  );
+}
+
+export async function forgotPasswordWithApi(
+  payload: ForgotPasswordPayload
+): Promise<{
+  success: boolean;
+  message: string;
+  raw: any;
+}> {
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: payload.email,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw makePasswordApiError(
+      getPasswordErrorMessage(
+        data,
+        "Không thể gửi yêu cầu khôi phục mật khẩu."
+      ),
+      response.status,
+      data
+    );
+  }
+
+  return {
+    success: data?.success ?? true,
+    message:
+      data?.message ||
+      "Yêu cầu khôi phục mật khẩu đã được gửi thành công.",
+    raw: data,
+  };
+}
+
+export async function resetPasswordWithApi(
+  payload: ResetPasswordPayload
+): Promise<{
+  success: boolean;
+  message: string;
+  raw: any;
+}> {
+  const token = payload.token || payload.otp || payload.code || "";
+
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: payload.email,
+      token,
+      otp: payload.otp || token,
+      code: payload.code || token,
+      password: payload.password,
+      password_confirmation:
+        payload.password_confirmation || payload.password,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw makePasswordApiError(
+      getPasswordErrorMessage(
+        data,
+        "Không thể đặt lại mật khẩu. Vui lòng kiểm tra mã xác nhận."
+      ),
+      response.status,
+      data
+    );
+  }
+
+  return {
+    success: data?.success ?? true,
+    message: data?.message || "Đặt lại mật khẩu thành công.",
+    raw: data,
+  };
+}
