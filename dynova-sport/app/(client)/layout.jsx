@@ -101,7 +101,7 @@ export default function ClientLayout({ children }) {
     {
       title: "Mua sắm",
       links: [
-        { name: "Flash Sale", href: "/flash-sale" },
+        { name: "Flash Sale", href: "/sale" },
         { name: "Sản phẩm mới", href: "/shop" },
         { name: "Bộ sưu tập", href: "/collections" },
         { name: "Sản phẩm yêu thích", href: "/wishlist" },
@@ -118,12 +118,10 @@ export default function ClientLayout({ children }) {
       ],
     },
     {
-      title: "Tài khoản",
+      title: "CSKH",
       links: [
-        { name: "Hồ sơ cá nhân", href: "/profile" },
-        { name: "Đăng nhập", href: "/login" },
-        { name: "Đăng ký", href: "/register" },
-        { name: "Dashboard quản trị", href: "/admin" },
+        { name: "Chat với chúng tôi", href: "https://zalo.me/0866347730" },
+        { name: "FAQ (Câu hỏi thường gặp)", href: "/faq" },
       ],
     },
   ];
