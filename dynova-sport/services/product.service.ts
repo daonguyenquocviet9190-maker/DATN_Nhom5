@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import { apiFetch } from "./api";
 import type { ApiProduct } from "./home.service";
 
@@ -61,7 +61,7 @@ export async function getProductById(id: string | number) {
 
   return response.data;
 }
-=======
+
 import api from './api';
 
 export const productService = {
@@ -95,4 +95,4 @@ export const productService = {
         return response.data;
     }
 };
->>>>>>> tuananhbach
+

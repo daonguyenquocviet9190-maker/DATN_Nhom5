@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Banner extends Model
 {
-<<<<<<< HEAD
+
     protected $fillable = [
         'title',
         'subtitle',
@@ -28,10 +28,10 @@ class Banner extends Model
         'start_at' => 'datetime',
         'end_at' => 'datetime',
     ];
-=======
+
     protected $table = 'banners'; // Xác định chính xác tên bảng
     protected $primaryKey = 'id'; // Khóa chính (đổi nếu bảng của bạn dùng tên khác)
     protected $guarded = [];
     public $timestamps = false;   // Tắt timestamps nếu bảng không có cột created_at/updated_at
->>>>>>> tuananhbach
+
 }

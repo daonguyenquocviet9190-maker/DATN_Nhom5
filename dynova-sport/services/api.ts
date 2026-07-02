@@ -1,91 +1,47 @@
-<<<<<<< HEAD
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 
-type ApiOptions = RequestInit & {
-  auth?: boolean;
-  token?: string;
-};
-
-export class ApiError extends Error {
-  status: number;
-  data: any;
-
-  constructor(message: string, status: number, data: any = null) {
-    super(message);
-    this.status = status;
-    this.data = data;
-  }
-}
-=======
-import axios from 'axios';
-
-// Lấy link từ file .env.local (http://127.0.0.1:8000/api)
+// Cấu hình Base URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
-const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+// Tạo instance của Axios
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
 });
->>>>>>> tuananhbach
 
-function getStoredToken() {
+// Helper lấy token
+const getStoredToken = () => {
   if (typeof window === "undefined") return null;
+  return localStorage.getItem("dynova_auth_token") || 
+         localStorage.getItem("auth_token") || 
+         localStorage.getItem("token");
+};
 
-  return (
-    localStorage.getItem("dynova_auth_token") ||
-    localStorage.getItem("auth_token") ||
-    localStorage.getItem("token")
-  );
-}
-
-export async function apiFetch<T = unknown>(
-  endpoint: string,
-  options: ApiOptions = {}
-): Promise<T> {
-  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : "/" + endpoint;
-
-  const {
-    auth = true,
-    token: optionToken,
-    headers: optionHeaders,
-    ...fetchOptions
-  } = options;
-
-  const token = optionToken || getStoredToken();
-  const headers = new Headers(optionHeaders);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
+// Interceptor để tự động đính kèm Token vào Header
+apiClient.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
+  return config;
+});
 
-  if (!headers.has("Content-Type") && !(fetchOptions.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
+// Xử lý response và lỗi tập trung
+apiClient.interceptors.response.use(
+  (response) => response.data,
+  (error: AxiosError<any>) => {
+    const message = error.response?.data?.message || error.response?.data?.error || "Đã có lỗi xảy ra.";
+    
+    // Ném ra lỗi để các component bắt (catch) được
+    return Promise.reject({
+      status: error.response?.status,
+      message,
+      data: error.response?.data
+    });
   }
+);
 
-  if (auth && token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(API_URL + cleanEndpoint, {
-    ...fetchOptions,
-    headers,
-    cache: "no-store",
-  });
-
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new ApiError(
-      data?.message ||
-        data?.error ||
-        "Không thể kết nối API. Vui lòng thử lại.",
-      response.status,
-      data
-    );
-  }
-
-  return data as T;
-}
+export default apiClient;

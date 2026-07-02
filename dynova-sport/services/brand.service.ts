@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import { apiFetch } from "./api";
 import type { ApiBrand } from "./home.service";
 
@@ -13,7 +13,6 @@ export async function getBrands() {
 
   return response.data || [];
 }
-=======
 import api from './api';
 
 export const brandService = {
@@ -41,4 +40,3 @@ export const brandService = {
         return response.data;
     }
 };
->>>>>>> tuananhbach

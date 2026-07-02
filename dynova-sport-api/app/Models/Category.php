@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Category extends Model
 {
-<<<<<<< HEAD
+
     protected $fillable = [
         'name',
         'slug',
@@ -24,10 +24,10 @@ class Category extends Model
     {
         return $this->hasMany(Product::class);
     }
-=======
+
     protected $table = 'categories'; 
     protected $primaryKey = 'id';
     protected $guarded = [];
     public $timestamps = false; 
->>>>>>> tuananhbach
+
 }

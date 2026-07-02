@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-<<<<<<< HEAD
+
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\HomeController;
@@ -114,7 +114,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/wishlist/toggle', [WishlistController::class, 'toggle']);
     Route::delete('/wishlist/{productId}', [WishlistController::class, 'destroy']);
     Route::get('/wishlist/check/{productId}', [WishlistController::class, 'check']);
-=======
+
 use App\Http\Controllers\Api\Admin\BannerController;
 use App\Http\Controllers\Api\Admin\BrandController;
 use App\Http\Controllers\Api\Admin\CategoryController;
@@ -161,5 +161,4 @@ Route::prefix('admin')->group(function () {
     // Cấu hình hệ thống
     Route::get('settings', [SettingController::class, 'index']);
     Route::post('settings', [SettingController::class, 'store']);
->>>>>>> tuananhbach
 });

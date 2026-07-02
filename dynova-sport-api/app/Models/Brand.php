@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Brand extends Model
 {
-<<<<<<< HEAD
+
     protected $fillable = [
         'name',
         'slug',
@@ -23,7 +23,7 @@ class Brand extends Model
     public function products()
     {
         return $this->hasMany(Product::class);
-=======
+
     // Xác định tên bảng trong database
     protected $table = 'brands'; 
 
@@ -50,6 +50,6 @@ class Brand extends Model
     public function products()
     {
         return $this->hasMany(Product::class, 'brand_id');
->>>>>>> tuananhbach
+
     }
 }

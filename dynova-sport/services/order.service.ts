@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import { apiFetch } from "./api";
 
 export type OrderItem = {
@@ -326,7 +326,7 @@ export async function getOrders(
 export async function getOrderById(id: number | string) {
   return getOrderDetail(id);
 }
-=======
+
 import api from "./api";
 
 export const orderService = {
@@ -343,4 +343,4 @@ export const orderService = {
     return response.data;
   }
 };
->>>>>>> tuananhbach
+

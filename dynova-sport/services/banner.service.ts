@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+import api from './api';
 import { apiFetch } from "./api";
 import type { ApiBanner } from "./home.service";
 
@@ -13,8 +13,7 @@ export async function getBanners() {
 
   return response.data || [];
 }
-=======
-import api from './api';
+
 
 export const bannerService = {
     // Lấy danh sách banner
@@ -41,4 +40,3 @@ export const bannerService = {
         return response.data;
     }
 };
->>>>>>> tuananhbach

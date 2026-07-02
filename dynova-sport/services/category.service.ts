@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import { apiFetch } from "./api";
 import type { ApiCategory } from "./home.service";
 
@@ -13,7 +13,7 @@ export async function getCategories() {
 
   return response.data || [];
 }
-=======
+
 import api from './api';
 
 export const categoryService = {
@@ -41,4 +41,4 @@ export const categoryService = {
         return response.data;
     }
 };
->>>>>>> tuananhbach
+
