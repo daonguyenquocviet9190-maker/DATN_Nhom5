@@ -3,10 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Brand extends Model
 {
+    /**
+     * Tên bảng trong database
+     */
+    protected $table = 'brands';
 
+    /**
+     * Các trường cho phép gán dữ liệu hàng loạt (Mass Assignment)
+     */
     protected $fillable = [
         'name',
         'slug',
@@ -16,40 +24,26 @@ class Brand extends Model
         'sort_order',
     ];
 
+    /**
+     * Ép kiểu dữ liệu (Casts)
+     */
     protected $casts = [
         'is_active' => 'boolean',
-    ];
-
-    public function products()
-    {
-        return $this->hasMany(Product::class);
-
-    // Xác định tên bảng trong database
-    protected $table = 'brands'; 
-
-    // Xác định khóa chính
-    protected $primaryKey = 'id';
-
-    // Cho phép gán hàng loạt các trường
-    protected $guarded = [];
-
-    // Tắt timestamps nếu bảng của bạn không có cột created_at/updated_at
-    // Nếu bảng có sử dụng timestamps, hãy chuyển thành true
-    public $timestamps = false; 
-
-    // Định nghĩa kiểu dữ liệu cho các cột (Casts)
-    // Giúp Laravel tự động chuyển đổi status từ số (database) sang integer (php)
-    protected $casts = [
-        'status' => 'integer', 
+        'sort_order' => 'integer',
     ];
 
     /**
-     * Khai báo quan hệ: Một thương hiệu có nhiều sản phẩm
-     * (Dùng để lấy tổng số sản phẩm trong bảng quản lý)
+     * Cấu hình Timestamps
+     * Nếu bảng có cột created_at và updated_at, hãy để là true.
+     * Nếu không có, hãy để là false.
      */
-    public function products()
+    public $timestamps = true; 
+
+    /**
+     * Quan hệ: Một thương hiệu có nhiều sản phẩm
+     */
+    public function products(): HasMany
     {
         return $this->hasMany(Product::class, 'brand_id');
-
     }
 }

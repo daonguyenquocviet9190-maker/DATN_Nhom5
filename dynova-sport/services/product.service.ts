@@ -1,6 +1,7 @@
-
 import { apiFetch } from "./api";
 import type { ApiProduct } from "./home.service";
+
+// --- TYPES ---
 
 type ProductListResponse = {
   success: boolean;
@@ -29,9 +30,10 @@ type ProductQuery = {
   per_page?: number;
 };
 
+// --- PUBLIC PRODUCT SERVICE ---
+
 export async function getProducts(params: ProductQuery = {}) {
   const searchParams = new URLSearchParams();
-
   if (params.q) searchParams.set("q", params.q);
   if (params.category) searchParams.set("category", String(params.category));
   if (params.brand) searchParams.set("brand", String(params.brand));
@@ -39,10 +41,7 @@ export async function getProducts(params: ProductQuery = {}) {
   if (params.per_page) searchParams.set("per_page", String(params.per_page));
 
   const query = searchParams.toString();
-
-  const response = await apiFetch<ProductListResponse>(
-    "/products" + (query ? `?${query}` : "")
-  );
+  const response = await apiFetch<ProductListResponse>("/products" + (query ? `?${query}` : ""));
 
   if (Array.isArray(response.data)) {
     return {
@@ -52,47 +51,44 @@ export async function getProducts(params: ProductQuery = {}) {
       total: response.data.length,
     };
   }
-
   return response.data;
 }
 
 export async function getProductById(id: string | number) {
   const response = await apiFetch<ProductDetailResponse>("/products/" + id);
-
   return response.data;
 }
 
-import api from './api';
+// --- ADMIN PRODUCT SERVICE (FIXED) ---
 
 export const productService = {
-    // Lấy danh sách sản phẩm
-    getAll: async () => {
-        const response = await api.get('/admin/products');
-        return response.data;
-    },
+  getAll: async () => {
+    return await apiFetch<ProductListResponse>('/admin/products');
+  },
 
-    // Xem chi tiết 1 sản phẩm
-    getById: async (id: any) => {
-        const response = await api.get(`/admin/products/${id}`);
-        return response.data;
-    },
+  getById: async (id: string | number) => {
+    return await apiFetch<ProductDetailResponse>(`/admin/products/${id}`);
+  },
 
-    // Thêm mới sản phẩm
-    create: async (data: any) => {
-        const response = await api.post('/admin/products', data);
-        return response.data;
-    },
+  create: async (data: any) => {
+    return await apiFetch('/admin/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
 
-    // Cập nhật sản phẩm
-    update: async (id: any, data: any) => {
-        const response = await api.put(`/admin/products/${id}`, data);
-        return response.data;
-    },
+  update: async (id: string | number, data: any) => {
+    return await apiFetch(`/admin/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
 
-    // Xóa sản phẩm
-    delete: async (id: any) => {
-        const response = await api.delete(`/admin/products/${id}`);
-        return response.data;
-    }
+  delete: async (id: string | number) => {
+    return await apiFetch(`/admin/products/${id}`, {
+      method: 'DELETE'
+    });
+  }
 };
-

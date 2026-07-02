@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -10,41 +9,44 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, Notifiable;
+    // Cần khai báo đủ các Traits này để hệ thống hoạt động chính xác
+    use HasApiTokens, HasFactory, Notifiable;
 
-    protected $fillable = [
-        'name',
-    use HasFactory, Notifiable;
-
-    // Chỉ định chính xác bảng users trong DB
+    /**
+     * Tên bảng trong database (mặc định là 'users', bạn có thể giữ nguyên nếu không đổi)
+     */
     protected $table = 'users';
 
-    // Cho phép lưu các trường dữ liệu tương ứng cấu hình MySQL
+    /**
+     * Các trường có thể gán dữ liệu hàng loạt
+     */
     protected $fillable = [
         'role_id',
-
         'full_name',
         'email',
         'phone',
         'role',
         'password',
-        'phone',
         'address',
         'avatar',
         'status',
         'email_verified_at'
     ];
 
+    /**
+     * Các trường cần ẩn khi trả về JSON (để bảo mật)
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-
+    /**
+     * Ép kiểu dữ liệu (Casting)
+     */
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+        'password' => 'hashed', // Tự động hash password khi lưu
         'role_id' => 'integer',
     ];
-
 }

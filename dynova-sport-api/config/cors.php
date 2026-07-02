@@ -2,8 +2,6 @@
 
 return [
 
-
-
     /*
     |--------------------------------------------------------------------------
     | Cross-Origin Resource Sharing (CORS) Configuration
@@ -21,15 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-
-    'allowed_origins' => [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:3001',
-        'http://127.0.0.1:3001',
-    ],
-
-    'allowed_origins' => ['*'],
+    'allowed_origins' => ['*'], // Cấu hình cho phép tất cả các nguồn (hoặc điền cụ thể các domain của bạn)
 
     'allowed_origins_patterns' => [],
 
@@ -39,10 +29,5 @@ return [
 
     'max_age' => 0,
 
-
-    'supports_credentials' => true,
-];
-
-    'supports_credentials' => false,
-
+    'supports_credentials' => true, // Phải là true nếu bạn dùng Sanctum cho SPA (xác thực cookie/session)
 ];

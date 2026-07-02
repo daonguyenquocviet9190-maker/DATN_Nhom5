@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
 
 // Cấu hình Base URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
@@ -20,7 +20,7 @@ const getStoredToken = () => {
          localStorage.getItem("token");
 };
 
-// Interceptor để tự động đính kèm Token vào Header
+// Interceptor để tự động đính kèm Token
 apiClient.interceptors.request.use((config) => {
   const token = getStoredToken();
   if (token && config.headers) {
@@ -29,13 +29,11 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Xử lý response và lỗi tập trung
+// Xử lý response tập trung
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error: AxiosError<any>) => {
     const message = error.response?.data?.message || error.response?.data?.error || "Đã có lỗi xảy ra.";
-    
-    // Ném ra lỗi để các component bắt (catch) được
     return Promise.reject({
       status: error.response?.status,
       message,
@@ -44,4 +42,20 @@ apiClient.interceptors.response.use(
   }
 );
 
+// --- PHẦN FIX CHO BẠN ---
+// 1. Giữ nguyên default export để không làm hỏng các file cũ
 export default apiClient;
+
+// 2. Xuất thêm apiFetch để các service bạn vừa sửa hoạt động được
+// Chúng ta map các method của axios vào apiFetch
+export const apiFetch = async <T>(url: string, options?: any): Promise<T> => {
+  const method = options?.method?.toLowerCase() || 'get';
+  const config = {
+    ...options,
+    data: options?.body ? JSON.parse(options.body) : undefined,
+  };
+  
+  // @ts-ignore
+  console.log("Đang gọi API:", url, "với config:", config);
+  return apiClient[method](url, config);
+};
