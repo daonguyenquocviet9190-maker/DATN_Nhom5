@@ -1,17 +1,62 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, Save, Settings, Store, Truck } from "lucide-react";
-import { getSettings, saveSettings } from "@/utils/shopStorage";
+import { Loader2, Save, Settings } from "lucide-react";
+import { extractObject, getAdminSettings, updateAdminSettings } from "@/services/admin.service";
 
-export default function SettingsAdmin() {
-  const [settings, setSettings] = useState(null);
-  const [message, setMessage] = useState("");
-  useEffect(() => { setSettings(getSettings()); }, []);
-  if (!settings) return null;
-  const update = (key, value) => setSettings((prev) => ({ ...prev, [key]: value }));
-  const updateBank = (key, value) => setSettings((prev) => ({ ...prev, bankAccount: { ...prev.bankAccount, [key]: value } }));
-  const updateGateway = (key, value) => setSettings((prev) => ({ ...prev, gateways: { ...prev.gateways, [key]: value } }));
-  const submit = (event) => { event.preventDefault(); saveSettings(settings); setMessage("Đã lưu cấu hình hệ thống."); setTimeout(() => setMessage(""), 2200); };
-  return <div className="space-y-6">{message && <div className="fixed right-6 top-24 z-50 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white shadow-2xl">{message}</div>}<div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">System Settings</p><h2 className="mt-2 text-3xl font-black">Cấu hình hệ thống</h2><p className="mt-2 text-sm text-slate-400">Quản lý thông tin cửa hàng, vận chuyển và phương thức thanh toán.</p></div><form onSubmit={submit} className="space-y-6"><section className="admin-card rounded-3xl p-5"><div className="mb-5 flex items-center gap-2"><Store className="text-orange-300" /><h3 className="font-black">Thông tin cửa hàng</h3></div><div className="grid gap-4 md:grid-cols-2"><input value={settings.storeName} onChange={(e) => update("storeName", e.target.value)} className="admin-input" placeholder="Tên cửa hàng" /><input value={settings.hotline} onChange={(e) => update("hotline", e.target.value)} className="admin-input" placeholder="Hotline" /><input value={settings.email} onChange={(e) => update("email", e.target.value)} className="admin-input" placeholder="Email" /><input value={settings.address} onChange={(e) => update("address", e.target.value)} className="admin-input" placeholder="Địa chỉ" /></div></section><section className="admin-card rounded-3xl p-5"><div className="mb-5 flex items-center gap-2"><Truck className="text-orange-300" /><h3 className="font-black">Vận chuyển & tính tiền</h3></div><div className="grid gap-4 md:grid-cols-3"><input type="number" value={settings.shippingFee} onChange={(e) => update("shippingFee", Number(e.target.value))} className="admin-input" placeholder="Phí ship" /><input type="number" value={settings.freeShipThreshold} onChange={(e) => update("freeShipThreshold", Number(e.target.value))} className="admin-input" placeholder="Miễn ship từ" /><input type="number" value={settings.taxRate} onChange={(e) => update("taxRate", Number(e.target.value))} className="admin-input" placeholder="Thuế %" /></div></section><section className="admin-card rounded-3xl p-5"><div className="mb-5 flex items-center gap-2"><CreditCard className="text-orange-300" /><h3 className="font-black">Thanh toán</h3></div><div className="grid gap-4 md:grid-cols-2"><input value={settings.bankAccount.bank} onChange={(e) => updateBank("bank", e.target.value)} className="admin-input" placeholder="Ngân hàng" /><input value={settings.bankAccount.accountNumber} onChange={(e) => updateBank("accountNumber", e.target.value)} className="admin-input" placeholder="Số tài khoản" /><input value={settings.bankAccount.accountName} onChange={(e) => updateBank("accountName", e.target.value)} className="admin-input" placeholder="Chủ tài khoản" /><input value={settings.bankAccount.branch} onChange={(e) => updateBank("branch", e.target.value)} className="admin-input" placeholder="Chi nhánh" /></div><div className="mt-5 grid gap-3 md:grid-cols-5">{Object.keys(settings.gateways).map((key) => <label key={key} className="flex items-center justify-between rounded-2xl bg-white/5 p-4 text-sm font-black uppercase"><span>{key}</span><input type="checkbox" checked={settings.gateways[key]} onChange={(e) => updateGateway(key, e.target.checked)} className="accent-orange-500" /></label>)}</div><p className="mt-4 text-xs leading-5 text-slate-500">Các cổng VNPAY, MoMo, ZaloPay hiện ở chế độ demo. Khi có merchant key thật, backend sẽ cần endpoint tạo payment URL và callback xác nhận giao dịch.</p></section><button className="rounded-2xl bg-orange-500 px-6 py-4 text-sm font-black text-white"><Save className="mr-2 inline" size={17} /> Lưu cấu hình</button></form></div>;
+export default function AdminSettingsPage() {
+  const [form, setForm] = useState({
+    site_name: "Dynova Sport",
+    hotline: "0866 347 730",
+    email: "cskh@dynova.vn",
+    address: "TP. Hồ Chí Minh",
+    facebook: "",
+    instagram: "",
+    tiktok: "",
+    shipping_note: "Miễn phí giao hàng cho đơn từ 500K",
+    return_policy: "Đổi trả 30 ngày",
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        setLoading(true);
+        const res = await getAdminSettings();
+        const data = extractObject(res, ["settings"]);
+        setForm((prev) => ({ ...prev, ...data }));
+      } catch (err) {
+        setError(err?.message || "Không thể tải cài đặt. Cần API /api/admin/settings.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const updateField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const submit = async (event) => {
+    event.preventDefault();
+    try {
+      setSaving(true);
+      setError("");
+      await updateAdminSettings(form);
+      setNotice("Đã lưu cấu hình website.");
+      setTimeout(() => setNotice(""), 1800);
+    } catch (err) {
+      setError(err?.message || "Không thể lưu cấu hình website.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="grid h-72 place-items-center rounded-[32px] border border-white/10 bg-white/[0.06]"><Loader2 className="animate-spin text-orange-300" size={34}/></div>;
+  }
+
+  return <div className="space-y-6">{notice&&<div className="fixed right-5 top-24 z-[120] rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white">{notice}</div>}<section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white"><Settings size={22}/></div><div><p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">Settings</p><h2 className="mt-1 text-2xl font-black text-white">Cấu hình website</h2><p className="mt-1 text-sm font-semibold text-slate-500">Cập nhật thông tin hiển thị ở header, footer và hệ thống.</p></div></div></section>{error&&<div className="rounded-3xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">{error}</div>}<form onSubmit={submit} className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl"><div className="grid gap-4 md:grid-cols-2"><label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Tên website</span><input value={form.site_name} onChange={e=>updateField('site_name',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Hotline</span><input value={form.hotline} onChange={e=>updateField('hotline',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Email</span><input value={form.email} onChange={e=>updateField('email',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Địa chỉ</span><input value={form.address} onChange={e=>updateField('address',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Facebook</span><input value={form.facebook} onChange={e=>updateField('facebook',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Instagram</span><input value={form.instagram} onChange={e=>updateField('instagram',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label className="md:col-span-2"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Thông báo giao hàng</span><textarea rows={3} value={form.shipping_note} onChange={e=>updateField('shipping_note',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label><label className="md:col-span-2"><span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">Chính sách đổi trả</span><textarea rows={3} value={form.return_policy} onChange={e=>updateField('return_policy',e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none"/></label></div><div className="mt-6 flex justify-end"><button disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-6 py-3 text-sm font-black text-white disabled:opacity-60"><Save size={17}/>{saving?'Đang lưu...':'Lưu cấu hình'}</button></div></form></div>;
 }
