@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { apiFetch } from "./api";
 
 export type OrderItem = {
@@ -325,3 +326,21 @@ export async function getOrders(
 export async function getOrderById(id: number | string) {
   return getOrderDetail(id);
 }
+=======
+import api from "./api";
+
+export const orderService = {
+  getAll: async () => {
+    const response = await api.get("/admin/orders");
+    return response.data;
+  },
+  getById: async (id: any) => {
+    const response = await api.get(`/admin/orders/${id}`);
+    return response.data;
+  },
+  update: async (id: any, data: any) => {
+    const response = await api.put(`/admin/orders/${id}`, data);
+    return response.data;
+  }
+};
+>>>>>>> tuananhbach

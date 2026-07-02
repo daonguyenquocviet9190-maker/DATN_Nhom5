@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model
 {
+<<<<<<< HEAD
     protected $fillable = [
         'category_id',
         'brand_id',
@@ -49,4 +50,10 @@ class Product extends Model
     {
         return $this->hasMany(Review::class);
     }
+=======
+    protected $table = 'products'; 
+    protected $primaryKey = 'id';
+    protected $guarded = [];
+    public $timestamps = false; 
+>>>>>>> tuananhbach
 }

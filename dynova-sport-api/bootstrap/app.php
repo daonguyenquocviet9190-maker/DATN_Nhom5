@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     commands: __DIR__.'/../routes/console.php',
     health: '/up',
 )
+<<<<<<< HEAD
     ->withMiddleware(function (Middleware $middleware): void {
         //
     })
@@ -26,3 +27,13 @@ return Application::configure(basePath: dirname(__DIR__))
         }
     });
 })->create();
+=======
+    ->withMiddleware(function (Middleware $middleware) {
+    $middleware->validateCsrfTokens(except: [
+        'api/*' // Bỏ qua check CSRF token đối với toàn bộ link API
+    ]);
+})
+    ->withExceptions(function (Exceptions $exceptions): void {
+        //
+    })->create();
+>>>>>>> tuananhbach

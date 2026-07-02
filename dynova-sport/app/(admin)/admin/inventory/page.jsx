@@ -1,16 +1,144 @@
-"use client";
+'use client';
 
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Minus, Plus, Search } from "lucide-react";
-import { getProducts, saveProducts } from "@/utils/shopStorage";
+import { Search, Package, RefreshCw, AlertTriangle, CheckCircle, Eye, History } from "lucide-react";
+import { inventoryService } from "@/services/inventory.service";
 
 export default function InventoryAdmin() {
-  const [products, setProducts] = useState([]);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  useEffect(() => { setProducts(getProducts()); }, []);
-  const status = (stock) => stock === 0 ? "Hết hàng" : stock <= 10 ? "Sắp hết" : "An toàn";
-  const filtered = useMemo(() => products.filter((item) => (filter === "all" || status(item.stock) === filter) && (item.name + item.sku).toLowerCase().includes(query.toLowerCase())), [products, query, filter]);
-  const adjust = (id, amount) => { const next = products.map((item) => item.id === id ? { ...item, stock: Math.max(0, Number(item.stock || 0) + amount) } : item); setProducts(next); saveProducts(next); };
-  return <div className="space-y-6"><div><p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Inventory</p><h2 className="mt-2 text-3xl font-black">Quản lý tồn kho</h2><p className="mt-2 text-sm text-slate-400">Theo dõi tồn kho theo sản phẩm và điều chỉnh nhanh số lượng.</p></div><section className="grid gap-4 md:grid-cols-3"><div className="admin-card rounded-3xl p-5"><Boxes className="text-emerald-300" /><p className="mt-3 text-2xl font-black">{products.reduce((sum, item) => sum + Number(item.stock || 0), 0)}</p><p className="text-sm text-slate-400">Tổng tồn kho</p></div><div className="admin-card rounded-3xl p-5"><p className="text-2xl font-black text-orange-300">{products.filter((item) => status(item.stock) === "Sắp hết").length}</p><p className="mt-3 text-sm text-slate-400">Sắp hết hàng</p></div><div className="admin-card rounded-3xl p-5"><p className="text-2xl font-black text-rose-300">{products.filter((item) => status(item.stock) === "Hết hàng").length}</p><p className="mt-3 text-sm text-slate-400">Hết hàng</p></div></section><div className="admin-card rounded-3xl p-5"><div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]"><div className="relative"><Search className="absolute left-3 top-3.5 text-slate-500" size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} className="admin-input w-full pl-10" placeholder="Tìm sản phẩm hoặc SKU" /></div><select value={filter} onChange={(e) => setFilter(e.target.value)} className="admin-input"><option value="all">Tất cả</option><option value="An toàn">An toàn</option><option value="Sắp hết">Sắp hết</option><option value="Hết hàng">Hết hàng</option></select></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs uppercase text-slate-500"><tr><th className="p-3">Sản phẩm</th><th className="p-3">SKU</th><th className="p-3">Tồn kho</th><th className="p-3">Trạng thái</th><th className="p-3 text-right">Điều chỉnh</th></tr></thead><tbody className="divide-y divide-white/10">{filtered.map((product) => <tr key={product.id} className="hover:bg-white/5"><td className="p-3"><div className="flex items-center gap-3"><img src={product.image} alt={product.name} className="h-12 w-12 rounded-xl object-cover" /><p className="font-black text-white">{product.name}</p></div></td><td className="p-3 text-slate-400">{product.sku}</td><td className="p-3 text-lg font-black">{product.stock}</td><td className="p-3"><span className={"status-pill " + (status(product.stock) === "An toàn" ? "bg-emerald-400/10 text-emerald-300" : status(product.stock) === "Sắp hết" ? "bg-orange-400/10 text-orange-300" : "bg-rose-400/10 text-rose-300")}>{status(product.stock)}</span></td><td className="p-3 text-right"><button onClick={() => adjust(product.id, -5)} className="rounded-xl bg-rose-400/10 p-2 text-rose-300"><Minus size={16} /></button><button onClick={() => adjust(product.id, 5)} className="ml-2 rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><Plus size={16} /></button></td></tr>)}</tbody></table></div></div></div>;
+  const [stockFilter, setStockFilter] = useState("all");
+  
+  // State cho Modal lịch sử
+  const [history, setHistory] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+  };
+
+  const fetchInventory = async () => {
+    try {
+      setLoading(true);
+      const data = await inventoryService.getAll();
+      setItems(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Lỗi lấy dữ liệu kho:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchInventory(); }, []);
+
+  // Mở modal lịch sử
+  const openHistory = async (item) => {
+    setSelectedProduct(item.product?.name);
+    try {
+      const logs = await inventoryService.getHistory(item.product_id);
+      setHistory(logs);
+      setShowModal(true);
+    } catch (error) {
+      alert("Không thể tải lịch sử!");
+    }
+  };
+
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      const name = item.product?.name?.toLowerCase() || "";
+      const stock = item.quantity_on_hand ?? 0;
+      const matchesQuery = name.includes(query.toLowerCase());
+      
+      if (stockFilter === "low") return matchesQuery && stock <= 5 && stock > 0;
+      if (stockFilter === "out") return matchesQuery && stock === 0;
+      return matchesQuery;
+    });
+  }, [items, query, stockFilter]);
+
+  const handleUpdateStock = async (id, currentStock) => {
+    const newStockStr = prompt("Nhập số lượng tồn kho mới:", currentStock);
+    if (newStockStr === null) return;
+    const newStock = parseInt(newStockStr, 10);
+    if (isNaN(newStock) || newStock < 0) return alert("Số lượng không hợp lệ!");
+
+    try {
+      await inventoryService.updateStock(id, { quantity_on_hand: newStock });
+      fetchInventory();
+    } catch (error) { alert("Cập nhật thất bại!"); }
+  };
+
+  return (
+    <div className="space-y-6 p-2">
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-300">Inventory</p>
+        <h2 className="mt-2 text-3xl font-black uppercase text-white">Quản lý kho hàng</h2>
+      </div>
+
+      <div className="admin-card rounded-3xl p-5 bg-[#161616] border border-[#222222]">
+        {/* Thanh tìm kiếm và bộ lọc */}
+        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-3.5 text-slate-500" size={16} />
+            <input 
+              value={query} onChange={(e) => setQuery(e.target.value)} 
+              className="w-full pl-10 bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl py-2.5 text-sm text-white outline-none" 
+              placeholder="Tìm kiếm sản phẩm..." 
+            />
+          </div>
+          <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} className="bg-[#1c1c1c] border border-[#2d2d2d] rounded-xl px-4 py-2.5 text-sm text-white">
+            <option value="all">Tất cả sản phẩm</option>
+            <option value="low">Sắp hết hàng (≤ 5)</option>
+            <option value="out">Đã hết hàng (0)</option>
+          </select>
+        </div>
+
+        {/* Bảng dữ liệu */}
+        <table className="w-full text-left text-sm text-gray-400">
+          <thead className="text-xs uppercase text-slate-500 bg-[#1c1c1c]">
+            <tr>
+              <th className="p-3">Sản phẩm</th>
+              <th className="p-3">Số lượng tồn</th>
+              <th className="p-3">Trạng thái</th>
+              <th className="p-3 text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {filtered.map((item) => (
+              <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                <td className="p-3 font-bold text-white">{item.product?.name}</td>
+                <td className="p-3 font-mono font-bold text-white">{item.quantity_on_hand}</td>
+                <td className="p-3">
+                  {item.quantity_on_hand === 0 ? <span className="text-rose-400 text-xs">Hết hàng</span> : <span className="text-emerald-400 text-xs">Còn hàng</span>}
+                </td>
+                <td className="p-3 text-right flex justify-end gap-2">
+                  <button onClick={() => openHistory(item)} className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-xl" title="Xem lịch sử"><History size={16}/></button>
+                  <button onClick={() => handleUpdateStock(item.id, item.quantity_on_hand)} className="p-2 text-orange-400 hover:bg-orange-500/10 rounded-xl" title="Cập nhật kho"><RefreshCw size={16}/></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal Lịch sử */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1c1c1c] p-6 rounded-2xl w-full max-w-md border border-[#333]">
+            <h3 className="text-lg font-bold text-white mb-4">Lịch sử: {selectedProduct}</h3>
+            <div className="max-h-[300px] overflow-y-auto pr-2">
+              {history.map((log) => (
+                <div key={log.id} className="flex justify-between py-2 border-b border-white/5 text-xs">
+                  <span className={log.type === 'import' ? 'text-emerald-400' : 'text-rose-400'}>{log.type === 'import' ? 'Nhập' : 'Xuất'} {Math.abs(log.change_quantity)}</span>
+                  <span className="text-slate-500">{new Date(log.created_at).toLocaleString('vi-VN')}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowModal(false)} className="mt-6 w-full py-2 bg-white/10 rounded-xl text-white">Đóng</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
