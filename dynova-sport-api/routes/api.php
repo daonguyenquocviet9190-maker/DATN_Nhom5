@@ -18,6 +18,8 @@ use App\Http\Controllers\Api\Admin\SettingController;
 |--------------------------------------------------------------------------
 */
 
+// ... (các dòng use phía trên giữ nguyên)
+
 Route::prefix('admin')->group(function () {
     
     // Module cốt lõi
@@ -29,13 +31,18 @@ Route::prefix('admin')->group(function () {
     Route::apiResource('orders', OrderController::class);
     Route::apiResource('promotions', PromotionController::class);
     Route::apiResource('ratings', RatingController::class);
+    Route::get('inventory/{productId}/history', [App\Http\Controllers\Api\Admin\InventoryController::class, 'getHistory']);
+    Route::apiResource('inventory', App\Http\Controllers\Api\Admin\InventoryController::class);
     
-    // Module Kho hàng (Inventory) - Tối ưu hóa cho tính năng Lịch sử
-    // Loại bỏ các route không dùng (show, destroy, store) để bảo mật
-    Route::apiResource('inventory', InventoryController::class)->except(['show', 'destroy', 'store']);
+    // --- KHU VỰC KHO HÀNG (Inventory) ---
     
-    // Route riêng để xem lịch sử xuất nhập kho (Khắc phục lỗi 404 trước đó)
+    // 1. Đặt route cụ thể lên TRƯỚC resource để tránh bị hiểu nhầm là {id}
     Route::get('inventory/{productId}/history', [InventoryController::class, 'getHistory']);
+    
+    // 2. Chỉ cho phép index (danh sách) và update (cập nhật)
+    Route::apiResource('inventory', InventoryController::class)->only(['index', 'update']);
+    
+    // ------------------------------------
     
     // Cấu hình hệ thống
     Route::get('settings', [SettingController::class, 'index']);
