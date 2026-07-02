@@ -28,6 +28,12 @@ import { formatCurrency } from "@/data/shop";
 import { addToCart } from "@/utils/shopStorage";
 
 import {
+  getProductImage,
+  getStorageImage,
+  PRODUCT_FALLBACK,
+} from "@/utils/imageUrl";
+
+import {
   checkWishlistItem,
   toggleWishlistApi,
 } from "@/services/wishlist.service";
@@ -70,13 +76,7 @@ function normalizeImage(image) {
 }
 
 function getImage(product) {
-  return normalizeImage(
-    product?.image_url ||
-      product?.image ||
-      product?.imageUrl ||
-      product?.thumbnail ||
-      product?.thumbnail_url
-  );
+  return getProductImage(product);
 }
 
 function getCategoryName(product) {
@@ -106,36 +106,46 @@ function getBrandName(product) {
 function getGallery(product) {
   const images = [];
 
-  if (Array.isArray(product?.gallery)) images.push(...product.gallery);
-  if (Array.isArray(product?.images)) images.push(...product.images);
+  if (Array.isArray(product?.gallery)) {
+    images.push(...product.gallery);
+  }
+
+  if (Array.isArray(product?.images)) {
+    images.push(...product.images);
+  }
 
   images.push(getImage(product));
 
   if (Array.isArray(product?.variants)) {
     product.variants.forEach((variant) => {
-      if (variant?.image_url) images.push(normalizeImage(variant.image_url));
-      if (variant?.image) images.push(normalizeImage(variant.image));
+      if (variant?.image) {
+        images.push(getStorageImage(variant.image, "products", PRODUCT_FALLBACK));
+      }
+
+      if (variant?.image_url) {
+        images.push(getStorageImage(variant.image_url, "products", PRODUCT_FALLBACK));
+      }
     });
   }
 
-  return uniqueArray(images.map(normalizeImage));
+  return uniqueArray(images);
 }
 
 function getProductRating(product) {
   return Number(
     product?.average_rating ||
-      product?.rating_average ||
-      product?.rating ||
-      0
+    product?.rating_average ||
+    product?.rating ||
+    0
   );
 }
 
 function getProductReviewCount(product) {
   return Number(
     product?.reviews_count ||
-      product?.review_count ||
-      product?.total_reviews ||
-      0
+    product?.review_count ||
+    product?.total_reviews ||
+    0
   );
 }
 
@@ -175,8 +185,8 @@ function RelatedCard({ product }) {
         <img
           src={getImage(product)}
           alt={product.name}
-          onError={(event) => {
-            event.currentTarget.src = FALLBACK_IMAGE;
+          onError={(e) => {
+            e.currentTarget.src = PRODUCT_FALLBACK;
           }}
           className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105"
         />
@@ -266,26 +276,26 @@ export default function ProductDetailClient({
 
   const displayPrice = Number(
     selectedVariant?.sale_price ||
-      selectedVariant?.price ||
-      product?.sale_price ||
-      product?.price ||
-      0
+    selectedVariant?.price ||
+    product?.sale_price ||
+    product?.price ||
+    0
   );
 
   const comparePrice = Number(
     selectedVariant?.compare_price ||
-      product?.oldPrice ||
-      product?.compare_price ||
-      product?.old_price ||
-      product?.original_price ||
-      0
+    product?.oldPrice ||
+    product?.compare_price ||
+    product?.old_price ||
+    product?.original_price ||
+    0
   );
 
   const stock = Number(
     selectedVariant?.stock ??
-      product?.stock ??
-      product?.quantity ??
-      99
+    product?.stock ??
+    product?.quantity ??
+    99
   );
 
   const sold = Number(product?.sold || 0);
@@ -434,8 +444,8 @@ export default function ProductDetailClient({
           <img
             src={getImage(product)}
             alt={product.name}
-            onError={(event) => {
-              event.currentTarget.src = FALLBACK_IMAGE;
+            onError={(e) => {
+              e.currentTarget.src = PRODUCT_FALLBACK;
             }}
             className="h-full w-full object-cover opacity-20 blur-sm"
           />
@@ -504,8 +514,8 @@ export default function ProductDetailClient({
                   <img
                     src={image}
                     alt="Ảnh sản phẩm"
-                    onError={(event) => {
-                      event.currentTarget.src = FALLBACK_IMAGE;
+                    onError={(e) => {
+                      e.currentTarget.src = PRODUCT_FALLBACK;
                     }}
                     className="h-full w-full object-cover"
                   />
@@ -517,8 +527,8 @@ export default function ProductDetailClient({
               <img
                 src={mainImage}
                 alt={product.name}
-                onError={(event) => {
-                  event.currentTarget.src = FALLBACK_IMAGE;
+                onError={(e) => {
+                  e.currentTarget.src = PRODUCT_FALLBACK;
                 }}
                 className="product-main-image absolute inset-0 h-full w-full object-cover"
               />
