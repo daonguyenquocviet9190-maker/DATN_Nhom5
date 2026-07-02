@@ -46,6 +46,14 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/banners', [BannerController::class, 'index']);
 Route::get('/brands', [BrandController::class, 'index']);
 
+/*
+|--------------------------------------------------------------------------
+| PUBLIC REVIEWS
+|--------------------------------------------------------------------------
+| Xem danh sách đánh giá không cần đăng nhập.
+|--------------------------------------------------------------------------
+*/
+
 Route::get('/reviews', [ReviewController::class, 'index']);
 
 Route::post('/shipping/fee', [ShippingController::class, 'fee']);
@@ -75,21 +83,24 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-   Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/orders', [OrderController::class, 'myOrders']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
     Route::post('/orders/{id}/reorder', [OrderController::class, 'reorder']);
-});
 
     /*
     |--------------------------------------------------------------------------
-    | REVIEWS
+    | PRIVATE REVIEWS
+    |--------------------------------------------------------------------------
+    | Gửi, sửa, xóa, xem đánh giá của tôi cần đăng nhập.
     |--------------------------------------------------------------------------
     */
 
     Route::post('/reviews', [ReviewController::class, 'store']);
+    Route::get('/my-reviews', [ReviewController::class, 'myReviews']);
+    Route::put('/reviews/{id}', [ReviewController::class, 'update']);
+    Route::delete('/reviews/{id}', [ReviewController::class, 'destroy']);
 
     /*
     |--------------------------------------------------------------------------
