@@ -26,13 +26,11 @@ export function saveAuthSession(token?: string, user?: AuthUser) {
   if (typeof window === "undefined") return;
 
   if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem("dynova_auth_token", token);
   }
 
   if (user) {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-
-    // giữ tương thích với header/profile/cart cũ
+    localStorage.setItem("dynova_current_user", JSON.stringify(user));
     localStorage.setItem("currentUser", JSON.stringify(user));
     localStorage.setItem("isLoggedIn", "true");
     localStorage.setItem("userDisplayName", user.name || user.fullName || "");

@@ -2,9 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Flame, Heart, ShoppingBag, Star, Zap, CheckCircle, ShoppingCart } from "lucide-react";
-import { categories, formatCurrency } from "@/data/shop";
-import { addToCart, getProducts, getWishlist, toggleWishlist } from "@/utils/shopStorage";
+import { Flame, Heart, ShoppingBag, Star, CheckCircle, ShoppingCart } from "lucide-react";
+
+import {
+    categories as localCategories,
+    formatCurrency,
+} from "@/data/shop";
+
+import {
+    addToCart,
+    getProducts as getLocalProducts,
+    getWishlist,
+    toggleWishlist,
+} from "@/utils/shopStorage";
+
+import { getProducts } from "@/services/product.service";
+import { getCategories } from "@/services/category.service";
 
 // Tính mốc kết thúc Flash Sale: 23:59:59 hôm nay (nếu đã qua mốc này thì tự lùi sang ngày mai)
 function getSaleEndTime() {
@@ -29,19 +42,97 @@ function soldPercentFromId(id) {
 
 export default function FlashSalePage() {
     const [items, setItems] = useState([]);
+    const [apiCategories, setApiCategories] = useState([]);
     const [category, setCategory] = useState("all");
     const [sort, setSort] = useState("discount");
     const [wishlist, setWishlist] = useState([]);
     const [notice, setNotice] = useState("");
     const [endTime, setEndTime] = useState(null);
     const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 });
+    const [loading, setLoading] = useState(true);
 
+    // ==== LẤY SẢN PHẨM TỪ API, GIỐNG TRANG SHOP ====
     useEffect(() => {
-        setItems(getProducts());
-        setWishlist(getWishlist().map(Number));
-        setEndTime(getSaleEndTime());
+        async function loadSaleData() {
+            try {
+                setLoading(true);
+
+                const [productResponse, categoryResponse] = await Promise.all([
+                    getProducts({ per_page: 100 }),
+                    getCategories(),
+                ]);
+
+                const apiProducts = productResponse?.data || [];
+
+                setItems(apiProducts.length > 0 ? apiProducts : getLocalProducts());
+                setApiCategories(
+                    categoryResponse.length > 0 ? categoryResponse : localCategories
+                );
+            } catch (error) {
+                console.log("Flash sale API error:", error.message);
+
+                setItems(getLocalProducts());
+                setApiCategories(localCategories);
+            } finally {
+                setWishlist(getWishlist().map(Number));
+                setEndTime(getSaleEndTime());
+                setLoading(false);
+            }
+        }
+
+        loadSaleData();
     }, []);
 
+    const safeCategories =
+        Array.isArray(apiCategories) && apiCategories.length > 0
+            ? apiCategories
+            : localCategories;
+
+    // ==== CÁC HELPER CHUẨN HÓA FIELD, GIỐNG TRANG SHOP ====
+    const getProductImage = (product) => {
+        return (
+            product?.image ||
+            product?.image_url ||
+            product?.imageUrl ||
+            "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
+        );
+    };
+
+    const getProductCategoryName = (product) => {
+        if (typeof product?.category === "string") return product.category;
+
+        return (
+            product?.category?.name ||
+            product?.category_name ||
+            product?.categoryName ||
+            "Dynova Sport"
+        );
+    };
+
+    const getProductCategoryId = (product) => {
+        return String(
+            product?.category_id ||
+            product?.categoryId ||
+            product?.category?.id ||
+            ""
+        );
+    };
+
+    const getProductOldPrice = (product) => {
+        return product?.oldPrice || product?.compare_price;
+    };
+
+    const normalizeProductForStorage = (product) => {
+        return {
+            ...product,
+            image: getProductImage(product),
+            category: getProductCategoryName(product),
+            categoryId: getProductCategoryId(product),
+            oldPrice: getProductOldPrice(product),
+        };
+    };
+
+    // ==== ĐẾM NGƯỢC ====
     useEffect(() => {
         if (!endTime) return;
         const tick = () => {
@@ -57,20 +148,32 @@ export default function FlashSalePage() {
         return () => clearInterval(id);
     }, [endTime]);
 
+    // ==== CHỈ LẤY SẢN PHẨM ĐANG GIẢM GIÁ (oldPrice > price) ====
     const saleItems = useMemo(
         () =>
             items
-                .filter((p) => p.oldPrice && p.oldPrice > p.price)
                 .map((p) => ({
                     ...p,
-                    discount: Math.round(((p.oldPrice - p.price) / p.oldPrice) * 100),
+                    oldPrice: getProductOldPrice(p),
+                }))
+                .filter((p) => p.oldPrice && Number(p.oldPrice) > Number(p.price))
+                .map((p) => ({
+                    ...p,
+                    image: getProductImage(p),
+                    category: getProductCategoryName(p),
+                    categoryId: getProductCategoryId(p),
+                    discount: Math.round(
+                        ((p.oldPrice - p.price) / p.oldPrice) * 100
+                    ),
                     soldPercent: soldPercentFromId(p.id),
                 })),
         [items]
     );
 
     const filtered = useMemo(() => {
-        const result = saleItems.filter((p) => category === "all" || p.categoryId === category);
+        const result = saleItems.filter(
+            (p) => category === "all" || String(p.categoryId) === String(category)
+        );
         if (sort === "price-asc") return [...result].sort((a, b) => a.price - b.price);
         if (sort === "price-desc") return [...result].sort((a, b) => b.price - a.price);
         if (sort === "ending-soon") return [...result].sort((a, b) => b.soldPercent - a.soldPercent);
@@ -78,7 +181,12 @@ export default function FlashSalePage() {
     }, [saleItems, category, sort]);
 
     const handleAdd = (product) => {
-        addToCart(product, { quantity: 1 });
+        addToCart(normalizeProductForStorage(product), { quantity: 1 });
+
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("dynova:storage"));
+        }
+
         setNotice(`Đã thêm "${product.name}" vào giỏ hàng thành công!`);
         setTimeout(() => setNotice(""), 2500);
     };
@@ -86,12 +194,16 @@ export default function FlashSalePage() {
     const handleWishlist = (product) => {
         const next = toggleWishlist(product.id).map(Number);
         setWishlist(next);
+
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("dynova:storage"));
+        }
     };
 
     return (
         <div className="min-h-screen bg-[#f8fafc] py-12 selection:bg-orange-500 selection:text-white">
-            
-            {/* TOAST NOTICE MƯỢT MÀ HƠN */}
+
+            {/* TOAST NOTICE */}
             {notice && (
                 <div className="fixed right-5 top-24 z-50 flex items-center gap-3 animate-fade-in-down rounded-xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white shadow-2xl backdrop-blur-md border border-slate-800">
                     <CheckCircle size={18} className="text-emerald-400 shrink-0" />
@@ -101,11 +213,11 @@ export default function FlashSalePage() {
 
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-                {/* HERO BANNER CAO CẤP */}
+                {/* HERO BANNER */}
                 <div className="relative mb-10 overflow-hidden rounded-2xl bg-gradient-to-br from-rose-600 via-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/10">
                     <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
                     <div className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full bg-black/10 blur-2xl pointer-events-none" />
-                    
+
                     <div className="grid gap-8 p-8 md:grid-cols-[1.2fr_1fr] md:p-12 items-center">
                         <div>
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur-md">
@@ -119,7 +231,7 @@ export default function FlashSalePage() {
                             </p>
                         </div>
 
-                        {/* ĐẾM NGƯỢC STYLE HIỆN ĐẠI */}
+                        {/* ĐẾM NGƯỢC */}
                         <div className="flex flex-col rounded-xl bg-slate-950/30 p-6 backdrop-blur-md border border-white/10">
                             <span className="text-xs font-bold uppercase tracking-widest text-orange-200/80 mb-3 text-center md:text-left">Chương trình kết thúc sau</span>
                             <div className="flex gap-3 justify-center md:justify-start">
@@ -138,31 +250,31 @@ export default function FlashSalePage() {
                     </div>
                 </div>
 
-                {/* THANH BỘ LỌC TINH TẾ */}
+                {/* THANH BỘ LỌC */}
                 <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap gap-1.5">
-                        <button 
-                            onClick={() => setCategory("all")} 
+                        <button
+                            onClick={() => setCategory("all")}
                             className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 ${category === "all" ? "bg-orange-500 text-white shadow-md shadow-orange-500/20" : "bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
                         >
                             Tất cả
                         </button>
-                        {categories.map((cat) => (
-                            <button 
-                                key={cat.id} 
-                                onClick={() => setCategory(cat.id)} 
-                                className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 ${category === cat.id ? "bg-orange-500 text-white shadow-md shadow-orange-500/20" : "bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
+                        {safeCategories.map((cat) => (
+                            <button
+                                key={cat.id}
+                                onClick={() => setCategory(String(cat.id))}
+                                className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 ${String(category) === String(cat.id) ? "bg-orange-500 text-white shadow-md shadow-orange-500/20" : "bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
                             >
                                 {cat.name}
                             </button>
                         ))}
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Sắp xếp:</span>
-                        <select 
-                            value={sort} 
-                            onChange={(e) => setSort(e.target.value)} 
+                        <select
+                            value={sort}
+                            onChange={(e) => setSort(e.target.value)}
                             className="w-full sm:w-48 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-orange-500 focus:bg-white"
                         >
                             <option value="discount">🔥 Giảm giá nhiều nhất</option>
@@ -178,8 +290,15 @@ export default function FlashSalePage() {
                     Tìm thấy <span className="font-bold text-slate-800">{filtered.length}</span> sản phẩm đang diễn ra ưu đãi.
                 </p>
 
-                {/* KHÔNG CÓ SẢN PHẨM */}
-                {filtered.length === 0 ? (
+                {/* LOADING SKELETON */}
+                {loading ? (
+                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                            <div key={index} className="h-[430px] animate-pulse rounded-2xl bg-white border border-slate-100" />
+                        ))}
+                    </div>
+                ) : filtered.length === 0 ? (
+                    /* KHÔNG CÓ SẢN PHẨM */
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-16 text-center shadow-sm">
                         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
                             <ShoppingCart size={24} />
@@ -188,43 +307,42 @@ export default function FlashSalePage() {
                         <p className="mt-1 text-sm text-slate-400">Vui lòng quay lại sau hoặc khám phá các danh mục hấp dẫn khác.</p>
                     </div>
                 ) : (
-                    /* LƯỚI SẢN PHẨM CẢI TIẾN */
+                    /* LƯỚI SẢN PHẨM */
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {filtered.map((product) => {
                             const liked = wishlist.includes(Number(product.id));
                             const isHot = product.soldPercent >= 80;
 
                             return (
-                                <article 
-                                    key={product.id} 
+                                <article
+                                    key={product.id}
                                     className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-slate-200"
                                 >
                                     {/* PHẦN ẢNH SẢN PHẨM */}
                                     <div className="relative aspect-square w-full overflow-hidden bg-slate-50">
                                         <Link href={`/shop/product/${product.id}`} className="block h-full w-full">
-                                            <img 
-                                                src={product.image} 
-                                                alt={product.name} 
-                                                className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" 
+                                            <img
+                                                src={product.image}
+                                                alt={product.name}
+                                                className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                                                 loading="lazy"
                                             />
                                         </Link>
-                                        
-                                        {/* BADGE GIẢM GIÁ THIẾT KẾ LẠI */}
+
+                                        {/* BADGE GIẢM GIÁ */}
                                         <div className="absolute left-3 top-3 z-10 drop-shadow-md">
                                             <span className="inline-flex items-center gap-0.5 rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-black text-white">
                                                 -{product.discount}%
                                             </span>
                                         </div>
 
-                                        {/* NÚT YÊU THÍCH BLUR-GLASS EFFECT */}
-                                        <button 
-                                            onClick={() => handleWishlist(product)} 
-                                            className={`absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-all active:scale-95 ${
-                                                liked 
-                                                    ? "bg-rose-500 border-rose-500 text-white" 
+                                        {/* NÚT YÊU THÍCH */}
+                                        <button
+                                            onClick={() => handleWishlist(product)}
+                                            className={`absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-all active:scale-95 ${liked
+                                                    ? "bg-rose-500 border-rose-500 text-white"
                                                     : "bg-white/80 border-slate-100 text-slate-600 backdrop-blur-sm hover:bg-white hover:text-rose-500"
-                                            }`}
+                                                }`}
                                             aria-label="Thêm vào danh sách yêu thích"
                                         >
                                             <Heart size={16} className={liked ? "fill-current" : "transition-transform group-hover:scale-110"} />
@@ -236,8 +354,8 @@ export default function FlashSalePage() {
                                         <div className="flex items-center justify-between gap-2">
                                             <span className="text-[10px] font-extrabold uppercase tracking-widest text-orange-500">{product.category}</span>
                                             <div className="flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-bold text-amber-700">
-                                                <Star size={11} className="fill-amber-500 text-amber-500" /> 
-                                                {product.rating}
+                                                <Star size={11} className="fill-amber-500 text-amber-500" />
+                                                {product.rating || 4.8}
                                             </div>
                                         </div>
 
@@ -253,12 +371,12 @@ export default function FlashSalePage() {
                                             <span className="text-xs font-semibold text-slate-400 line-through">{formatCurrency(product.oldPrice)}</span>
                                         </div>
 
-                                        {/* THANH TIẾN TRÌNH ĐÃ BÁN MẠCH ĐẬP */}
+                                        {/* THANH TIẾN TRÌNH ĐÃ BÁN */}
                                         <div className="mt-4">
                                             <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                                                <div 
-                                                    className={`h-full rounded-full bg-gradient-to-r ${isHot ? "from-orange-500 to-rose-600 animate-pulse" : "from-amber-400 to-orange-500"}`} 
-                                                    style={{ width: `${product.soldPercent}%` }} 
+                                                <div
+                                                    className={`h-full rounded-full bg-gradient-to-r ${isHot ? "from-orange-500 to-rose-600 animate-pulse" : "from-amber-400 to-orange-500"}`}
+                                                    style={{ width: `${product.soldPercent}%` }}
                                                 />
                                             </div>
                                             <div className="mt-1.5 flex items-center justify-between text-[11px] font-bold text-slate-500">
@@ -271,9 +389,9 @@ export default function FlashSalePage() {
                                             </div>
                                         </div>
 
-                                        {/* NÚT THÊM VÀO GIỎ TỐI GIẢN & SANG TRỌNG */}
-                                        <button 
-                                            onClick={() => handleAdd(product)} 
+                                        {/* NÚT THÊM VÀO GIỎ */}
+                                        <button
+                                            onClick={() => handleAdd(product)}
                                             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-xs font-bold uppercase tracking-wider text-white transition-all duration-200 hover:bg-orange-500 hover:shadow-lg hover:shadow-orange-500/20 active:scale-[0.98]"
                                         >
                                             <ShoppingBag size={14} /> Thêm vào giỏ

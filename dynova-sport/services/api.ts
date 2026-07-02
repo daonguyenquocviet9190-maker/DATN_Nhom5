@@ -6,10 +6,25 @@ type ApiOptions = RequestInit & {
   token?: string;
 };
 
+export class ApiError extends Error {
+  status: number;
+  data: any;
+
+  constructor(message: string, status: number, data: any = null) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
+
 function getStoredToken() {
   if (typeof window === "undefined") return null;
 
-  return localStorage.getItem("dynova_auth_token");
+  return (
+    localStorage.getItem("dynova_auth_token") ||
+    localStorage.getItem("auth_token") ||
+    localStorage.getItem("token")
+  );
 }
 
 export async function apiFetch<T = unknown>(
@@ -26,7 +41,6 @@ export async function apiFetch<T = unknown>(
   } = options;
 
   const token = optionToken || getStoredToken();
-
   const headers = new Headers(optionHeaders);
 
   if (!headers.has("Accept")) {
@@ -50,19 +64,14 @@ export async function apiFetch<T = unknown>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(
+    throw new ApiError(
       data?.message ||
         data?.error ||
-        "Không thể kết nối API. Vui lòng thử lại."
+        "Không thể kết nối API. Vui lòng thử lại.",
+      response.status,
+      data
     );
   }
 
   return data as T;
-}
-
-export function getImageUrl(path?: string | null) {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-
-  return path;
 }

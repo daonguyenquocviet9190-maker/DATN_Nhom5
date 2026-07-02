@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Headphones,
   Heart,
+  Loader2,
   PackageCheck,
   Search,
   ShieldCheck,
@@ -20,25 +21,14 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
-import { addToCart, toggleWishlist } from "@/utils/shopStorage";
-
-const DEFAULT_BANNER = {
-  id: 1,
-  title: "Bứt tốc cùng Dynova Sport",
-  subtitle: "Sport Collection 2026",
-  description:
-    "Khám phá sản phẩm thể thao hiện đại, dễ mua sắm, dễ theo dõi đơn hàng và sẵn sàng mở rộng với backend Laravel.",
-  image:
-    "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=1600&auto=format&fit=crop&q=90",
-  buttonText: "Mua sắm ngay",
-  buttonLink: "/shop",
-  secondaryText: "Xem bộ sưu tập",
-  secondaryLink: "/collections",
-};
+import { addToCart } from "@/utils/shopStorage";
+import { toggleWishlistApi } from "@/services/wishlist.service";
 
 export default function HomeClient({
   products = [],
   banners = [],
+  categories = [],
+  brands = [],
   apiCategories = [],
   apiBrands = [],
 }) {
@@ -48,16 +38,23 @@ export default function HomeClient({
   const [keyword, setKeyword] = useState("");
   const [activeBanner, setActiveBanner] = useState(0);
   const [pauseBanner, setPauseBanner] = useState(false);
+  const [wishlistLoadingId, setWishlistLoadingId] = useState(null);
 
   const safeProducts = Array.isArray(products) ? products : [];
 
   const safeCategories =
-  Array.isArray(apiCategories) && apiCategories.length > 0
-    ? apiCategories
-    : [];
+    Array.isArray(apiCategories) && apiCategories.length > 0
+      ? apiCategories
+      : Array.isArray(categories)
+        ? categories
+        : [];
 
   const safeBrands =
-    Array.isArray(apiBrands) && apiBrands.length > 0 ? apiBrands : [];
+    Array.isArray(apiBrands) && apiBrands.length > 0
+      ? apiBrands
+      : Array.isArray(brands)
+        ? brands
+        : [];
 
   const featured = useMemo(() => {
     const featuredProducts = safeProducts.filter(
@@ -76,11 +73,57 @@ export default function HomeClient({
       .slice(0, 4);
   }, [safeProducts]);
 
- const heroBanners = useMemo(() => {
-  return Array.isArray(banners) && banners.length > 0
-    ? banners
-    : [DEFAULT_BANNER];
-}, [banners]);
+  const heroBanners = useMemo(() => {
+    const source =
+      Array.isArray(banners) && banners.length > 0
+        ? banners
+        : [DEFAULT_BANNER];
+
+    const normalized = [...source]
+      .filter((banner) => banner?.isActive !== false && banner?.is_active !== 0)
+      .sort(
+        (a, b) =>
+          Number(a?.sortOrder || a?.sort_order || 0) -
+          Number(b?.sortOrder || b?.sort_order || 0)
+      )
+      .map((banner, index) => ({
+        id: banner.id || index + 1,
+        title:
+          banner.title ||
+          banner.name ||
+          "Trang bị thể thao cho phong cách sống năng động",
+        subtitle:
+          banner.subtitle || banner.tagline || "Sport Collection 2026",
+        description:
+          banner.description ||
+          "Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
+        image:
+          banner.image ||
+          banner.imageUrl ||
+          banner.image_url ||
+          DEFAULT_BANNER.image,
+        buttonText:
+          banner.buttonText ||
+          banner.ctaText ||
+          banner.cta_text ||
+          "Mua sắm ngay",
+        buttonLink:
+          banner.buttonLink ||
+          banner.ctaLink ||
+          banner.cta_link ||
+          "/shop",
+        secondaryText:
+          banner.secondaryText ||
+          banner.secondary_text ||
+          "Xem bộ sưu tập",
+        secondaryLink:
+          banner.secondaryLink ||
+          banner.secondary_link ||
+          "/collections",
+      }));
+
+    return normalized.length > 0 ? normalized : [DEFAULT_BANNER];
+  }, [banners]);
 
   const currentBanner = heroBanners[activeBanner] || heroBanners[0];
 
@@ -157,13 +200,39 @@ export default function HomeClient({
     showNotice("Đã thêm " + product.name + " vào giỏ hàng.");
   };
 
-  const handleWishlist = (product) => {
-    toggleWishlist(product.id);
+  const handleWishlist = async (product) => {
+    const productId = product?.id || product?.product_id;
 
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("dynova:storage"));
+    if (!productId) {
+      showNotice("Sản phẩm này chưa có ID nên chưa thể lưu yêu thích.");
+      return;
     }
-showNotice("Đã cập nhật danh sách yêu thích.");
+
+    setWishlistLoadingId(productId);
+
+    try {
+      const result = await toggleWishlistApi(productId);
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("dynova:storage"));
+        window.dispatchEvent(new Event("dynova:wishlist"));
+      }
+
+      showNotice(
+        result?.wishlisted
+          ? "Đã thêm vào danh sách yêu thích."
+          : "Đã xóa khỏi danh sách yêu thích."
+      );
+    } catch (err) {
+      if (err.status === 401) {
+        router.push("/login?redirect=/wishlist");
+        return;
+      }
+
+      showNotice(err.message || "Không thể cập nhật yêu thích.");
+    } finally {
+      setWishlistLoadingId(null);
+    }
   };
 
   const handleSearch = (event) => {
@@ -252,11 +321,17 @@ onClick={() => handleAdd(product)}
               </button>
 
               <button
+                type="button"
                 onClick={() => handleWishlist(product)}
-                className="btn-ghost flex h-11 w-11 items-center justify-center rounded-2xl"
+                disabled={wishlistLoadingId === product.id}
+                className="btn-ghost flex h-11 w-11 items-center justify-center rounded-2xl disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Yêu thích"
               >
-                <Heart size={16} />
+                {wishlistLoadingId === product.id ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Heart size={16} />
+                )}
               </button>
             </div>
           </div>
@@ -274,185 +349,186 @@ onClick={() => handleAdd(product)}
       )}
 
       <section
-  className="home-hero-clean relative isolate overflow-hidden bg-slate-950 text-white"
-  onMouseEnter={() => setPauseBanner(true)}
-  onMouseLeave={() => setPauseBanner(false)}
->
-  <div className="absolute inset-0">
-    <div
-      key={currentBanner.id}
-      className="hero-soft-fade absolute inset-0"
-    >
-      <img
-        src={currentBanner.image}
-        alt={currentBanner.title}
-        className="h-full w-full object-cover opacity-40"
-      />
-    </div>
-
-    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/58" />
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(249,115,22,0.18),transparent_32%),radial-gradient(circle_at_85%_18%,rgba(255,255,255,0.08),transparent_26%)]" />
-  </div>
-
-  <div className="container-page relative z-10 grid min-h-[610px] items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
-    <div className="max-w-3xl">
-      <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-        <Sparkles size={14} />
-        {currentBanner.subtitle}
-      </div>
-
-      <h1 className="max-w-3xl text-4xl font-black uppercase leading-[1.02] tracking-[-0.045em] md:text-6xl">
-        {currentBanner.title}
-      </h1>
-
-      <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
-        {currentBanner.description}
-      </p>
-
-      <form
-        onSubmit={handleSearch}
-        className="mt-8 flex max-w-xl flex-col gap-2 rounded-[22px] border border-white/10 bg-white p-2 shadow-2xl shadow-slate-950/25 sm:flex-row"
+        className="home-hero-clean relative isolate overflow-hidden bg-slate-950 text-white"
+        onMouseEnter={() => setPauseBanner(true)}
+        onMouseLeave={() => setPauseBanner(false)}
       >
-        <div className="flex flex-1 items-center gap-3 px-3 text-slate-400">
-          <Search size={18} />
-
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            onFocus={() => setPauseBanner(true)}
-            onBlur={() => setPauseBanner(false)}
-className="h-12 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-            placeholder="Tìm sản phẩm, thương hiệu..."
-          />
-        </div>
-
-        <button className="rounded-[18px] bg-orange-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600">
-          Tìm kiếm
-        </button>
-      </form>
-
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Link
-          href={currentBanner.buttonLink}
-          className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
-        >
-          {currentBanner.buttonText}
-          <ArrowRight size={16} />
-        </Link>
-
-        <Link
-          href={currentBanner.secondaryLink}
-          className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
-        >
-          {currentBanner.secondaryText}
-        </Link>
-      </div>
-
-      <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
-        {[
-          { value: "500+", label: "Sản phẩm" },
-          { value: "30 ngày", label: "Đổi trả" },
-          { value: "24/7", label: "Hỗ trợ" },
-        ].map((item) => (
+        <div className="absolute inset-0">
           <div
-            key={item.label}
-            className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur transition hover:bg-white/[0.14]"
+            key={currentBanner.id}
+            className="hero-soft-fade absolute inset-0"
           >
-            <p className="text-xl font-black text-white md:text-2xl">
-              {item.value}
-            </p>
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              {item.label}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-
-    <div className="hidden lg:block">
-      <div className="hero-product-panel relative ml-auto max-w-[460px]">
-        <div
-          key={"panel-" + currentBanner.id}
-          className="hero-card-fade overflow-hidden rounded-[36px] border border-white/10 bg-white/10 p-3 shadow-2xl shadow-slate-950/30 backdrop-blur"
-        >
-          <div className="relative overflow-hidden rounded-[28px] bg-slate-900">
             <img
               src={currentBanner.image}
               alt={currentBanner.title}
-              className="h-[430px] w-full object-cover"
+              className="h-full w-full object-cover opacity-40"
             />
+          </div>
 
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/58" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(249,115,22,0.18),transparent_32%),radial-gradient(circle_at_85%_18%,rgba(255,255,255,0.08),transparent_26%)]" />
+        </div>
 
-            <div className="absolute bottom-5 left-5 right-5">
-              <div className="rounded-[26px] border border-white/10 bg-white/95 p-5 text-slate-950 shadow-2xl backdrop-blur">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-500">
-                  Dynova Collection
-                </p>
-<h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
-                  {currentBanner.title}
-                </h3>
+        <div className="container-page relative z-10 grid min-h-[610px] items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="max-w-3xl">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
+              <Sparkles size={14} />
+              {currentBanner.subtitle}
+            </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  {[
-                    "Chính hãng",
-                    "Dễ mua",
-                    "Dễ đổi",
-                  ].map((item) => (
-                    <span
-                      key={item}
-                      className="rounded-2xl bg-slate-100 px-3 py-2 text-center text-[11px] font-black text-slate-700"
-                    >
-                      {item}
-                    </span>
-                  ))}
+            <h1 className="max-w-3xl text-4xl font-black uppercase leading-[1.02] tracking-[-0.045em] md:text-6xl">
+              {currentBanner.title}
+            </h1>
+
+            <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
+              {currentBanner.description}
+            </p>
+
+            <form
+              onSubmit={handleSearch}
+              className="mt-8 flex max-w-xl flex-col gap-2 rounded-[22px] border border-white/10 bg-white p-2 shadow-2xl shadow-slate-950/25 sm:flex-row"
+            >
+              <div className="flex flex-1 items-center gap-3 px-3 text-slate-400">
+                <Search size={18} />
+
+                <input
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  onFocus={() => setPauseBanner(true)}
+                  onBlur={() => setPauseBanner(false)}
+                  className="h-12 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                  placeholder="Tìm sản phẩm, thương hiệu..."
+                />
+              </div>
+
+              <button className="rounded-[18px] bg-orange-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600">
+                Tìm kiếm
+              </button>
+            </form>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href={currentBanner.buttonLink}
+                className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
+              >
+                {currentBanner.buttonText}
+                <ArrowRight size={16} />
+              </Link>
+
+              <Link
+                href={currentBanner.secondaryLink}
+                className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+              >
+                {currentBanner.secondaryText}
+              </Link>
+            </div>
+
+            <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
+              {[
+                { value: "500+", label: "Sản phẩm" },
+                { value: "30 ngày", label: "Đổi trả" },
+                { value: "24/7", label: "Hỗ trợ" },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur transition hover:bg-white/[0.14]"
+                >
+                  <p className="text-xl font-black text-white md:text-2xl">
+                    {item.value}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    {item.label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="hidden lg:block">
+            <div className="hero-product-panel relative ml-auto max-w-[460px]">
+              <div
+                key={"panel-" + currentBanner.id}
+                className="hero-card-fade overflow-hidden rounded-[36px] border border-white/10 bg-white/10 p-3 shadow-2xl shadow-slate-950/30 backdrop-blur"
+              >
+                <div className="relative overflow-hidden rounded-[28px] bg-slate-900">
+                  <img
+                    src={currentBanner.image}
+                    alt={currentBanner.title}
+                    className="h-[430px] w-full object-cover"
+                  />
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent" />
+
+                  <div className="absolute bottom-5 left-5 right-5">
+                    <div className="rounded-[26px] border border-white/10 bg-white/95 p-5 text-slate-950 shadow-2xl backdrop-blur">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-500">
+                        Dynova Collection
+                      </p>
+
+                      <h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
+                        {currentBanner.title}
+                      </h3>
+
+                      <div className="mt-4 grid grid-cols-3 gap-2">
+                        {[
+                          "Chính hãng",
+                          "Dễ mua",
+                          "Dễ đổi",
+                        ].map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-2xl bg-slate-100 px-3 py-2 text-center text-[11px] font-black text-slate-700"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {heroBanners.length > 1 && (
+                <div className="mt-5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {heroBanners.map((banner, index) => (
+                      <button
+                        key={banner.id}
+                        onClick={() => setActiveBanner(index)}
+                        className={
+                          "h-2.5 rounded-full transition-all duration-300 " +
+                          (activeBanner === index
+                            ? "w-9 bg-orange-500"
+                            : "w-2.5 bg-white/35 hover:bg-white/70")
+                        }
+                        aria-label={"Chuyển banner " + (index + 1)}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={goPrevBanner}
+                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+                      aria-label="Banner trước"
+                    >
+                      <ChevronLeft size={21} />
+                    </button>
+
+                    <button
+                      onClick={goNextBanner}
+                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+                      aria-label="Banner sau"
+                    >
+                      <ChevronRight size={21} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
-
-        {heroBanners.length > 1 && (
-          <div className="mt-5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {heroBanners.map((banner, index) => (
-                <button
-                  key={banner.id}
-                  onClick={() => setActiveBanner(index)}
-                  className={
-                    "h-2.5 rounded-full transition-all duration-300 " +
-                    (activeBanner === index
-                      ? "w-9 bg-orange-500"
-                      : "w-2.5 bg-white/35 hover:bg-white/70")
-                  }
-                  aria-label={"Chuyển banner " + (index + 1)}
-                />
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={goPrevBanner}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
-                aria-label="Banner trước"
-              >
-                <ChevronLeft size={21} />
-              </button>
-
-              <button
-                onClick={goNextBanner}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
-                aria-label="Banner sau"
-              >
-                <ChevronRight size={21} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  </div>
-</section>
+      </section>
 
       <section className="container-page py-10">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -566,7 +642,11 @@ href="/shop"
             >
               <div className="h-40 overflow-hidden bg-slate-100">
                 <img
-                  src={category.image || category.image_url}
+                  src={
+                    category.image ||
+                    category.image_url ||
+                    "/images/categories/category-placeholder.jpg"
+                  }
                   alt={category.name}
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                 />

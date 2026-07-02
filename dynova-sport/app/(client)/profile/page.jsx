@@ -2,30 +2,112 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
   ArrowRight,
+  Camera,
   CheckCircle2,
+  Clock3,
   Eye,
   EyeOff,
+  Heart,
+  KeyRound,
+  Loader2,
   Lock,
+  LogOut,
   Mail,
+  MapPin,
+  PackageCheck,
   Phone,
+  RefreshCw,
+  Save,
   ShieldCheck,
-  Sparkles,
+  ShoppingBag,
+  Truck,
   User,
 } from "lucide-react";
 
-import { registerWithApi } from "@/services/auth.service";
+import { formatCurrency } from "@/data/shop";
+import { logoutWithApi } from "@/services/auth.service";
+import {
+  getProfile,
+  updateProfile,
+  updateProfilePassword,
+  uploadProfileAvatar,
+} from "@/services/profile.service";
+
+const tabs = [
+  {
+    id: "overview",
+    label: "Tổng quan",
+    icon: User,
+  },
+  {
+    id: "profile",
+    label: "Thông tin cá nhân",
+    icon: ShieldCheck,
+  },
+  {
+    id: "security",
+    label: "Bảo mật",
+    icon: KeyRound,
+  },
+];
+
+function getDisplayName(user) {
+  return (
+    user?.fullName ||
+    user?.full_name ||
+    user?.name ||
+    "Khách hàng Dynova"
+  );
+}
+
+function getInitials(name = "") {
+  return name
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(-2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}
+
+function formatDate(value) {
+  if (!value) return "Chưa có";
+
+  return new Date(value).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function statusLabel(status = "") {
+  const clean = String(status).toLowerCase();
+
+  const map = {
+    pending: "Chờ xử lý",
+    waiting_bank_transfer: "Chờ chuyển khoản",
+    confirmed: "Đã xác nhận",
+    shipping: "Đang giao",
+    completed: "Hoàn thành",
+    cancelled: "Đã hủy",
+  };
+
+  return map[clean] || status || "Chưa xác định";
+}
 
 function Field({
   label,
   icon: Icon,
-  type = "text",
   value,
   onChange,
   placeholder,
-  error,
+  type = "text",
+  disabled = false,
   rightSlot,
 }) {
   return (
@@ -41,356 +123,859 @@ function Field({
         />
 
         <input
-          required
           type={type}
           value={value}
+          disabled={disabled}
           onChange={onChange}
           placeholder={placeholder}
-          className={
-            "h-[54px] w-full rounded-2xl border bg-slate-50 pl-11 pr-12 text-sm font-bold text-slate-950 outline-none transition duration-300 placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 " +
-            (error
-              ? "border-rose-300 focus:border-rose-400"
-              : "border-slate-200 focus:border-orange-400")
-          }
+          className="h-[54px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm font-bold text-slate-950 outline-none transition duration-300 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
         />
 
         {rightSlot}
       </div>
-
-      {error && <p className="mt-2 text-xs font-bold text-rose-500">{error}</p>}
     </label>
   );
 }
 
-function isEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+function StatCard({ title, value, icon: Icon, tone = "orange", suffix = "" }) {
+  const toneClass =
+    tone === "green"
+      ? "bg-emerald-50 text-emerald-600"
+      : tone === "blue"
+        ? "bg-sky-50 text-sky-600"
+        : tone === "rose"
+          ? "bg-rose-50 text-rose-600"
+          : "bg-orange-50 text-orange-600";
+
+  return (
+    <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/70">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+            {title}
+          </p>
+
+          <p className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+            {value || 0}
+            {suffix}
+          </p>
+        </div>
+
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClass}`}>
+          <Icon size={22} />
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function isPhone(value) {
-  return /^(0|\+84)[0-9]{8,10}$/.test(value.replace(/\s/g, ""));
+function ProfileSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#f7f8fb] py-10">
+      <div className="container-page">
+        <div className="grid place-items-center rounded-[34px] border border-slate-200 bg-white p-16 shadow-sm">
+          <Loader2 size={38} className="animate-spin text-orange-500" />
+          <p className="mt-4 text-sm font-black text-slate-500">
+            Đang tải hồ sơ tài khoản...
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export default function RegisterPage() {
+export default function ProfilePage() {
   const router = useRouter();
+
+  const [activeTab, setActiveTab] = useState("overview");
+  const [user, setUser] = useState(null);
+  const [stats, setStats] = useState({});
+  const [recentOrders, setRecentOrders] = useState([]);
 
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     phone: "",
-    password: "",
-    confirmPassword: "",
-    agree: true,
+    address: "",
+    province: "",
+    ward: "",
+    avatar_url: "",
   });
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errors, setErrors] = useState({});
-  const [successText, setSuccessText] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: "",
+    password: "",
+    password_confirmation: "",
+  });
 
-  const passwordStrength = useMemo(() => {
-    let score = 0;
+  const [showPassword, setShowPassword] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
 
-    if (form.password.length >= 6) score += 1;
-    if (/[A-Z]/.test(form.password)) score += 1;
-    if (/[0-9]/.test(form.password)) score += 1;
-    if (/[^A-Za-z0-9]/.test(form.password)) score += 1;
+  const [loading, setLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
 
-    if (!form.password) return { label: "Chưa nhập mật khẩu", width: "0%" };
-    if (score <= 1) return { label: "Mật khẩu yếu", width: "33%" };
-    if (score <= 3) return { label: "Mật khẩu ổn", width: "66%" };
+  const displayName = getDisplayName(user);
+  const profilePercent = useMemo(() => {
+    const fields = [
+      form.fullName,
+      form.email,
+      form.phone,
+      form.address,
+      form.province,
+      form.ward,
+    ];
 
-    return { label: "Mật khẩu mạnh", width: "100%" };
-  }, [form.password]);
+    return Math.round((fields.filter((item) => String(item || "").trim()).length / fields.length) * 100);
+  }, [form]);
 
-  const update = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => ({ ...prev, [key]: "", submit: "" }));
+  const showNotice = (text) => {
+    setNotice(text);
+    setTimeout(() => setNotice(""), 2400);
   };
 
-  const validate = () => {
-    const nextErrors = {};
-
-    if (!form.fullName.trim()) nextErrors.fullName = "Vui lòng nhập họ tên.";
-
-    if (!form.email.trim()) {
-      nextErrors.email = "Vui lòng nhập email.";
-    } else if (!isEmail(form.email)) {
-      nextErrors.email = "Email chưa đúng định dạng.";
-    }
-
-    if (!form.phone.trim()) {
-      nextErrors.phone = "Vui lòng nhập số điện thoại.";
-    } else if (!isPhone(form.phone)) {
-      nextErrors.phone = "Số điện thoại chưa đúng định dạng.";
-    }
-
-    if (form.password.length < 6) {
-      nextErrors.password = "Mật khẩu cần tối thiểu 6 ký tự.";
-    }
-
-    if (form.password !== form.confirmPassword) {
-      nextErrors.confirmPassword = "Mật khẩu xác nhận không khớp.";
-    }
-
-    if (!form.agree) {
-      nextErrors.submit = "Bạn cần đồng ý với điều khoản sử dụng.";
-    }
-
-    setErrors(nextErrors);
-
-    return Object.keys(nextErrors).length === 0;
+  const fillForm = (profileUser) => {
+    setForm({
+      fullName: getDisplayName(profileUser),
+      email: profileUser?.email || "",
+      phone: profileUser?.phone || "",
+      address: profileUser?.address || "",
+      province: profileUser?.province || "",
+      ward: profileUser?.ward || "",
+      avatar_url: profileUser?.avatar_url || "",
+    });
   };
 
-  const submit = async (event) => {
-    event.preventDefault();
-
-    setSuccessText("");
-
-    if (!validate()) return;
-
+  const loadProfile = async () => {
     setLoading(true);
+    setError("");
 
     try {
-      await registerWithApi({
-        fullName: form.fullName,
-        name: form.fullName,
-        email: form.email,
-        phone: form.phone,
-        password: form.password,
-        password_confirmation: form.confirmPassword,
-      });
+      const data = await getProfile();
+      const profileUser = data.user;
 
-      setSuccessText("Đăng ký thành công. Đang chuyển đến hồ sơ...");
+      if (!profileUser) {
+        throw new Error("Không tìm thấy thông tin tài khoản.");
+      }
 
-      setTimeout(() => {
-        router.push("/profile");
-      }, 700);
+      setUser(profileUser);
+      setStats(data.stats || {});
+      setRecentOrders(data.recent_orders || []);
+      fillForm(profileUser);
     } catch (err) {
-      setErrors({
-        submit:
-          err.message ||
-          "Không thể đăng ký tài khoản. Vui lòng kiểm tra API Laravel.",
-      });
+      console.log("PROFILE ERROR:", err);
+
+      if (err.status === 401) {
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+
+        setTimeout(() => {
+          router.push("/login?redirect=/profile");
+        }, 900);
+
+        return;
+      }
+
+      setError(
+        err.message ||
+        "Không thể tải hồ sơ. Vui lòng kiểm tra route /api/profile bên Laravel."
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const updateField = (key, value) => {
+    setForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+    setError("");
+  };
+
+  const updatePasswordField = (key, value) => {
+    setPasswordForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+    setError("");
+  };
+
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
+
+    if (!form.fullName.trim()) {
+      setError("Vui lòng nhập họ và tên.");
+      return;
+    }
+
+    if (!form.email.trim()) {
+      setError("Vui lòng nhập email.");
+      return;
+    }
+
+    if (!form.phone.trim()) {
+      setError("Vui lòng nhập số điện thoại.");
+      return;
+    }
+
+    setSavingProfile(true);
+    setError("");
+
+    try {
+      const data = await updateProfile(form);
+      const updatedUser = data?.user || user;
+
+      setUser(updatedUser);
+      fillForm(updatedUser);
+      showNotice("Cập nhật hồ sơ thành công.");
+    } catch (err) {
+      setError(err.message || "Không thể cập nhật hồ sơ.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+
+    if (!passwordForm.current_password.trim()) {
+      setError("Vui lòng nhập mật khẩu hiện tại.");
+      return;
+    }
+
+    if (passwordForm.password.length < 6) {
+      setError("Mật khẩu mới cần tối thiểu 6 ký tự.");
+      return;
+    }
+
+    if (passwordForm.password !== passwordForm.password_confirmation) {
+      setError("Mật khẩu xác nhận không khớp.");
+      return;
+    }
+
+    setSavingPassword(true);
+    setError("");
+
+    try {
+      await updateProfilePassword(passwordForm);
+
+      setPasswordForm({
+        current_password: "",
+        password: "",
+        password_confirmation: "",
+      });
+
+      showNotice("Đổi mật khẩu thành công.");
+    } catch (err) {
+      setError(err.message || "Không thể đổi mật khẩu.");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Vui lòng chọn file hình ảnh.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Ảnh không được vượt quá 2MB.");
+      return;
+    }
+
+    setSavingProfile(true);
+    setError("");
+
+    try {
+      const data = await uploadProfileAvatar(file);
+      const updatedUser = data?.user;
+
+      if (updatedUser) {
+        setUser(updatedUser);
+        fillForm(updatedUser);
+      }
+
+      showNotice("Cập nhật ảnh đại diện thành công.");
+    } catch (err) {
+      setError(err.message || "Không thể upload ảnh đại diện.");
+    } finally {
+      setSavingProfile(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleLogout = async () => {
+    const ok = window.confirm("Bạn có chắc muốn đăng xuất không?");
+
+    if (!ok) return;
+
+    try {
+      await logoutWithApi();
+    } finally {
+      router.push("/login");
+    }
+  };
+
+  if (loading) {
+    return <ProfileSkeleton />;
+  }
+
   return (
-    <div className="min-h-screen overflow-hidden bg-[#f7f8fb]">
-      <section className="container-page grid min-h-screen items-center gap-8 py-10 lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="relative hidden min-h-[680px] overflow-hidden rounded-[42px] bg-slate-950 text-white shadow-2xl shadow-slate-300/70 lg:block">
-          <img
-            src="https://images.unsplash.com/photo-1508609349937-5ec4ae374ebf?w=1600&auto=format&fit=crop&q=85"
-            alt="Dynova register"
-            className="absolute inset-0 h-full w-full object-cover opacity-60"
-          />
+    <div className="min-h-screen bg-[#f7f8fb] py-10">
+      {notice && (
+        <div className="fixed right-5 top-24 z-[95] rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
+          {notice}
+        </div>
+      )}
 
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/85 to-orange-950/55" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(249,115,22,0.34),transparent_32%)]" />
+      <div className="container-page">
+        <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-500">
+              My account
+            </p>
 
-          <div className="relative z-10 flex h-full flex-col justify-between p-10">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-                <Sparkles size={15} />
-                Dynova Club
-              </div>
+            <h1 className="mt-2 text-4xl font-black tracking-[-0.04em] text-slate-950">
+              Hồ sơ cá nhân
+            </h1>
 
-              <h1 className="mt-8 max-w-xl text-6xl font-black uppercase leading-[0.95] tracking-[-0.06em]">
-                Tạo tài khoản thành viên
-              </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
+              Quản lý thông tin tài khoản, địa chỉ giao hàng, bảo mật và theo dõi
+              hoạt động mua hàng của bạn tại Dynova Sport.
+            </p>
+          </div>
 
-              <p className="mt-6 max-w-lg text-sm font-semibold leading-7 text-slate-300">
-                Mua hàng nhanh hơn, lưu địa chỉ giao hàng, theo dõi đơn và nhận
-                ưu đãi riêng cho thành viên.
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={loadProfile}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-700 transition hover:bg-slate-50"
+            >
+              <RefreshCw size={15} />
+              Làm mới
+            </button>
 
-            <div className="grid gap-3">
-              {[
-                "Lưu tài khoản vào bảng users",
-                "Mật khẩu được mã hóa bằng Laravel Hash",
-                "Đăng ký xong tự đăng nhập bằng token",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm font-bold text-slate-100 backdrop-blur"
-                >
-                  <CheckCircle2 size={18} className="text-orange-300" />
-                  {item}
-                </div>
-              ))}
-            </div>
+            <Link
+              href="/orders"
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500"
+            >
+              <PackageCheck size={15} />
+              Xem đơn hàng
+            </Link>
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-[620px]">
-          <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 md:p-8">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-                Create account
-              </p>
-
-              <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
-                Đăng ký tài khoản
-              </h2>
-
-              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-                Tài khoản sẽ được lưu vào database Laravel. Sau khi đăng ký,
-                hệ thống tự đăng nhập và chuyển đến hồ sơ.
-              </p>
+        {error && (
+          <div className="mb-6 rounded-3xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={18} className="mt-0.5" />
+              <span>{error}</span>
             </div>
+          </div>
+        )}
 
-            {errors.submit && (
-              <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-600">
-                {errors.submit}
-              </div>
-            )}
-
-            {successText && (
-              <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold leading-6 text-emerald-600">
-                {successText}
-              </div>
-            )}
-
-            <form onSubmit={submit} className="mt-7 grid gap-5 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <Field
-                  label="Họ và tên"
-                  icon={User}
-                  value={form.fullName}
-                  onChange={(e) => update("fullName", e.target.value)}
-                  placeholder="Nguyễn Trọng Hoài"
-                  error={errors.fullName}
-                />
+        <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+          <aside className="space-y-5">
+            <div className="overflow-hidden rounded-[34px] border border-slate-200 bg-white shadow-sm">
+              <div className="relative h-32 bg-slate-950">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(249,115,22,0.5),transparent_35%)]" />
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-orange-950" />
               </div>
 
-              <Field
-                label="Email"
-                icon={Mail}
-                type="email"
-                value={form.email}
-                onChange={(e) => update("email", e.target.value)}
-                placeholder="name@email.com"
-                error={errors.email}
-              />
+              <div className="-mt-14 px-6 pb-6">
+                <div className="relative">
+                  {form.avatar_url ? (
+                    <img
+                      src={form.avatar_url}
+                      alt={displayName}
+                      className="h-28 w-28 rounded-[30px] border-4 border-white object-cover shadow-xl"
+                    />
+                  ) : (
+                    <div className="flex h-28 w-28 items-center justify-center rounded-[30px] border-4 border-white bg-orange-500 text-3xl font-black text-white shadow-xl">
+                      {getInitials(displayName) || "DN"}
+                    </div>
+                  )}
 
-              <Field
-                label="Số điện thoại"
-                icon={Phone}
-                value={form.phone}
-                onChange={(e) => update("phone", e.target.value)}
-                placeholder="0866 347 730"
-                error={errors.phone}
-              />
-
-              <Field
-                label="Mật khẩu"
-                icon={Lock}
-                type={showPassword ? "text" : "password"}
-                value={form.password}
-                onChange={(e) => update("password", e.target.value)}
-                placeholder="Tối thiểu 6 ký tự"
-                error={errors.password}
-                rightSlot={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
-                  >
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                }
-              />
-
-              <Field
-                label="Xác nhận mật khẩu"
-                icon={Lock}
-                type={showConfirmPassword ? "text" : "password"}
-                value={form.confirmPassword}
-                onChange={(e) => update("confirmPassword", e.target.value)}
-                placeholder="Nhập lại mật khẩu"
-                error={errors.confirmPassword}
-                rightSlot={
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword((prev) => !prev)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff size={17} />
+                  <label className="absolute bottom-2 left-20 flex h-9 w-9 cursor-pointer items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg transition hover:bg-orange-500">
+                    {savingProfile ? (
+                      <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      <Eye size={17} />
+                      <Camera size={16} />
                     )}
-                  </button>
-                }
-              />
 
-              <div className="md:col-span-2">
-                <div className="rounded-2xl bg-slate-50 p-4">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <h2 className="mt-4 text-2xl font-black tracking-[-0.04em] text-slate-950">
+                  {displayName}
+                </h2>
+
+                <p className="mt-1 text-sm font-bold text-slate-500">
+                  {user?.email || "Chưa có email"}
+                </p>
+
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-600">
+                  <ShieldCheck size={15} />
+                  {user?.role === "admin" ? "Quản trị viên" : "Khách hàng"}
+                </div>
+
+                <div className="mt-5 rounded-3xl bg-slate-50 p-4">
                   <div className="flex items-center justify-between text-xs font-black text-slate-500">
-                    <span>Độ mạnh mật khẩu</span>
-                    <span>{passwordStrength.label}</span>
+                    <span>Hoàn thiện hồ sơ</span>
+                    <span>{profilePercent}%</span>
                   </div>
 
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
                     <div
-                      className="h-full rounded-full bg-orange-500 transition-all duration-500"
-                      style={{ width: passwordStrength.width }}
+                      className="h-full rounded-full bg-orange-500 transition-all duration-700"
+                      style={{
+                        width: `${profilePercent}%`,
+                      }}
                     />
                   </div>
                 </div>
+
+                <div className="mt-5 space-y-2">
+                  {tabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const active = activeTab === tab.id;
+
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={
+                          "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition " +
+                          (active
+                            ? "bg-slate-950 text-white shadow-lg shadow-slate-200"
+                            : "bg-slate-50 text-slate-600 hover:bg-orange-50 hover:text-orange-600")
+                        }
+                      >
+                        <Icon size={17} />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={handleLogout}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-black text-rose-600 transition hover:bg-rose-500 hover:text-white"
+                >
+                  <LogOut size={17} />
+                  Đăng xuất
+                </button>
               </div>
-
-              <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-4 text-sm font-bold leading-6 text-slate-600 md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={form.agree}
-                  onChange={(e) => update("agree", e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
-                />
-                <span>
-                  Tôi đồng ý với điều khoản sử dụng và chính sách bảo mật của
-                  Dynova Sport.
-                </span>
-              </label>
-
-              <button
-                disabled={loading}
-                className="flex h-[56px] items-center justify-center gap-2 rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-orange-500/20 transition duration-300 hover:-translate-y-0.5 hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none md:col-span-2"
-              >
-                {loading ? (
-                  <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                    Đang tạo tài khoản...
-                  </>
-                ) : (
-                  <>
-                    Đăng ký
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
-              <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
-              Mật khẩu sẽ được mã hóa trước khi lưu vào database.
             </div>
 
-            <p className="mt-6 text-center text-sm text-slate-500">
-              Đã có tài khoản?{" "}
-              <Link
-                href="/login"
-                className="font-black text-orange-600 transition hover:text-orange-700"
+            <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                Thành viên từ
+              </p>
+
+              <p className="mt-2 text-lg font-black text-slate-950">
+                {formatDate(user?.created_at)}
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Tài khoản của bạn đang được bảo vệ bằng Laravel Sanctum token.
+              </p>
+            </div>
+          </aside>
+
+          <main className="space-y-6">
+            {activeTab === "overview" && (
+              <>
+                <div className="grid gap-4 md:grid-cols-4">
+                  <StatCard
+                    title="Tổng đơn"
+                    value={stats.total_orders}
+                    icon={PackageCheck}
+                  />
+
+                  <StatCard
+                    title="Đang giao"
+                    value={stats.shipping_orders}
+                    icon={Truck}
+                    tone="blue"
+                  />
+
+                  <StatCard
+                    title="Hoàn thành"
+                    value={stats.completed_orders}
+                    icon={CheckCircle2}
+                    tone="green"
+                  />
+
+                  <StatCard
+                    title="Wishlist"
+                    value={0}
+                    icon={Heart}
+                    tone="rose"
+                  />
+                </div>
+
+                <div className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+                        Spending summary
+                      </p>
+
+                      <h2 className="mt-2 text-2xl font-black text-slate-950">
+                        Tổng chi tiêu
+                      </h2>
+
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        Tổng giá trị các đơn hàng hoàn thành trong tài khoản.
+                      </p>
+                    </div>
+
+                    <p className="text-3xl font-black tracking-[-0.04em] text-orange-500">
+                      {formatCurrency(stats.total_spent || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+                        Recent orders
+                      </p>
+
+                      <h2 className="mt-2 text-2xl font-black text-slate-950">
+                        Đơn hàng gần đây
+                      </h2>
+                    </div>
+
+                    <Link
+                      href="/orders"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500"
+                    >
+                      Xem tất cả
+                      <ArrowRight size={15} />
+                    </Link>
+                  </div>
+
+                  {recentOrders.length === 0 ? (
+                    <div className="mt-6 rounded-3xl bg-slate-50 p-8 text-center">
+                      <ShoppingBag className="mx-auto text-orange-500" size={38} />
+
+                      <h3 className="mt-4 text-xl font-black text-slate-950">
+                        Bạn chưa có đơn hàng nào
+                      </h3>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        Hãy mua sắm để kiểm tra luồng đặt hàng, thanh toán và
+                        theo dõi đơn.
+                      </p>
+
+                      <Link
+                        href="/shop"
+                        className="mt-5 inline-flex rounded-2xl bg-orange-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
+                      >
+                        Mua sắm ngay
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-3">
+                      {recentOrders.map((order) => (
+                        <Link
+                          key={order.id}
+                          href="/orders"
+                          className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-lg hover:shadow-slate-200/70 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-wider text-orange-500">
+                              #{order.order_code || `DNV-${order.id}`}
+                            </p>
+
+                            <p className="mt-1 text-sm font-bold text-slate-500">
+                              {formatDate(order.created_at)} •{" "}
+                              {order.payment_method || "COD"}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">
+                              {statusLabel(order.status)}
+                            </span>
+
+                            <span className="text-lg font-black text-slate-950">
+                              {formatCurrency(order.total || 0)}
+                            </span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeTab === "profile" && (
+              <form
+                onSubmit={handleSaveProfile}
+                className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-sm"
               >
-                Đăng nhập
-              </Link>
-            </p>
-          </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+                    Profile information
+                  </p>
+
+                  <h2 className="mt-2 text-2xl font-black text-slate-950">
+                    Thông tin cá nhân
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-7 text-slate-500">
+                    Cập nhật thông tin này để hệ thống tự điền nhanh khi thanh
+                    toán và giao hàng.
+                  </p>
+                </div>
+
+                <div className="mt-7 grid gap-5 md:grid-cols-2">
+
+                  <Field
+                    label="Họ và tên"
+                    icon={User}
+                    value={form.fullName}
+                    onChange={(event) =>
+                      updateField("fullName", event.target.value)
+                    }
+                    placeholder="Nguyễn Trọng Hoài"
+                  />
+
+                  <Field
+                    label="Email"
+                    icon={Mail}
+                    value={form.email}
+                    onChange={(event) =>
+                      updateField("email", event.target.value)
+                    }
+                    placeholder="name@email.com"
+                  />
+
+                  <Field
+                    label="Số điện thoại"
+                    icon={Phone}
+                    value={form.phone}
+                    onChange={(event) =>
+                      updateField("phone", event.target.value)
+                    }
+                    placeholder="0937 781 823"
+                  />
+
+                  <Field
+                    label="Tỉnh / Thành phố"
+                    icon={MapPin}
+                    value={form.province}
+                    onChange={(event) =>
+                      updateField("province", event.target.value)
+                    }
+                    placeholder="Thành phố Hồ Chí Minh"
+                  />
+
+                  <Field
+                    label="Phường / Xã"
+                    icon={MapPin}
+                    value={form.ward}
+                    onChange={(event) =>
+                      updateField("ward", event.target.value)
+                    }
+                    placeholder="Phường Thủ Dầu Một"
+                  />
+
+                  <div className="md:col-span-2">
+                    <Field
+                      label="Địa chỉ chi tiết"
+                      icon={MapPin}
+                      value={form.address}
+                      onChange={(event) =>
+                        updateField("address", event.target.value)
+                      }
+                      placeholder="Số nhà, tên đường, khu phố..."
+                    />
+                  </div>
+                </div>
+
+                <button
+                  disabled={savingProfile}
+                  className="mt-7 inline-flex h-[54px] items-center justify-center gap-2 rounded-2xl bg-orange-500 px-6 text-xs font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-orange-500/20 transition hover:-translate-y-0.5 hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                >
+                  {savingProfile ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      Lưu thay đổi
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {activeTab === "security" && (
+              <form
+                onSubmit={handleChangePassword}
+                className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-sm"
+              >
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+                    Account security
+                  </p>
+
+                  <h2 className="mt-2 text-2xl font-black text-slate-950">
+                    Đổi mật khẩu
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-7 text-slate-500">
+                    Để bảo vệ tài khoản, hãy dùng mật khẩu mạnh và không chia sẻ
+                    thông tin đăng nhập cho người khác.
+                  </p>
+                </div>
+
+                <div className="mt-7 grid gap-5">
+                  <Field
+                    label="Mật khẩu hiện tại"
+                    icon={Lock}
+                    type={showPassword.current ? "text" : "password"}
+                    value={passwordForm.current_password}
+                    onChange={(event) =>
+                      updatePasswordField("current_password", event.target.value)
+                    }
+                    placeholder="Nhập mật khẩu hiện tại"
+                    rightSlot={
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPassword((prev) => ({
+                            ...prev,
+                            current: !prev.current,
+                          }))
+                        }
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
+                      >
+                        {showPassword.current ? (
+                          <EyeOff size={17} />
+                        ) : (
+                          <Eye size={17} />
+                        )}
+                      </button>
+                    }
+                  />
+
+                  <Field
+                    label="Mật khẩu mới"
+                    icon={Lock}
+                    type={showPassword.new ? "text" : "password"}
+                    value={passwordForm.password}
+                    onChange={(event) =>
+                      updatePasswordField("password", event.target.value)
+                    }
+                    placeholder="Tối thiểu 6 ký tự"
+                    rightSlot={
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPassword((prev) => ({
+                            ...prev,
+                            new: !prev.new,
+                          }))
+                        }
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
+                      >
+                        {showPassword.new ? (
+                          <EyeOff size={17} />
+                        ) : (
+                          <Eye size={17} />
+                        )}
+                      </button>
+                    }
+                  />
+
+                  <Field
+                    label="Xác nhận mật khẩu mới"
+                    icon={Lock}
+                    type={showPassword.confirm ? "text" : "password"}
+                    value={passwordForm.password_confirmation}
+                    onChange={(event) =>
+                      updatePasswordField(
+                        "password_confirmation",
+                        event.target.value
+                      )
+                    }
+                    placeholder="Nhập lại mật khẩu mới"
+                    rightSlot={
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPassword((prev) => ({
+                            ...prev,
+                            confirm: !prev.confirm,
+                          }))
+                        }
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
+                      >
+                        {showPassword.confirm ? (
+                          <EyeOff size={17} />
+                        ) : (
+                          <Eye size={17} />
+                        )}
+                      </button>
+                    }
+                  />
+                </div>
+
+                <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-sm font-bold leading-7 text-slate-500">
+                  <ShieldCheck className="mr-2 inline text-emerald-500" size={17} />
+                  Sau khi đổi mật khẩu, bạn vẫn có thể tiếp tục dùng phiên đăng
+                  nhập hiện tại. Các token khác có thể xử lý đăng xuất sau nếu cần.
+                </div>
+
+                <button
+                  disabled={savingPassword}
+                  className="mt-7 inline-flex h-[54px] items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 text-xs font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-slate-200 transition hover:-translate-y-0.5 hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                >
+                  {savingPassword ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Đang cập nhật...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound size={16} />
+                      Đổi mật khẩu
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+          </main>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

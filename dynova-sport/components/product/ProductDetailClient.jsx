@@ -30,6 +30,10 @@ import {
   getWishlist,
   toggleWishlist,
 } from "@/utils/shopStorage";
+import {
+  getProductReviews as fetchProductReviews,
+  createProductReview,
+} from "@/services/review.service";
 
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
@@ -88,35 +92,13 @@ function getGallery(product) {
   return uniqueArray(images);
 }
 
-function getProductReviews(product) {
-  if (Array.isArray(product?.reviews) && product.reviews.length > 0) {
-    return product.reviews.map((review) => ({
-      id: review.id,
-      name:
-        review?.user?.fullName ||
-        review?.user?.name ||
-        review?.name ||
-        "Khách hàng",
-      rating: Number(review.rating || 5),
-      content: review.content || review.comment || "Sản phẩm tốt.",
-      created_at: review.created_at,
-    }));
+function formatReviewDate(value) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleDateString("vi-VN");
+  } catch {
+    return "";
   }
-
-  return [
-    {
-      id: 1,
-      name: "Nguyễn Hoàng",
-      rating: 5,
-      content: "Sản phẩm đẹp, đóng gói chỉn chu và đúng size tư vấn.",
-    },
-    {
-      id: 2,
-      name: "Minh Anh",
-      rating: 4,
-      content: "Chất liệu tốt, giao nhanh. Mình sẽ mua thêm màu khác.",
-    },
-  ];
 }
 
 function buildCartProduct(product, selectedVariant, displayPrice) {
@@ -192,12 +174,56 @@ export default function ProductDetailClient({
   const [activeTab, setActiveTab] = useState("description");
   const [notice, setNotice] = useState("");
   const [wishlist, setWishlist] = useState([]);
-  const [reviews, setReviews] = useState(() => getProductReviews(product));
+
+  // ==== ĐÁNH GIÁ THẬT TỪ DB (thay cho dữ liệu mock trước đây) ====
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewForm, setReviewForm] = useState({
-    name: "",
     rating: 5,
     content: "",
   });
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadReviews() {
+      try {
+        setReviewsLoading(true);
+        const res = await fetchProductReviews(product.id);
+
+        if (isMounted) {
+          const mapped = (res?.data || []).map((r) => ({
+            id: r.id,
+            rating: Number(r.rating),
+            content: r.content,
+            created_at: r.created_at,
+          }));
+
+          setReviews(mapped);
+        }
+      } catch (error) {
+        console.log("Load reviews error:", error.message);
+        if (isMounted) setReviews([]);
+      } finally {
+        if (isMounted) setReviewsLoading(false);
+      }
+    }
+
+    if (product?.id) loadReviews();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [product?.id]);
+
+  const averageRating = useMemo(() => {
+    if (reviews.length === 0) return Number(product?.rating || 0);
+
+    const sum = reviews.reduce((total, r) => total + Number(r.rating || 0), 0);
+
+    return sum / reviews.length;
+  }, [reviews, product]);
 
   const sizeOptions = useMemo(() => {
     const matchedVariants = variants.filter((variant) => {
@@ -244,13 +270,12 @@ export default function ProductDetailClient({
 
   const stock = Number(
     selectedVariant?.stock ??
-      product?.stock ??
-      product?.quantity ??
-      99
+    product?.stock ??
+    product?.quantity ??
+    99
   );
 
   const sold = Number(product?.sold || 0);
-  const rating = Number(product?.rating || 4.8);
   const liked = wishlist.includes(Number(product.id));
 
   useEffect(() => {
@@ -341,31 +366,30 @@ export default function ProductDetailClient({
     }
   };
 
-  const submitReview = (event) => {
+  const submitReview = async (event) => {
     event.preventDefault();
 
-    if (!reviewForm.name.trim() || !reviewForm.content.trim()) {
-      showNotice("Vui lòng nhập đủ họ tên và nội dung đánh giá.");
+    if (!reviewForm.content.trim()) {
+      showNotice("Vui lòng nhập nội dung đánh giá.");
       return;
     }
 
-    setReviews([
-      {
-        id: Date.now(),
-        name: reviewForm.name,
+    try {
+      setSubmittingReview(true);
+
+      await createProductReview(product.id, {
         rating: Number(reviewForm.rating),
         content: reviewForm.content,
-      },
-      ...reviews,
-    ]);
+      });
 
-    setReviewForm({
-      name: "",
-      rating: 5,
-      content: "",
-    });
+      setReviewForm({ rating: 5, content: "" });
 
-    showNotice("Đã gửi đánh giá demo.");
+      showNotice("Đã gửi đánh giá, chờ duyệt trước khi hiển thị công khai.");
+    } catch (error) {
+      showNotice(error.message || "Gửi đánh giá thất bại, thử lại sau.");
+    } finally {
+      setSubmittingReview(false);
+    }
   };
 
   return (
@@ -446,28 +470,28 @@ export default function ProductDetailClient({
                   aria-label="Chọn ảnh sản phẩm"
                 >
                   <img
-                src={image}
-                alt="Ảnh sản phẩm"
-                onError={(e) => {
-                    e.currentTarget.src =
-                    "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&auto=format&fit=crop&q=80";
-                }}
-                className="h-full w-full object-cover"
-                />
+                    src={image}
+                    alt="Ảnh sản phẩm"
+                    onError={(e) => {
+                      e.currentTarget.src =
+                        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&auto=format&fit=crop&q=80";
+                    }}
+                    className="h-full w-full object-cover"
+                  />
                 </button>
               ))}
             </div>
 
             <div className="product-image-frame order-1 relative overflow-hidden rounded-[30px] bg-slate-100 lg:order-2">
-            <img
+              <img
                 src={mainImage}
                 alt={product.name}
                 onError={(e) => {
-                e.currentTarget.src =
+                  e.currentTarget.src =
                     "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
                 }}
                 className="product-main-image absolute inset-0 h-full w-full object-cover"
-            />
+              />
             </div>
           </div>
 
@@ -514,7 +538,7 @@ export default function ProductDetailClient({
               <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold text-slate-500">
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1.5 text-amber-600">
                   <Star size={15} className="fill-current" />
-                  {rating.toFixed(1)}
+                  {averageRating.toFixed(1)}
                 </span>
 
                 <span>Đã bán {sold}</span>
@@ -854,21 +878,9 @@ export default function ProductDetailClient({
                 </h3>
 
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Phần này đang là đánh giá demo phía frontend. Sau này có thể
-                  nối API POST review.
+                  Đánh giá của bạn sẽ được kiểm duyệt trước khi hiển thị công
+                  khai trên trang sản phẩm.
                 </p>
-
-                <input
-                  value={reviewForm.name}
-                  onChange={(e) =>
-                    setReviewForm({
-                      ...reviewForm,
-                      name: e.target.value,
-                    })
-                  }
-                  className="input-control mt-4"
-                  placeholder="Họ tên"
-                />
 
                 <select
                   value={reviewForm.rating}
@@ -878,7 +890,7 @@ export default function ProductDetailClient({
                       rating: Number(e.target.value),
                     })
                   }
-                  className="input-control mt-3"
+                  className="input-control mt-4"
                 >
                   <option value="5">5 sao</option>
                   <option value="4">4 sao</option>
@@ -899,36 +911,57 @@ export default function ProductDetailClient({
                   placeholder="Nội dung đánh giá"
                 />
 
-                <button className="btn-primary mt-3 w-full rounded-2xl py-3 text-xs font-black uppercase tracking-wider">
-                  Gửi đánh giá
+                <button
+                  disabled={submittingReview}
+                  className="btn-primary mt-3 w-full rounded-2xl py-3 text-xs font-black uppercase tracking-wider disabled:opacity-60"
+                >
+                  {submittingReview ? "Đang gửi..." : "Gửi đánh giá"}
                 </button>
               </form>
 
               <div className="space-y-3">
-                {reviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="rounded-[24px] border border-slate-200 bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="flex items-center gap-3 font-black text-slate-950">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-orange-600">
-                          <User size={16} />
-                        </span>
+                {reviewsLoading ? (
+                  Array.from({ length: 2 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-24 animate-pulse rounded-[24px] bg-slate-100"
+                    />
+                  ))
+                ) : reviews.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Chưa có đánh giá nào cho sản phẩm này.
+                  </p>
+                ) : (
+                  reviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="rounded-[24px] border border-slate-200 bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="flex items-center gap-3 font-black text-slate-950">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+                            <User size={16} />
+                          </span>
 
-                        {review.name}
-                      </p>
+                          Khách hàng
+                        </p>
 
-                      <p className="text-sm font-black text-amber-500">
-                        {review.rating} sao
+                        <div className="text-right">
+                          <p className="text-sm font-black text-amber-500">
+                            {review.rating} sao
+                          </p>
+                          <p className="text-xs font-semibold text-slate-400">
+                            {formatReviewDate(review.created_at)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-sm leading-7 text-slate-600">
+                        {review.content}
                       </p>
                     </div>
-
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {review.content}
-                    </p>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           )}

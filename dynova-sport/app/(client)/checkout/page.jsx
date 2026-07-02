@@ -122,7 +122,7 @@ function Field({ label, icon: Icon, error, children }) {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  console.log("BANK ACCOUNT CHECKOUT:", bankAccount);
+  // console.log("BANK ACCOUNT CHECKOUT:", bankAccount);
 
   const [items, setItems] = useState([]);
   const [coupon, setCoupon] = useState("");
