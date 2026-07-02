@@ -1,94 +1,142 @@
 import { apiFetch } from "./api";
 
-export type ReviewStatus = "pending" | "approved" | "rejected";
+export type ApiReviewUser = {
+  id?: number | string | null;
+  name?: string;
+  email?: string | null;
+  avatar_url?: string | null;
+};
+
+export type ApiReviewProduct = {
+  id?: number | string | null;
+  name?: string;
+  slug?: string | null;
+  image?: string | null;
+  image_url?: string | null;
+  price?: number;
+};
 
 export type ApiReview = {
-    id: number;
-    user_id: number;
-    product_id: number;
-    rating: number;
-    content: string;
-    status: ReviewStatus;
-    created_at: string;
-    updated_at: string;
+  id?: number | string;
+  user_id?: number | string | null;
+  product_id?: number | string | null;
+  order_id?: number | string | null;
+  rating: number;
+  content: string;
+  status?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  user?: ApiReviewUser;
+  product?: ApiReviewProduct | null;
+};
+
+export type ApiReviewStats = {
+  average: number;
+  total: number;
+  breakdown: Record<number, number>;
+};
+
+export type ProductReviewsResult = ApiReviewStats & {
+  reviews: ApiReview[];
+};
+
+export type MyReviewsResult = {
+  reviews: ApiReview[];
+  total: number;
 };
 
 type ReviewListResponse = {
-    success: boolean;
-    message?: string;
-    data:
-    | {
-        data: ApiReview[];
-        current_page?: number;
-        last_page?: number;
-        total?: number;
-    }
-    | ApiReview[];
+  success?: boolean;
+  message?: string;
+  data?: {
+    reviews?: ApiReview[];
+    total?: number;
+    average?: number;
+    breakdown?: Record<string | number, number>;
+  };
 };
 
-type ReviewDetailResponse = {
-    success: boolean;
-    message?: string;
-    data: ApiReview;
+type ReviewActionResponse = {
+  success?: boolean;
+  message?: string;
+  data?: {
+    review?: ApiReview;
+    stats?: ApiReviewStats;
+  };
 };
 
-type ReviewQuery = {
-    per_page?: number;
-    status?: ReviewStatus;
-};
-
-export type CreateReviewPayload = {
-    rating: number;
-    content: string;
-};
-
-// Lấy danh sách review theo product_id
-// GET /reviews?product_id=xxx&status=approved&per_page=xxx
-export async function getProductReviews(
-    productId: string | number,
-    params: ReviewQuery = {}
-) {
-    if (!productId) {
-        return { data: [] as ApiReview[], current_page: 1, last_page: 1, total: 0 };
-    }
-
-    const searchParams = new URLSearchParams();
-
-    searchParams.set("product_id", String(productId));
-    searchParams.set("status", params.status || "approved");
-    if (params.per_page) searchParams.set("per_page", String(params.per_page));
-
-    const query = searchParams.toString();
-
-    const response = await apiFetch<ReviewListResponse>(
-        "/reviews" + (query ? `?${query}` : "")
-    );
-
-    if (Array.isArray(response.data)) {
-        return {
-            data: response.data,
-            current_page: 1,
-            last_page: 1,
-            total: response.data.length,
-        };
-    }
-
-    return response.data;
+function normalizeBreakdown(breakdown: any = {}) {
+  return {
+    5: Number(breakdown?.[5] || breakdown?.["5"] || 0),
+    4: Number(breakdown?.[4] || breakdown?.["4"] || 0),
+    3: Number(breakdown?.[3] || breakdown?.["3"] || 0),
+    2: Number(breakdown?.[2] || breakdown?.["2"] || 0),
+    1: Number(breakdown?.[1] || breakdown?.["1"] || 0),
+  };
 }
 
-// (tuỳ chọn, dùng sau này nếu cho phép gửi đánh giá mới)
-// POST /reviews
-export async function createProductReview(
-    productId: string | number,
-    payload: CreateReviewPayload
-) {
-    const response = await apiFetch<ReviewDetailResponse>("/reviews", {
-        method: "POST",
-        body: JSON.stringify({
-            product_id: productId,
-            ...payload,
-        }),
-    });
+export async function getProductReviews(
+  productId: number | string
+): Promise<ProductReviewsResult> {
+  const response = await apiFetch<ReviewListResponse>(
+    `/reviews?product_id=${productId}`,
+    {
+      auth: false,
+    }
+  );
 
-    return response.data;
+  const data = response?.data || {};
+
+  return {
+    reviews: Array.isArray(data.reviews) ? data.reviews : [],
+    average: Number(data.average || 0),
+    total: Number(data.total || data.reviews?.length || 0),
+    breakdown: normalizeBreakdown(data.breakdown),
+  };
+}
+
+export async function createReview(payload: {
+  product_id: number | string;
+  order_id?: number | string | null;
+  rating: number;
+  content: string;
+}) {
+  const response = await apiFetch<ReviewActionResponse>("/reviews", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  return response?.data || {};
+}
+
+export async function getMyReviews(): Promise<MyReviewsResult> {
+  const response = await apiFetch<ReviewListResponse>("/my-reviews");
+
+  const data = response?.data || {};
+
+  return {
+    reviews: Array.isArray(data.reviews) ? data.reviews : [],
+    total: Number(data.total || data.reviews?.length || 0),
+  };
+}
+
+export async function updateReview(
+  id: number | string,
+  payload: {
+    rating: number;
+    content: string;
+  }
+) {
+  const response = await apiFetch<ReviewActionResponse>(`/reviews/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+  return response?.data || {};
+}
+
+export async function deleteReview(id: number | string) {
+  return apiFetch(`/reviews/${id}`, {
+    method: "DELETE",
+  });
 }

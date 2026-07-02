@@ -25,56 +25,28 @@ import { formatCurrency } from "@/data/shop";
 import {
   cancelOrder,
   getMyOrders,
-  getOrderDetail,
   reorderOrder,
 } from "@/services/order.service";
 
 const CART_KEY = "dynova_cart";
 
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
+
 const orderSteps = [
-  {
-    key: "pending",
-    label: "Đã tiếp nhận",
-  },
-  {
-    key: "confirmed",
-    label: "Đã xác nhận",
-  },
-  {
-    key: "shipping",
-    label: "Đang giao",
-  },
-  {
-    key: "completed",
-    label: "Hoàn thành",
-  },
+  { key: "pending", label: "Đã tiếp nhận" },
+  { key: "confirmed", label: "Đã xác nhận" },
+  { key: "shipping", label: "Đang giao" },
+  { key: "completed", label: "Hoàn thành" },
 ];
 
 const filters = [
-  {
-    id: "all",
-    label: "Tất cả",
-  },
-  {
-    id: "pending",
-    label: "Chờ xử lý",
-  },
-  {
-    id: "waiting_bank_transfer",
-    label: "Chờ chuyển khoản",
-  },
-  {
-    id: "shipping",
-    label: "Đang giao",
-  },
-  {
-    id: "completed",
-    label: "Hoàn thành",
-  },
-  {
-    id: "cancelled",
-    label: "Đã hủy",
-  },
+  { id: "all", label: "Tất cả" },
+  { id: "pending", label: "Chờ xử lý" },
+  { id: "waiting_bank_transfer", label: "Chờ chuyển khoản" },
+  { id: "shipping", label: "Đang giao" },
+  { id: "completed", label: "Hoàn thành" },
+  { id: "cancelled", label: "Đã hủy" },
 ];
 
 function normalizeStatus(status = "") {
@@ -152,6 +124,9 @@ function getStatusMeta(status) {
 function getPaymentLabel(method = "") {
   const clean = String(method).toUpperCase();
 
+  const normalized =
+    clean === "COD" ? "COD" : clean === "BANK_TRANSFER" ? "BANK" : clean;
+
   const map = {
     COD: "Thanh toán khi nhận hàng",
     BANK: "Chuyển khoản ngân hàng",
@@ -159,11 +134,71 @@ function getPaymentLabel(method = "") {
     MOMO: "MoMo",
   };
 
-  return map[clean] || method || "Chưa xác định";
+  return map[normalized] || method || "Chưa xác định";
 }
 
 function getOrderItems(order) {
   return order?.items || order?.order_items || [];
+}
+
+function getOrderTotal(order) {
+  return Number(
+    order?.grand_total ||
+    order?.total ||
+    order?.total_price ||
+    order?.subtotal ||
+    0
+  );
+}
+
+function getOrderPhone(order) {
+  return order?.customer_phone || order?.phone || "";
+}
+
+function getOrderAddress(order) {
+  return (
+    order?.shipping_address ||
+    [order?.address, order?.ward, order?.district, order?.province]
+      .filter(Boolean)
+      .join(", ") ||
+    "Chưa có địa chỉ"
+  );
+}
+
+function getItemImage(item) {
+  const image =
+    item?.product_image ||
+    item?.image ||
+    item?.product?.image_url ||
+    item?.product?.image ||
+    "";
+
+  if (!image || image.includes("product-placeholder")) {
+    return FALLBACK_IMAGE;
+  }
+
+  return image;
+}
+
+function getItemName(item) {
+  return item?.product_name || item?.name || item?.product?.name || "Sản phẩm";
+}
+
+function getItemQuantity(item) {
+  return Number(item?.quantity || item?.qty || 1);
+}
+
+function getItemPrice(item) {
+  return Number(item?.price || item?.unit_price || 0);
+}
+
+function getItemTotal(item) {
+  return Number(
+    item?.total ||
+    item?.subtotal ||
+    item?.line_total ||
+    getItemPrice(item) * getItemQuantity(item)
+  );
 }
 
 function getOrderCode(order) {
@@ -211,7 +246,6 @@ function addItemsToCart(items = []) {
   if (typeof window === "undefined") return;
 
   const currentCart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
-
   const nextCart = [...currentCart];
 
   items.forEach((item) => {
@@ -224,18 +258,21 @@ function addItemsToCart(items = []) {
 
     if (exists) {
       exists.quantity =
-        Number(exists.quantity || 1) + Number(item.quantity || 1);
+        Number(exists.quantity || 1) + Number(getItemQuantity(item));
     } else {
       nextCart.push({
         key,
         id: productId,
-        variantId: item.variant_id || null,
-        name: item.product_name || item.name || "Sản phẩm",
-        image: item.image || "",
+        product_id: productId,
+        variantId: item.variant_id || item.product_variant_id || null,
+        variant_id: item.variant_id || item.product_variant_id || null,
+        name: getItemName(item),
+        product_name: getItemName(item),
+        image: getItemImage(item),
         size,
         color,
-        quantity: Number(item.quantity || 1),
-        price: Number(item.price || 0),
+        quantity: getItemQuantity(item),
+        price: getItemPrice(item),
       });
     }
   });
@@ -249,10 +286,10 @@ function StatCard({ title, value, icon: Icon, tone = "orange" }) {
     tone === "green"
       ? "bg-emerald-50 text-emerald-600"
       : tone === "blue"
-      ? "bg-sky-50 text-sky-600"
-      : tone === "rose"
-      ? "bg-rose-50 text-rose-600"
-      : "bg-orange-50 text-orange-600";
+        ? "bg-sky-50 text-sky-600"
+        : tone === "rose"
+          ? "bg-rose-50 text-rose-600"
+          : "bg-orange-50 text-orange-600";
 
   return (
     <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/70">
@@ -267,7 +304,9 @@ function StatCard({ title, value, icon: Icon, tone = "orange" }) {
           </p>
         </div>
 
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClass}`}>
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClass}`}
+        >
           <Icon size={22} />
         </div>
       </div>
@@ -343,7 +382,9 @@ function OrderDetailModal({ order, loading, onClose, onCancel, onReorder }) {
                 Trạng thái
               </p>
 
-              <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-black ${statusMeta.className}`}>
+              <div
+                className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-black ${statusMeta.className}`}
+              >
                 <StatusIcon size={15} />
                 {statusMeta.label}
               </div>
@@ -369,7 +410,7 @@ function OrderDetailModal({ order, loading, onClose, onCancel, onReorder }) {
               </p>
 
               <p className="mt-3 text-2xl font-black text-orange-300">
-                {formatCurrency(order.total || 0)}
+                {formatCurrency(getOrderTotal(order))}
               </p>
             </div>
           </div>
@@ -389,15 +430,15 @@ function OrderDetailModal({ order, loading, onClose, onCancel, onReorder }) {
 
               <p>
                 Số điện thoại:{" "}
-                <span className="text-slate-950">{order.phone || "Chưa có"}</span>
+                <span className="text-slate-950">
+                  {getOrderPhone(order) || "Chưa có"}
+                </span>
               </p>
 
               <p className="md:col-span-2">
                 Địa chỉ:{" "}
                 <span className="text-slate-950">
-                  {[order.address, order.ward, order.district, order.province]
-                    .filter(Boolean)
-                    .join(", ") || "Chưa có"}
+                  {getOrderAddress(order)}
                 </span>
               </p>
 
@@ -415,40 +456,46 @@ function OrderDetailModal({ order, loading, onClose, onCancel, onReorder }) {
             </h3>
 
             <div className="mt-4 space-y-3">
-              {items.map((item, index) => (
-                <div
-                  key={item.id || index}
-                  className="flex gap-3 rounded-3xl border border-slate-200 bg-white p-3"
-                >
-                  <img
-                    src={item.image || "/images/products/product-placeholder.jpg"}
-                    alt={item.product_name || item.name || "Sản phẩm"}
-                    className="h-20 w-20 rounded-2xl object-cover"
-                  />
+              {items.length === 0 ? (
+                <div className="rounded-3xl bg-slate-50 p-5 text-sm font-bold text-slate-500">
+                  Đơn hàng này chưa có sản phẩm.
+                </div>
+              ) : (
+                items.map((item, index) => (
+                  <div
+                    key={item.id || index}
+                    className="flex gap-3 rounded-3xl border border-slate-200 bg-white p-3"
+                  >
+                    <img
+                      src={getItemImage(item)}
+                      alt={getItemName(item)}
+                      onError={(event) => {
+                        event.currentTarget.src = FALLBACK_IMAGE;
+                      }}
+                      className="h-20 w-20 rounded-2xl object-cover"
+                    />
 
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-black text-slate-950">
-                      {item.product_name || item.name || "Sản phẩm"}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-black text-slate-950">
+                        {getItemName(item)}
+                      </p>
 
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                      {item.quantity || 1} x {item.size || "Freesize"} /{" "}
-                      {item.color || "Mặc định"}
-                    </p>
+                      <p className="mt-1 text-xs font-bold text-slate-500">
+                        {getItemQuantity(item)} x {item.size || "Freesize"} /{" "}
+                        {item.color || "Mặc định"}
+                      </p>
 
-                    <p className="mt-2 text-sm font-black text-orange-600">
-                      {formatCurrency(item.price || 0)}
+                      <p className="mt-2 text-sm font-black text-orange-600">
+                        {formatCurrency(getItemPrice(item))}
+                      </p>
+                    </div>
+
+                    <p className="text-sm font-black text-slate-950">
+                      {formatCurrency(getItemTotal(item))}
                     </p>
                   </div>
-
-                  <p className="text-sm font-black text-slate-950">
-                    {formatCurrency(
-                      Number(item.total || 0) ||
-                        Number(item.price || 0) * Number(item.quantity || 1)
-                    )}
-                  </p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -482,7 +529,7 @@ function OrderDetailModal({ order, loading, onClose, onCancel, onReorder }) {
 
             <button
               onClick={() => onReorder(order)}
-              disabled={loading}
+              disabled={loading || items.length === 0}
               className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:opacity-70"
             >
               <RotateCcw size={15} />
@@ -505,7 +552,7 @@ function OrderDetailModal({ order, loading, onClose, onCancel, onReorder }) {
   );
 }
 
-function OrderCard({ order, onView, onCancel, onReorder }) {
+function OrderCard({ order, onCancel, onReorder }) {
   const statusMeta = getStatusMeta(order.status);
   const StatusIcon = statusMeta.icon;
   const items = getOrderItems(order);
@@ -548,33 +595,42 @@ function OrderCard({ order, onView, onCancel, onReorder }) {
 
       <div className="mt-5 grid gap-4 md:grid-cols-[1fr_300px]">
         <div className="space-y-3">
-          {items.slice(0, 3).map((item, index) => (
-            <div key={item.id || index} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
-              <img
-                src={item.image || "/images/products/product-placeholder.jpg"}
-                alt={item.product_name || item.name || "Sản phẩm"}
-                className="h-16 w-16 rounded-xl object-cover"
-              />
+          {items.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-500">
+              Chưa có sản phẩm trong đơn hàng.
+            </div>
+          ) : (
+            items.slice(0, 3).map((item, index) => (
+              <div
+                key={item.id || index}
+                className="flex gap-3 rounded-2xl bg-slate-50 p-3"
+              >
+                <img
+                  src={getItemImage(item)}
+                  alt={getItemName(item)}
+                  onError={(event) => {
+                    event.currentTarget.src = FALLBACK_IMAGE;
+                  }}
+                  className="h-16 w-16 rounded-xl object-cover"
+                />
 
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-sm font-black text-slate-950">
-                  {item.product_name || item.name || "Sản phẩm"}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-black text-slate-950">
+                    {getItemName(item)}
+                  </p>
 
-                <p className="mt-1 text-xs font-bold text-slate-500">
-                  {item.quantity || 1} x {item.size || "Freesize"} /{" "}
-                  {item.color || "Mặc định"}
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {getItemQuantity(item)} x {item.size || "Freesize"} /{" "}
+                    {item.color || "Mặc định"}
+                  </p>
+                </div>
+
+                <p className="text-sm font-black text-slate-900">
+                  {formatCurrency(getItemTotal(item))}
                 </p>
               </div>
-
-              <p className="text-sm font-black text-slate-900">
-                {formatCurrency(
-                  Number(item.total || 0) ||
-                    Number(item.price || 0) * Number(item.quantity || 1)
-                )}
-              </p>
-            </div>
-          ))}
+            ))
+          )}
 
           {items.length > 3 && (
             <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs font-black text-slate-500">
@@ -587,28 +643,26 @@ function OrderCard({ order, onView, onCancel, onReorder }) {
           <p className="text-sm font-bold text-slate-300">Tổng thanh toán</p>
 
           <p className="mt-1 text-2xl font-black text-orange-300">
-            {formatCurrency(order.total || 0)}
+            {formatCurrency(getOrderTotal(order))}
           </p>
 
           <p className="mt-3 text-xs font-bold leading-6 text-slate-300">
-            Giao tới:{" "}
-            {[order.address, order.ward, order.district, order.province]
-              .filter(Boolean)
-              .join(", ") || "Chưa có địa chỉ"}
+            Giao tới: {getOrderAddress(order)}
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              onClick={() => onView(order)}
+            <Link
+              href={`/orders/${order.id}`}
               className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:bg-orange-50 hover:text-orange-600"
             >
               <Eye size={15} />
               Chi tiết
-            </button>
+            </Link>
 
             <button
               onClick={() => onReorder(order)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20"
+              disabled={items.length === 0}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20 disabled:opacity-60"
             >
               <RotateCcw size={15} />
               Mua lại
@@ -654,7 +708,6 @@ export default function OrdersPage() {
   const [stats, setStats] = useState({});
   const [activeFilter, setActiveFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [selectedOrder, setSelectedOrder] = useState(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -666,15 +719,16 @@ export default function OrdersPage() {
     return orders.filter((order) => {
       const status = normalizeStatus(order.status);
       const code = getOrderCode(order).toLowerCase();
-      const phone = String(order.phone || "").toLowerCase();
+      const phone = String(getOrderPhone(order) || "").toLowerCase();
 
-      const matchStatus =
-        activeFilter === "all" || status === activeFilter;
+      const matchStatus = activeFilter === "all" || status === activeFilter;
+
+      const keyword = search.trim().toLowerCase();
 
       const matchSearch =
-        !search.trim() ||
-        code.includes(search.toLowerCase()) ||
-        phone.includes(search.toLowerCase());
+        !keyword ||
+        code.includes(keyword) ||
+        phone.includes(keyword);
 
       return matchStatus && matchSearch;
     });
@@ -697,7 +751,7 @@ export default function OrdersPage() {
     } catch (err) {
       setError(
         err.message ||
-          "Không thể tải lịch sử đơn hàng. Vui lòng đăng nhập lại."
+        "Không thể tải lịch sử đơn hàng. Vui lòng đăng nhập lại."
       );
     } finally {
       setPageLoading(false);
@@ -708,19 +762,6 @@ export default function OrdersPage() {
     loadOrders();
   }, []);
 
-  const handleView = async (order) => {
-    setActionLoading(true);
-
-    try {
-      const detail = await getOrderDetail(order.id);
-
-      setSelectedOrder(detail || order);
-    } catch {
-      setSelectedOrder(order);
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   const handleCancel = async (order) => {
     const ok = window.confirm(
@@ -730,6 +771,7 @@ export default function OrdersPage() {
     if (!ok) return;
 
     setActionLoading(true);
+    setError("");
 
     try {
       const response = await cancelOrder(order.id);
@@ -746,6 +788,7 @@ export default function OrdersPage() {
       );
 
       showNotice("Đã hủy đơn hàng thành công.");
+      loadOrders();
     } catch (err) {
       setError(err.message || "Không thể hủy đơn hàng.");
     } finally {
@@ -755,6 +798,7 @@ export default function OrdersPage() {
 
   const handleReorder = async (order) => {
     setActionLoading(true);
+    setError("");
 
     try {
       const response = await reorderOrder(order.id);
@@ -762,7 +806,6 @@ export default function OrdersPage() {
       const items = getOrderItems(reorderData);
 
       addItemsToCart(items);
-
       showNotice("Đã thêm sản phẩm của đơn hàng vào giỏ.");
     } catch {
       const items = getOrderItems(order);
@@ -824,18 +867,21 @@ export default function OrdersPage() {
             value={stats.total || orders.length}
             icon={PackageCheck}
           />
+
           <StatCard
             title="Đang xử lý"
             value={stats.pending}
             icon={Clock3}
             tone="orange"
           />
+
           <StatCard
             title="Đang giao"
             value={stats.shipping}
             icon={Truck}
             tone="blue"
           />
+
           <StatCard
             title="Hoàn thành"
             value={stats.completed}
@@ -908,7 +954,6 @@ export default function OrdersPage() {
               <OrderCard
                 key={order.id}
                 order={order}
-                onView={handleView}
                 onCancel={handleCancel}
                 onReorder={handleReorder}
               />
@@ -917,7 +962,7 @@ export default function OrdersPage() {
         )}
       </div>
 
-      {selectedOrder && (
+      {/* {selectedOrder && (
         <OrderDetailModal
           order={selectedOrder}
           loading={actionLoading}
@@ -925,7 +970,7 @@ export default function OrdersPage() {
           onCancel={handleCancel}
           onReorder={handleReorder}
         />
-      )}
+      )} */}
     </div>
   );
 }

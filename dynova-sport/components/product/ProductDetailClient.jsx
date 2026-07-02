@@ -9,6 +9,7 @@ import {
   CheckCircle,
   ChevronRight,
   Heart,
+  Loader2,
   Minus,
   PackageCheck,
   Plus,
@@ -20,20 +21,22 @@ import {
   Sparkles,
   Star,
   Truck,
-  User,
   Zap,
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
+import { addToCart } from "@/utils/shopStorage";
+
 import {
-  addToCart,
-  getWishlist,
-  toggleWishlist,
-} from "@/utils/shopStorage";
-import {
-  getProductReviews as fetchProductReviews,
-  createProductReview,
-} from "@/services/review.service";
+  checkWishlistItem,
+  toggleWishlistApi,
+} from "@/services/wishlist.service";
+
+import ProductReviews from "@/components/reviews/ProductReviews";
+
+const API_HOST = (
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
+).replace("/api", "");
 
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
@@ -42,12 +45,37 @@ function uniqueArray(list) {
   return Array.from(new Set(list.filter(Boolean)));
 }
 
+function normalizeImage(image) {
+  if (!image || image.includes("product-placeholder")) {
+    return FALLBACK_IMAGE;
+  }
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  if (image.startsWith("/storage")) {
+    return API_HOST + image;
+  }
+
+  if (image.startsWith("storage/")) {
+    return API_HOST + "/" + image;
+  }
+
+  if (image.startsWith("/")) {
+    return image;
+  }
+
+  return API_HOST + "/storage/" + image;
+}
+
 function getImage(product) {
-  return (
-    product?.image ||
+  return normalizeImage(
     product?.image_url ||
-    product?.imageUrl ||
-    FALLBACK_IMAGE
+      product?.image ||
+      product?.imageUrl ||
+      product?.thumbnail ||
+      product?.thumbnail_url
   );
 }
 
@@ -70,6 +98,7 @@ function getBrandName(product) {
     product?.brandInfo?.name ||
     product?.brand?.name ||
     product?.brand_name ||
+    product?.brandName ||
     "Dynova"
   );
 }
@@ -84,34 +113,54 @@ function getGallery(product) {
 
   if (Array.isArray(product?.variants)) {
     product.variants.forEach((variant) => {
-      if (variant?.image) images.push(variant.image);
-      if (variant?.image_url) images.push(variant.image_url);
+      if (variant?.image_url) images.push(normalizeImage(variant.image_url));
+      if (variant?.image) images.push(normalizeImage(variant.image));
     });
   }
 
-  return uniqueArray(images);
+  return uniqueArray(images.map(normalizeImage));
 }
 
-function formatReviewDate(value) {
-  if (!value) return "";
-  try {
-    return new Date(value).toLocaleDateString("vi-VN");
-  } catch {
-    return "";
-  }
+function getProductRating(product) {
+  return Number(
+    product?.average_rating ||
+      product?.rating_average ||
+      product?.rating ||
+      0
+  );
+}
+
+function getProductReviewCount(product) {
+  return Number(
+    product?.reviews_count ||
+      product?.review_count ||
+      product?.total_reviews ||
+      0
+  );
 }
 
 function buildCartProduct(product, selectedVariant, displayPrice) {
   return {
     ...product,
     id: product.id,
+    product_id: product.id,
     name: product.name,
-    image: selectedVariant?.image || getImage(product),
+    image: selectedVariant?.image_url
+      ? normalizeImage(selectedVariant.image_url)
+      : selectedVariant?.image
+        ? normalizeImage(selectedVariant.image)
+        : getImage(product),
     price: Number(displayPrice || product.price || 0),
-    oldPrice: product.oldPrice || product.compare_price,
+    oldPrice:
+      product.oldPrice ||
+      product.compare_price ||
+      product.old_price ||
+      product.original_price,
     category: getCategoryName(product),
+    categoryId: product.category_id || product.category?.id || null,
     brand: getBrandName(product),
     variantId: selectedVariant?.id || null,
+    variant_id: selectedVariant?.id || null,
     sku: selectedVariant?.sku || product.sku || "DNV-" + product.id,
   };
 }
@@ -126,6 +175,9 @@ function RelatedCard({ product }) {
         <img
           src={getImage(product)}
           alt={product.name}
+          onError={(event) => {
+            event.currentTarget.src = FALLBACK_IMAGE;
+          }}
           className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105"
         />
       </div>
@@ -162,9 +214,9 @@ export default function ProductDetailClient({
     const fromVariants = uniqueArray(variants.map((item) => item.color));
     const fromProduct = Array.isArray(product?.colors) ? product.colors : [];
 
-    return uniqueArray([...fromVariants, ...fromProduct]).length > 0
-      ? uniqueArray([...fromVariants, ...fromProduct])
-      : ["Mặc định"];
+    const result = uniqueArray([...fromVariants, ...fromProduct]);
+
+    return result.length > 0 ? result : ["Mặc định"];
   }, [variants, product]);
 
   const [mainImage, setMainImage] = useState(gallery[0] || FALLBACK_IMAGE);
@@ -173,57 +225,9 @@ export default function ProductDetailClient({
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("description");
   const [notice, setNotice] = useState("");
-  const [wishlist, setWishlist] = useState([]);
 
-  // ==== ĐÁNH GIÁ THẬT TỪ DB (thay cho dữ liệu mock trước đây) ====
-  const [reviews, setReviews] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
-  const [reviewForm, setReviewForm] = useState({
-    rating: 5,
-    content: "",
-  });
-  const [submittingReview, setSubmittingReview] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadReviews() {
-      try {
-        setReviewsLoading(true);
-        const res = await fetchProductReviews(product.id);
-
-        if (isMounted) {
-          const mapped = (res?.data || []).map((r) => ({
-            id: r.id,
-            rating: Number(r.rating),
-            content: r.content,
-            created_at: r.created_at,
-          }));
-
-          setReviews(mapped);
-        }
-      } catch (error) {
-        console.log("Load reviews error:", error.message);
-        if (isMounted) setReviews([]);
-      } finally {
-        if (isMounted) setReviewsLoading(false);
-      }
-    }
-
-    if (product?.id) loadReviews();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [product?.id]);
-
-  const averageRating = useMemo(() => {
-    if (reviews.length === 0) return Number(product?.rating || 0);
-
-    const sum = reviews.reduce((total, r) => total + Number(r.rating || 0), 0);
-
-    return sum / reviews.length;
-  }, [reviews, product]);
+  const [liked, setLiked] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   const sizeOptions = useMemo(() => {
     const matchedVariants = variants.filter((variant) => {
@@ -261,26 +265,42 @@ export default function ProductDetailClient({
   }, [variants, selectedColor, selectedSize]);
 
   const displayPrice = Number(
-    selectedVariant?.price || product?.price || 0
+    selectedVariant?.sale_price ||
+      selectedVariant?.price ||
+      product?.sale_price ||
+      product?.price ||
+      0
   );
 
   const comparePrice = Number(
-    product?.oldPrice || product?.compare_price || 0
+    selectedVariant?.compare_price ||
+      product?.oldPrice ||
+      product?.compare_price ||
+      product?.old_price ||
+      product?.original_price ||
+      0
   );
 
   const stock = Number(
     selectedVariant?.stock ??
-    product?.stock ??
-    product?.quantity ??
-    99
+      product?.stock ??
+      product?.quantity ??
+      99
   );
 
   const sold = Number(product?.sold || 0);
-  const liked = wishlist.includes(Number(product.id));
+  const productRating = getProductRating(product);
+  const reviewCount = getProductReviewCount(product);
 
   useEffect(() => {
     setMainImage(gallery[0] || FALLBACK_IMAGE);
   }, [gallery]);
+
+  useEffect(() => {
+    if (!colorOptions.includes(selectedColor)) {
+      setSelectedColor(colorOptions[0]);
+    }
+  }, [colorOptions, selectedColor]);
 
   useEffect(() => {
     if (!sizeOptions.includes(selectedSize)) {
@@ -289,14 +309,25 @@ export default function ProductDetailClient({
   }, [sizeOptions, selectedSize]);
 
   useEffect(() => {
-    setWishlist(getWishlist().map(Number));
-  }, []);
-
-  useEffect(() => {
     if (quantity > stock && stock > 0) {
       setQuantity(stock);
     }
   }, [stock, quantity]);
+
+  useEffect(() => {
+    async function loadWishlistStatus() {
+      if (!product?.id) return;
+
+      try {
+        const result = await checkWishlistItem(product.id);
+        setLiked(Boolean(result?.wishlisted));
+      } catch {
+        setLiked(false);
+      }
+    }
+
+    loadWishlistStatus();
+  }, [product?.id]);
 
   const showNotice = (text) => {
     setNotice(text);
@@ -332,7 +363,9 @@ export default function ProductDetailClient({
       variantId: selectedVariant?.id || null,
     });
 
-    window.dispatchEvent(new Event("dynova:storage"));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("dynova:storage"));
+    }
 
     if (buyNow) {
       router.push("/checkout");
@@ -342,17 +375,39 @@ export default function ProductDetailClient({
     showNotice("Đã thêm sản phẩm vào giỏ hàng.");
   };
 
-  const handleWishlist = () => {
-    const next = toggleWishlist(product.id).map(Number);
+  const handleWishlist = async () => {
+    if (!product?.id) {
+      showNotice("Sản phẩm này chưa có ID nên chưa thể lưu yêu thích.");
+      return;
+    }
 
-    setWishlist(next);
-    window.dispatchEvent(new Event("dynova:storage"));
+    try {
+      setWishlistLoading(true);
 
-    showNotice(
-      next.includes(Number(product.id))
-        ? "Đã thêm vào danh sách yêu thích."
-        : "Đã bỏ khỏi danh sách yêu thích."
-    );
+      const result = await toggleWishlistApi(product.id);
+
+      setLiked(Boolean(result?.wishlisted));
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("dynova:wishlist"));
+        window.dispatchEvent(new Event("dynova:storage"));
+      }
+
+      showNotice(
+        result?.wishlisted
+          ? "Đã thêm vào danh sách yêu thích."
+          : "Đã bỏ khỏi danh sách yêu thích."
+      );
+    } catch (error) {
+      if (error.status === 401) {
+        router.push(`/login?redirect=/shop/product/${product.id}`);
+        return;
+      }
+
+      showNotice(error.message || "Không thể cập nhật yêu thích.");
+    } finally {
+      setWishlistLoading(false);
+    }
   };
 
   const handleShare = async () => {
@@ -363,32 +418,6 @@ export default function ProductDetailClient({
       showNotice("Đã copy liên kết sản phẩm.");
     } catch {
       showNotice("Không thể copy liên kết.");
-    }
-  };
-
-  const submitReview = async (event) => {
-    event.preventDefault();
-
-    if (!reviewForm.content.trim()) {
-      showNotice("Vui lòng nhập nội dung đánh giá.");
-      return;
-    }
-
-    try {
-      setSubmittingReview(true);
-
-      await createProductReview(product.id, {
-        rating: Number(reviewForm.rating),
-        content: reviewForm.content,
-      });
-
-      setReviewForm({ rating: 5, content: "" });
-
-      showNotice("Đã gửi đánh giá, chờ duyệt trước khi hiển thị công khai.");
-    } catch (error) {
-      showNotice(error.message || "Gửi đánh giá thất bại, thử lại sau.");
-    } finally {
-      setSubmittingReview(false);
     }
   };
 
@@ -405,6 +434,9 @@ export default function ProductDetailClient({
           <img
             src={getImage(product)}
             alt={product.name}
+            onError={(event) => {
+              event.currentTarget.src = FALLBACK_IMAGE;
+            }}
             className="h-full w-full object-cover opacity-20 blur-sm"
           />
 
@@ -472,9 +504,8 @@ export default function ProductDetailClient({
                   <img
                     src={image}
                     alt="Ảnh sản phẩm"
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&auto=format&fit=crop&q=80";
+                    onError={(event) => {
+                      event.currentTarget.src = FALLBACK_IMAGE;
                     }}
                     className="h-full w-full object-cover"
                   />
@@ -486,9 +517,8 @@ export default function ProductDetailClient({
               <img
                 src={mainImage}
                 alt={product.name}
-                onError={(e) => {
-                  e.currentTarget.src =
-                    "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
+                onError={(event) => {
+                  event.currentTarget.src = FALLBACK_IMAGE;
                 }}
                 className="product-main-image absolute inset-0 h-full w-full object-cover"
               />
@@ -519,18 +549,23 @@ export default function ProductDetailClient({
 
                   <button
                     onClick={handleWishlist}
+                    disabled={wishlistLoading}
                     className={
-                      "flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm transition " +
+                      "flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 " +
                       (liked
-                        ? "bg-rose-500 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-500")
+                        ? "bg-orange-500 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-500")
                     }
                     aria-label="Yêu thích"
                   >
-                    <Heart
-                      size={19}
-                      className={liked ? "fill-current" : ""}
-                    />
+                    {wishlistLoading ? (
+                      <Loader2 size={19} className="animate-spin" />
+                    ) : (
+                      <Heart
+                        size={19}
+                        className={liked ? "fill-current" : ""}
+                      />
+                    )}
                   </button>
                 </div>
               </div>
@@ -538,8 +573,16 @@ export default function ProductDetailClient({
               <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold text-slate-500">
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1.5 text-amber-600">
                   <Star size={15} className="fill-current" />
-                  {averageRating.toFixed(1)}
+                  {productRating > 0 ? productRating.toFixed(1) : "5.0"}
                 </span>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("reviews")}
+                  className="transition hover:text-orange-600"
+                >
+                  {reviewCount > 0 ? `${reviewCount} đánh giá` : "Xem đánh giá"}
+                </button>
 
                 <span>Đã bán {sold}</span>
 
@@ -752,7 +795,13 @@ export default function ProductDetailClient({
             {[
               { id: "description", label: "Mô tả" },
               { id: "specs", label: "Thông số" },
-              { id: "reviews", label: "Đánh giá (" + reviews.length + ")" },
+              {
+                id: "reviews",
+                label:
+                  reviewCount > 0
+                    ? `Đánh giá (${reviewCount})`
+                    : "Đánh giá",
+              },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -840,11 +889,17 @@ export default function ProductDetailClient({
           {activeTab === "specs" && (
             <div className="grid gap-4 md:grid-cols-2">
               {[
-                ["Mã sản phẩm", selectedVariant?.sku || product.sku || "DNV-" + product.id],
+                [
+                  "Mã sản phẩm",
+                  selectedVariant?.sku || product.sku || "DNV-" + product.id,
+                ],
                 ["Thương hiệu", getBrandName(product)],
                 ["Danh mục", getCategoryName(product)],
                 ["Giá hiện tại", formatCurrency(displayPrice)],
-                ["Giá gốc", comparePrice ? formatCurrency(comparePrice) : "Không có"],
+                [
+                  "Giá gốc",
+                  comparePrice ? formatCurrency(comparePrice) : "Không có",
+                ],
                 ["Màu đang chọn", selectedColor],
                 ["Size đang chọn", selectedSize],
                 ["Tồn kho", stock + " sản phẩm"],
@@ -868,102 +923,7 @@ export default function ProductDetailClient({
           )}
 
           {activeTab === "reviews" && (
-            <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
-              <form
-                onSubmit={submitReview}
-                className="rounded-[28px] bg-slate-50 p-5"
-              >
-                <h3 className="text-lg font-black text-slate-950">
-                  Gửi đánh giá
-                </h3>
-
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Đánh giá của bạn sẽ được kiểm duyệt trước khi hiển thị công
-                  khai trên trang sản phẩm.
-                </p>
-
-                <select
-                  value={reviewForm.rating}
-                  onChange={(e) =>
-                    setReviewForm({
-                      ...reviewForm,
-                      rating: Number(e.target.value),
-                    })
-                  }
-                  className="input-control mt-4"
-                >
-                  <option value="5">5 sao</option>
-                  <option value="4">4 sao</option>
-                  <option value="3">3 sao</option>
-                  <option value="2">2 sao</option>
-                  <option value="1">1 sao</option>
-                </select>
-
-                <textarea
-                  value={reviewForm.content}
-                  onChange={(e) =>
-                    setReviewForm({
-                      ...reviewForm,
-                      content: e.target.value,
-                    })
-                  }
-                  className="input-control mt-3 min-h-28"
-                  placeholder="Nội dung đánh giá"
-                />
-
-                <button
-                  disabled={submittingReview}
-                  className="btn-primary mt-3 w-full rounded-2xl py-3 text-xs font-black uppercase tracking-wider disabled:opacity-60"
-                >
-                  {submittingReview ? "Đang gửi..." : "Gửi đánh giá"}
-                </button>
-              </form>
-
-              <div className="space-y-3">
-                {reviewsLoading ? (
-                  Array.from({ length: 2 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-24 animate-pulse rounded-[24px] bg-slate-100"
-                    />
-                  ))
-                ) : reviews.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    Chưa có đánh giá nào cho sản phẩm này.
-                  </p>
-                ) : (
-                  reviews.map((review) => (
-                    <div
-                      key={review.id}
-                      className="rounded-[24px] border border-slate-200 bg-white p-4"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <p className="flex items-center gap-3 font-black text-slate-950">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-orange-600">
-                            <User size={16} />
-                          </span>
-
-                          Khách hàng
-                        </p>
-
-                        <div className="text-right">
-                          <p className="text-sm font-black text-amber-500">
-                            {review.rating} sao
-                          </p>
-                          <p className="text-xs font-semibold text-slate-400">
-                            {formatReviewDate(review.created_at)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <p className="mt-3 text-sm leading-7 text-slate-600">
-                        {review.content}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <ProductReviews productId={product.id} />
           )}
         </section>
 
