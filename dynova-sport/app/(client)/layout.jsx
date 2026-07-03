@@ -40,6 +40,8 @@ import {
 import { getWishlist as getWishlistApi } from "@/services/wishlist.service";
 import HeaderSearchPopup from "@/components/header/HeaderSearchPopup";
 
+const BRAND_LOGO = "/images/dynova-logo.jpg";
+
 function SocialIcon({ type }) {
   if (type === "facebook") {
     return (
@@ -61,6 +63,68 @@ function SocialIcon({ type }) {
     <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
       <path d="M16.6 5.8c-1.1-.7-1.9-1.8-2.1-3.1h-3v12.1a2.4 2.4 0 1 1-2.4-2.4c.2 0 .5 0 .7.1V9.4c-.2 0-.5-.1-.7-.1a5.5 5.5 0 1 0 5.5 5.5V8.7c1.2.9 2.6 1.4 4.1 1.4V7c-.8 0-1.5-.4-2.1-1.2Z" />
     </svg>
+  );
+}
+
+
+function BrandLogo({ mode = "header" }) {
+  const isFooter = mode === "footer";
+  const isMobile = mode === "mobile";
+
+  return (
+    <Link
+      href="/"
+      className={
+        "group inline-flex shrink-0 items-center gap-3 " +
+        (isFooter ? "text-white" : "text-slate-950")
+      }
+    >
+      <div
+        className={
+          "relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl border transition duration-300 group-hover:-translate-y-0.5 " +
+          (isFooter
+            ? "h-20 w-20 border-white/10 bg-white shadow-lg shadow-black/20"
+            : isMobile
+              ? "h-16 w-16 border-slate-200 bg-white shadow-lg shadow-slate-950/10"
+              : "h-16 w-16 border-slate-200 bg-white shadow-lg shadow-slate-950/10")
+        }
+      >
+        <img
+          src={BRAND_LOGO}
+          alt="Dynova Sport Logo"
+          className="h-full w-full object-cover p-1"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+            event.currentTarget.parentElement.innerHTML =
+              '<span class="text-sm font-black text-slate-950">DNV</span>';
+          }}
+        />
+      </div>
+
+      <div className="leading-tight">
+        <p
+          className={
+            "font-black uppercase tracking-[-0.04em] " +
+            (isFooter
+              ? "text-2xl text-white"
+              : isMobile
+                ? "text-lg text-slate-950"
+                : "text-[20px] text-slate-950")
+          }
+        >
+          Dynova
+        </p>
+
+        <p
+          className={
+            "text-[11px] font-extrabold uppercase tracking-[0.24em] " +
+            (isFooter ? "text-orange-400" : "text-orange-500")
+          }
+        >
+          Sport Shop
+        </p>
+      </div>
+    </Link>
   );
 }
 
@@ -284,21 +348,7 @@ export default function ClientLayout({ children }) {
         </div>
 
         <div className="container-page flex h-[76px] items-center justify-between gap-3">
-          <Link href="/" className="group flex shrink-0 items-center gap-3">
-            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 text-[12px] font-black tracking-tight text-white shadow-lg shadow-slate-950/15 transition group-hover:-translate-y-0.5">
-              <span className="relative z-10">DNV</span>
-              <span className="absolute inset-x-0 bottom-0 h-1/2 bg-orange-500/90" />
-            </div>
-
-            <div className="leading-tight">
-              <p className="text-[20px] font-black uppercase tracking-[-0.03em] text-slate-950">
-                Dynova
-              </p>
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-orange-500">
-                Sport Shop
-              </p>
-            </div>
-          </Link>
+          <BrandLogo />
 
           <nav className="hidden items-center gap-0.5 rounded-2xl bg-slate-50 p-1 xl:flex">
             {menuItems.map((item) => {
@@ -515,14 +565,7 @@ export default function ClientLayout({ children }) {
           <div className="float-in ml-auto flex h-full w-[86%] max-w-sm flex-col bg-white shadow-2xl">
             <div className="border-b border-slate-100 p-5">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-lg font-black uppercase tracking-[-0.03em] text-slate-950">
-                    Dynova
-                  </p>
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-orange-500">
-                    Sport Shop
-                  </p>
-                </div>
+                <BrandLogo mode="mobile" />
 
                 <button
                   onClick={() => setOpenMobile(false)}
@@ -669,20 +712,7 @@ export default function ClientLayout({ children }) {
 
           <div className="grid gap-10 py-14 lg:grid-cols-[1.35fr_2fr_1.1fr]">
             <div>
-              <Link href="/" className="inline-flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[12px] font-black text-slate-950">
-                  DNV
-                </div>
-
-                <div>
-                  <p className="text-2xl font-black uppercase tracking-[-0.04em]">
-                    Dynova Sport
-                  </p>
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-orange-400">
-                    Premium Sport Shop
-                  </p>
-                </div>
-              </Link>
+              <BrandLogo mode="footer" />
 
               <p className="mt-5 max-w-md text-sm leading-7 text-slate-400">
                 Dynova Sport cung cấp sản phẩm thể thao hiện đại, phù hợp cho

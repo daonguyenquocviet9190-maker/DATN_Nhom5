@@ -939,3 +939,51 @@ textarea.contact-input {
     opacity: 1 !important;
   }
 }
+
+/* ==============================
+   DYNOVA ADMIN CUSTOM SCROLLBAR
+============================== */
+
+.admin-scroll{
+    scrollbar-width: thin;
+    scrollbar-color: rgba(249,115,22,.55) transparent;
+    overscroll-behavior: contain;
+}
+
+/* Chrome / Edge */
+
+.admin-scroll::-webkit-scrollbar{
+    width:10px;
+}
+
+.admin-scroll::-webkit-scrollbar-track{
+    background:transparent;
+    border-radius:20px;
+    margin:8px 0;
+}
+
+.admin-scroll::-webkit-scrollbar-thumb{
+    border-radius:20px;
+    border:2px solid transparent;
+    background:
+        linear-gradient(
+            180deg,
+            rgba(249,115,22,.95),
+            rgba(251,146,60,.85)
+        );
+    background-clip:padding-box;
+    transition:.25s;
+}
+
+.admin-scroll::-webkit-scrollbar-thumb:hover{
+    background:
+        linear-gradient(
+            180deg,
+            rgb(249,115,22),
+            rgb(234,88,12)
+        );
+}
+
+.admin-scroll::-webkit-scrollbar-corner{
+    background:transparent;
+}
