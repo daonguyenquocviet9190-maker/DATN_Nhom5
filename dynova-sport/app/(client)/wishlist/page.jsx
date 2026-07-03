@@ -22,27 +22,272 @@ import {
   removeWishlistItem,
 } from "@/services/wishlist.service";
 
-function getProductImage(product) {
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
+).replace(/\/$/, "");
+
+const API_ORIGIN = API_URL.replace(/\/api\/?$/, "");
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
+
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function encodePath(value) {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => encodeURIComponent(safeDecode(part)))
+    .join("/");
+}
+
+function toStorageProductImage(value) {
+  const raw = String(value || "").trim();
+
+  if (
+    !raw ||
+    raw === "null" ||
+    raw === "undefined" ||
+    raw.includes("product-placeholder")
+  ) {
+    return FALLBACK_IMAGE;
+  }
+
+  if (
+    /^(https?:)?\/\//i.test(raw) ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:")
+  ) {
+    return raw;
+  }
+
+  const clean = raw.replace(/\\/g, "/");
+
+  if (clean.startsWith("/storage/")) {
+    return `${API_ORIGIN}${encodePath(clean)}`;
+  }
+
+  if (clean.startsWith("storage/")) {
+    return `${API_ORIGIN}/${encodePath(clean)}`;
+  }
+
+  if (clean.startsWith("products/")) {
+    return `${API_ORIGIN}/storage/${encodePath(clean)}`;
+  }
+
+  if (clean.startsWith("/products/")) {
+    return `${API_ORIGIN}/storage${encodePath(clean)}`;
+  }
+
+  if (clean.startsWith("images/")) {
+    return `/${encodePath(clean)}`;
+  }
+
+  if (clean.startsWith("/images/")) {
+    return encodePath(clean);
+  }
+
+  if (clean.startsWith("/")) {
+    return clean;
+  }
+
+  return `${API_ORIGIN}/storage/products/${encodePath(clean)}`;
+}
+
+function extractWishlistItems(data) {
+  const candidates = [
+    data?.items,
+    data?.items?.data,
+
+    data?.wishlist,
+    data?.wishlist?.data,
+
+    data?.products,
+    data?.products?.data,
+
+    data?.data?.items,
+    data?.data?.items?.data,
+
+    data?.data?.wishlist,
+    data?.data?.wishlist?.data,
+
+    data?.data?.products,
+    data?.data?.products?.data,
+
+    data?.data?.data,
+    data?.data,
+
+    data,
+  ];
+
+  return candidates.find((item) => Array.isArray(item)) || [];
+}
+
+function getFirstImageFromList(value) {
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    const first = value[0];
+
+    if (typeof first === "string") return first;
+
+    return (
+      first?.image_url ||
+      first?.image ||
+      first?.url ||
+      first?.path ||
+      first?.src ||
+      ""
+    );
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+
+      if (Array.isArray(parsed)) {
+        return getFirstImageFromList(parsed);
+      }
+
+      if (parsed && typeof parsed === "object") {
+        return (
+          parsed.image_url ||
+          parsed.image ||
+          parsed.url ||
+          parsed.path ||
+          parsed.src ||
+          ""
+        );
+      }
+    } catch {
+      return value;
+    }
+  }
+
+  if (typeof value === "object") {
+    return (
+      value?.image_url ||
+      value?.image ||
+      value?.url ||
+      value?.path ||
+      value?.src ||
+      ""
+    );
+  }
+
+  return "";
+}
+
+function getRawProductImage(product = {}, item = {}) {
   return (
+    item?.variant_image ||
+    item?.product_image ||
+    item?.image_url ||
+    item?.image ||
+    item?.thumbnail ||
+    item?.thumb ||
+    item?.photo ||
+
+    product?.variant_image ||
+    product?.product_image ||
+    product?.main_image ||
     product?.image_url ||
     product?.image ||
-    "/images/products/product-placeholder.jpg"
+    product?.thumbnail ||
+    product?.thumb ||
+    product?.photo ||
+
+    product?.product_variant?.image_url ||
+    product?.product_variant?.image ||
+    product?.variant?.image_url ||
+    product?.variant?.image ||
+
+    getFirstImageFromList(product?.images) ||
+    getFirstImageFromList(product?.gallery) ||
+    getFirstImageFromList(product?.photos) ||
+    getFirstImageFromList(item?.images) ||
+    ""
+  );
+}
+
+function getProductImage(product = {}, item = {}) {
+  return toStorageProductImage(getRawProductImage(product, item));
+}
+
+function getProductId(item = {}) {
+  const product = item?.product || item?.product_data || item || {};
+
+  return (
+    product?.id ||
+    product?.product_id ||
+    item?.product_id ||
+    item?.productId ||
+    item?.id ||
+    null
   );
 }
 
 function normalizeProduct(item) {
-  const product = item?.product || item || {};
+  const product = item?.product || item?.product_data || item || {};
+  const productId = getProductId(item);
 
   return {
-    id: product.id || item.product_id,
-    name: product.name || "Sản phẩm",
-    slug: product.slug || null,
-    image: getProductImage(product),
-    price: Number(product.price || 0),
-    oldPrice: Number(product.old_price || 0),
-    stock: product.stock,
-    status: product.status,
-    wishlistedAt: item.wishlisted_at,
+    id: productId,
+    wishlistId: item?.id || item?.wishlist_id || null,
+
+    name:
+      product?.name ||
+      product?.product_name ||
+      item?.product_name ||
+      item?.name ||
+      "Sản phẩm",
+
+    slug:
+      product?.slug ||
+      item?.slug ||
+      null,
+
+    image: getProductImage(product, item),
+
+    price: Number(
+      product?.sale_price ||
+        product?.price ||
+        item?.sale_price ||
+        item?.price ||
+        0
+    ),
+
+    oldPrice: Number(
+      product?.old_price ||
+        product?.compare_price ||
+        product?.original_price ||
+        item?.old_price ||
+        item?.compare_price ||
+        0
+    ),
+
+    stock:
+      product?.stock ??
+      product?.total_stock ??
+      item?.stock ??
+      null,
+
+    status:
+      product?.status ||
+      item?.status ||
+      "active",
+
+    wishlistedAt:
+      item?.wishlisted_at ||
+      item?.created_at ||
+      item?.createdAt ||
+      null,
   };
 }
 
@@ -54,6 +299,12 @@ function formatDate(value) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function handleImageError(event) {
+  if (event.currentTarget.src !== FALLBACK_IMAGE) {
+    event.currentTarget.src = FALLBACK_IMAGE;
+  }
 }
 
 function EmptyWishlist() {
@@ -94,7 +345,7 @@ export default function WishlistPage() {
   const [error, setError] = useState("");
 
   const products = useMemo(() => {
-    return items.map(normalizeProduct);
+    return items.map(normalizeProduct).filter((product) => product.id);
   }, [items]);
 
   const filteredProducts = useMemo(() => {
@@ -118,14 +369,16 @@ export default function WishlistPage() {
 
     try {
       const data = await getWishlist();
-      setItems(data.items || []);
+      const nextItems = extractWishlistItems(data);
+
+      setItems(nextItems);
     } catch (err) {
-      if (err.status === 401) {
+      if (err?.status === 401) {
         router.push("/login?redirect=/wishlist");
         return;
       }
 
-      setError(err.message || "Không thể tải danh sách yêu thích.");
+      setError(err?.message || "Không thể tải danh sách yêu thích.");
     } finally {
       setLoading(false);
     }
@@ -147,12 +400,16 @@ export default function WishlistPage() {
       await removeWishlistItem(productId);
 
       setItems((prev) =>
-        prev.filter((item) => String(item.product_id) !== String(productId))
+        prev.filter((item) => String(getProductId(item)) !== String(productId))
       );
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("dynova:wishlist"));
+      }
 
       showNotice("Đã xóa sản phẩm khỏi danh sách yêu thích.");
     } catch (err) {
-      setError(err.message || "Không thể xóa sản phẩm yêu thích.");
+      setError(err?.message || "Không thể xóa sản phẩm yêu thích.");
     } finally {
       setRemovingId(null);
     }
@@ -163,8 +420,11 @@ export default function WishlistPage() {
       id: product.id,
       product_id: product.id,
       name: product.name,
+      product_name: product.name,
       image: product.image,
+      product_image: product.image,
       price: product.price,
+      sale_price: product.price,
       quantity: 1,
       size: "Freesize",
       color: "Mặc định",
@@ -307,6 +567,7 @@ export default function WishlistPage() {
                     <img
                       src={product.image}
                       alt={product.name}
+                      onError={handleImageError}
                       className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
                     />
 
