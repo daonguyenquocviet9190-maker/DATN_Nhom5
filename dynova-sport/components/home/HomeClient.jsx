@@ -858,17 +858,11 @@ href="/shop"
                 href="/shop"
                 className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
               >
-<<<<<<< HEAD
-<img
-                  src={getProductImage(product)}
-                  alt={product.name}
-                  className="h-28 w-28 shrink-0 rounded-2xl object-cover"
-                />
-=======
+
                 Xem thêm
               </Link>
             </div>
->>>>>>> main
+
 
             {bestSeller.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2">
