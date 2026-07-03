@@ -5,9 +5,12 @@ import "./shop.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Heart,
   Loader2,
   PackageSearch,
@@ -37,10 +40,6 @@ import {
   toggleWishlistApi,
 } from "@/services/wishlist.service";
 
-const API_HOST = "http://127.0.0.1:8000";
-
-const FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
 
 function extractProducts(response) {
   return (
@@ -82,6 +81,9 @@ export default function ShopPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  const PAGE_SIZE = 12;
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     async function loadShopData() {
@@ -178,44 +180,6 @@ export default function ShopPage() {
       ? apiCategories
       : localCategories;
 
-  const getProductImage = (product) => {
-    const image =
-      product?.image_url ||
-      product?.image ||
-      product?.imageUrl ||
-      product?.thumbnail ||
-      product?.thumbnail_url ||
-      "";
-
-    if (!image) {
-      return FALLBACK_IMAGE;
-    }
-
-    if (
-      image.includes("product-placeholder.jpg") ||
-      image.includes("placeholder")
-    ) {
-      return FALLBACK_IMAGE;
-    }
-
-    if (image.startsWith("http://") || image.startsWith("https://")) {
-      return image;
-    }
-
-    if (image.startsWith("/storage")) {
-      return API_HOST + image;
-    }
-
-    if (image.startsWith("storage/")) {
-      return API_HOST + "/" + image;
-    }
-
-    if (image.startsWith("/")) {
-      return image;
-    }
-
-    return API_HOST + "/storage/" + image;
-  };
 
   const getProductCategoryName = (product) => {
     if (typeof product?.category === "string") {
@@ -246,9 +210,9 @@ export default function ShopPage() {
   const getProductCategoryId = (product) => {
     return String(
       product?.category_id ||
-        product?.categoryId ||
-        product?.category?.id ||
-        ""
+      product?.categoryId ||
+      product?.category?.id ||
+      ""
     );
   };
 
@@ -338,6 +302,10 @@ export default function ShopPage() {
     );
   }, [items, query, category, brand, maxPrice, sort]);
 
+  useEffect(() => {
+  setCurrentPage(1);
+}, [query, category, brand, maxPrice, sort]);
+
   const selectedCategoryName = useMemo(() => {
     if (category === "all") return "Tất cả sản phẩm";
 
@@ -347,6 +315,52 @@ export default function ShopPage() {
 
     return found?.name || "Danh mục sản phẩm";
   }, [category, safeCategories]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+const safeCurrentPage = Math.min(currentPage, totalPages);
+
+const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+const endIndex = startIndex + PAGE_SIZE;
+
+const paginatedProducts = filtered.slice(startIndex, endIndex);
+
+useEffect(() => {
+  if (currentPage > totalPages) {
+    setCurrentPage(totalPages);
+  }
+}, [currentPage, totalPages]);
+
+const goToPage = (page) => {
+  const nextPage = Math.min(Math.max(page, 1), totalPages);
+
+  setCurrentPage(nextPage);
+
+  if (typeof window !== "undefined") {
+    window.scrollTo({
+      top: 420,
+      behavior: "smooth",
+    });
+  }
+};
+
+const paginationNumbers = useMemo(() => {
+  const pages = [];
+  const maxButtons = 5;
+
+  let start = Math.max(1, safeCurrentPage - 2);
+  let end = Math.min(totalPages, start + maxButtons - 1);
+
+  if (end - start < maxButtons - 1) {
+    start = Math.max(1, end - maxButtons + 1);
+  }
+
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page);
+  }
+
+  return pages;
+}, [safeCurrentPage, totalPages]);
 
   const showNotice = (message) => {
     setNotice(message);
@@ -476,7 +490,7 @@ export default function ShopPage() {
                 {selectedCategoryName}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                Tìm thấy {filtered.length} sản phẩm phù hợp
+                Tìm thấy {filtered.length} sản phẩm phù hợp · Trang {safeCurrentPage}/{totalPages}
               </p>
             </div>
 
@@ -667,7 +681,7 @@ export default function ShopPage() {
               </div>
             ) : (
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((product) => {
+                {paginatedProducts.map((product) => {
                   const liked = wishlist.includes(Number(product.id));
 
                   return (
@@ -680,8 +694,8 @@ export default function ShopPage() {
                           <img
                             src={getProductImage(product)}
                             alt={product.name}
-                            onError={(event) => {
-                              event.currentTarget.src = FALLBACK_IMAGE;
+                            onError={(e) => {
+                              e.currentTarget.src = PRODUCT_FALLBACK;
                             }}
                             className="aspect-[4/4.35] w-full object-cover transition duration-500 group-hover:scale-105"
                           />
@@ -750,14 +764,14 @@ export default function ShopPage() {
                             {(product.oldPrice ||
                               product.compare_price ||
                               product.old_price) && (
-                              <p className="text-xs font-bold text-slate-400 line-through">
-                                {formatCurrency(
-                                  product.oldPrice ||
+                                <p className="text-xs font-bold text-slate-400 line-through">
+                                  {formatCurrency(
+                                    product.oldPrice ||
                                     product.compare_price ||
                                     product.old_price
-                                )}
-                              </p>
-                            )}
+                                  )}
+                                </p>
+                              )}
                           </div>
 
                           <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-600">
@@ -781,6 +795,99 @@ export default function ShopPage() {
                 })}
               </div>
             )}
+            {totalPages > 1 && (
+  <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
+    <p className="text-sm font-bold text-slate-500">
+      Hiển thị{" "}
+      <span className="font-black text-slate-950">
+        {filtered.length === 0 ? 0 : startIndex + 1}
+      </span>
+      {" - "}
+      <span className="font-black text-slate-950">
+        {Math.min(endIndex, filtered.length)}
+      </span>
+      {" / "}
+      <span className="font-black text-slate-950">
+        {filtered.length}
+      </span>{" "}
+      sản phẩm
+    </p>
+
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        onClick={() => goToPage(safeCurrentPage - 1)}
+        disabled={safeCurrentPage === 1}
+        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Trang trước"
+      >
+        <ChevronLeft size={18} />
+      </button>
+
+      {paginationNumbers[0] > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => goToPage(1)}
+            className="h-11 min-w-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+          >
+            1
+          </button>
+
+          {paginationNumbers[0] > 2 && (
+            <span className="px-1 text-sm font-black text-slate-400">
+              ...
+            </span>
+          )}
+        </>
+      )}
+
+      {paginationNumbers.map((page) => (
+        <button
+          key={page}
+          type="button"
+          onClick={() => goToPage(page)}
+          className={
+            "h-11 min-w-11 rounded-2xl border px-4 text-sm font-black transition " +
+            (safeCurrentPage === page
+              ? "border-orange-500 bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+              : "border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600")
+          }
+        >
+          {page}
+        </button>
+      ))}
+
+      {paginationNumbers[paginationNumbers.length - 1] < totalPages && (
+        <>
+          {paginationNumbers[paginationNumbers.length - 1] < totalPages - 1 && (
+            <span className="px-1 text-sm font-black text-slate-400">
+              ...
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => goToPage(totalPages)}
+            className="h-11 min-w-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+          >
+            {totalPages}
+          </button>
+        </>
+      )}
+
+      <button
+        type="button"
+        onClick={() => goToPage(safeCurrentPage + 1)}
+        disabled={safeCurrentPage === totalPages}
+        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Trang sau"
+      >
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  </div>
+)}
           </section>
         </div>
       </div>

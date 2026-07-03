@@ -1,133 +1,51 @@
-'use client';
-import React, { useState } from 'react';
+"use client";
 
-export default function BannersAdmin() {
-  // 1. Giả lập danh sách banner truyền thông của Dynova Sport
-  const [banners, setBanners] = useState([
-    { id: 'BNR-001', title: 'Bộ Sưu Tập Hè Đột Phá 2026', position: 'Slide Trang Chủ (Chính)', link: '/collection/summer-2026', clicks: 1420, status: 'Hiển thị', bgPreview: 'bg-gradient-to-r from-orange-600 to-amber-500' },
-    { id: 'BNR-002', title: 'Giày Chạy Siêu Nhẹ Dynova X-Pro', position: 'Slide Trang Chủ (Phụ)', link: '/products/dynova-x-pro', clicks: 890, status: 'Hiển thị', bgPreview: 'bg-gradient-to-r from-blue-600 to-indigo-900' },
-    { id: 'BNR-003', title: 'Ưu Đãi Thành Viên Mới - Giảm 10%', position: 'Banner Giữa Trang', link: '/promotions', clicks: 2310, status: 'Hiển thị', bgPreview: 'bg-gradient-to-r from-rose-600 to-pink-500' },
-    { id: 'BNR-004', title: 'Xả Kho Cuối Mùa - Up To 50%', position: 'Slide Trang Chủ (Chính)', link: '/sale-off', clicks: 0, status: 'Đang ẩn', bgPreview: 'bg-gradient-to-r from-neutral-700 to-neutral-900' },
-  ]);
+import { useEffect, useMemo, useState } from "react";
+import { Edit3, Image, ImagePlus, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { createAdminBanner, deleteAdminBanner, extractItems, getAdminBanners, updateAdminBanner } from "@/services/admin.service";
 
-  // State quản lý bộ lọc vị trí banner
-  const [positionFilter, setPositionFilter] = useState('Tất cả');
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api").replace(/\/api\/?$/, "").replace(/\/$/, "");
+const emptyForm = { title: "", subtitle: "", description: "", button_text: "Mua sắm ngay", button_link: "/shop", sort_order: 1, is_active: true, image: null };
 
-  // 2. Hàm xử lý Ẩn / Hiện nhanh Banner trên giao diện người dùng
-  const toggleStatus = (id) => {
-    setBanners(banners.map(banner => {
-      if (banner.id === id) {
-        const nextStatus = banner.status === 'Hiển thị' ? 'Đang ẩn' : 'Hiển thị';
-        return { ...banner, status: nextStatus };
-      }
-      return banner;
-    }));
-  };
+function bannerImage(item) {
+  const value = item?.image_url || item?.image || item?.thumbnail || "";
+  if (!value) return "";
+  if (String(value).startsWith("http")) return value;
+  if (String(value).startsWith("/storage/")) return API_ORIGIN + encodeURI(value);
+  if (String(value).startsWith("storage/")) return API_ORIGIN + "/" + encodeURI(value);
+  return `${API_ORIGIN}/storage/banners/${encodeURIComponent(value)}`;
+}
 
-  // 3. Lọc danh sách banner theo vị trí được chọn
-  const filteredBanners = banners.filter(banner => {
-    return positionFilter === 'Tất cả' || banner.position === positionFilter;
+function payload(form) {
+  const body = new FormData();
+  Object.entries(form).forEach(([k, v]) => {
+    if (v === null || v === undefined) return;
+    if (k === "image") { if (v) body.append("image", v); return; }
+    if (k === "is_active") { body.append(k, v ? "1" : "0"); return; }
+    body.append(k, String(v));
   });
+  return body;
+}
 
-  return (
-    <div className="space-y-6 text-white">
-      {/* TIÊU ĐỀ TRANG & NÚT THÊM BANNER */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold">Quản lý Banner</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Cập nhật hình ảnh quảng cáo, chiến dịch truyền thông và liên kết ngoài trang chủ</p>
-        </div>
-        <button className="bg-orange-500 hover:bg-orange-600 text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-orange-500/10">
-          <span>+</span> Thêm Banner mới
-        </button>
-      </div>
+export default function AdminBannersPage() {
+  const [items, setItems] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
 
-      {/* THANH BỘ LỌC VỊ TRÍ */}
-      <div className="bg-[#161616] border border-[#222222] p-4 rounded-2xl flex justify-between items-center">
-        <span className="text-xs text-gray-400 font-medium">Bộ lọc vị trí xuất hiện:</span>
-        <div className="flex gap-2">
-          {['Tất cả', 'Slide Trang Chủ (Chính)', 'Slide Trang Chủ (Phụ)', 'Banner Giữa Trang'].map((pos) => (
-            <button
-              key={pos}
-              onClick={() => setPositionFilter(pos)}
-              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
-                positionFilter === pos 
-                  ? 'bg-orange-500/10 border-orange-500 text-orange-500' 
-                  : 'bg-[#1c1c1c] border-[#2d2d2d] text-gray-400 hover:text-white'
-              }`}
-            >
-              {pos}
-            </button>
-          ))}
-        </div>
-      </div>
+  const loadData = async () => { try{setLoading(true); const res=await getAdminBanners({per_page:100}); setItems(extractItems(res,["banners"])); setError("");}catch(err){setError(err?.message||"Không thể tải banner."); setItems([])}finally{setLoading(false)}};
+  useEffect(()=>{loadData()},[]);
+  const filtered = useMemo(()=>{const k=query.trim().toLowerCase(); return items.filter(i=>!k || [i.title,i.subtitle,i.description].filter(Boolean).join(" ").toLowerCase().includes(k))},[items,query]);
+  const showNotice=m=>{setNotice(m); setTimeout(()=>setNotice(""),1800)};
+  const openCreate=()=>{setEditing(null); setForm(emptyForm); setOpen(true)};
+  const openEdit=(i)=>{setEditing(i); setForm({title:i.title||"",subtitle:i.subtitle||i.tagline||"",description:i.description||"",button_text:i.button_text||i.buttonText||"Mua sắm ngay",button_link:i.button_link||i.buttonLink||i.cta_link||"/shop",sort_order:i.sort_order||i.sortOrder||1,is_active:i.is_active!==false&&i.is_active!==0,image:null}); setOpen(true)};
+  const submit=async(e)=>{e.preventDefault(); try{setSaving(true); if(editing?.id) await updateAdminBanner(editing.id,payload(form)); else await createAdminBanner(payload(form)); setOpen(false); showNotice(editing?"Đã cập nhật banner.":"Đã thêm banner."); await loadData()}catch(err){setError(err?.message||"Không thể lưu banner.")}finally{setSaving(false)}};
+  const remove=async(i)=>{if(!confirm(`Xóa banner "${i.title}"?`))return; try{await deleteAdminBanner(i.id); showNotice("Đã xóa banner."); await loadData()}catch(err){setError(err?.message||"Không thể xóa banner.")}};
 
-      {/* DANH SÁCH BANNER DẠNG THÈ (CARD) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredBanners.length > 0 ? (
-          filteredBanners.map((banner) => (
-            <div key={banner.id} className="bg-[#161616] border border-[#222222] rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:border-[#333333]">
-              
-              {/* Khung mô phỏng Banner thực tế */}
-              <div className={`h-40 ${banner.bgPreview} p-5 flex flex-col justify-between relative overflow-hidden group`}>
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                
-                <div className="relative z-10 flex justify-between items-start">
-                  <span className="text-[10px] uppercase font-bold tracking-wider bg-black/40 text-white px-2 py-0.5 rounded backdrop-blur-sm">
-                    {banner.position}
-                  </span>
-                  <span className="font-mono text-xs text-white/60 bg-black/30 px-1.5 py-0.5 rounded">
-                    {banner.id}
-                  </span>
-                </div>
-
-                <div className="relative z-10">
-                  <h3 className="text-base font-bold text-white drop-shadow-md">{banner.title}</h3>
-                  <p className="text-[11px] text-white/80 font-mono mt-0.5">Link: {banner.link}</p>
-                </div>
-              </div>
-
-              {/* Phần quản lý thông số và hành động phía dưới */}
-              <div className="p-4 bg-[#161616] flex justify-between items-center text-xs border-t border-[#222222]/60">
-                {/* Đã ép locale 'vi-VN' để đồng bộ hiển thị Server và Client */}
-                <div className="text-gray-400">
-                  📈 Số lượt click: <span className="text-white font-bold">{banner.clicks.toLocaleString('vi-VN')}</span>
-                </div>
-
-                {/* Các nút điều khiển nhanh */}
-                <div className="flex items-center gap-3">
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                    banner.status === 'Hiển thị' ? 'text-emerald-500 bg-emerald-500/10' : 'text-gray-500 bg-gray-500/10'
-                  }`}>
-                    {banner.status}
-                  </span>
-
-                  <div className="flex gap-1 border-l border-[#222222] pl-3">
-                    <button className="p-1 text-blue-400 hover:text-blue-300" title="Chỉnh sửa Banner">
-                      ✏️
-                    </button>
-                    <button 
-                      onClick={() => toggleStatus(banner.id)}
-                      className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
-                        banner.status === 'Hiển thị' 
-                          ? 'text-rose-400 hover:bg-rose-500/10' 
-                          : 'text-emerald-400 hover:bg-emerald-500/10'
-                      }`}
-                    >
-                      {banner.status === 'Hiển thị' ? '🙈 Ẩn' : '👀 Hiện'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          ))
-        ) : (
-          <div className="col-span-2 bg-[#161616] border border-[#222222] p-8 rounded-2xl text-center text-gray-500">
-            🔍 Không tìm thấy banner nào ở vị trí này.
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <div className="space-y-6">{notice&&<div className="fixed right-5 top-24 z-[120] rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white">{notice}</div>}<section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">Banners</p><h2 className="mt-2 text-2xl font-black text-white">Quản lý banner</h2><p className="mt-1 text-sm font-semibold text-slate-500">Banner trang chủ lấy từ API và ảnh trong storage/banners.</p></div><button onClick={openCreate} className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white"><Plus size={17}/> Thêm banner</button></div><div className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-slate-400"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-500" placeholder="Tìm banner..."/></div></section>{error&&<div className="rounded-3xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">{error}</div>}<section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-5 backdrop-blur-xl">{loading?<div className="grid h-72 place-items-center"><Loader2 className="animate-spin text-orange-300" size={34}/></div>:filtered.length===0?<div className="grid h-72 place-items-center text-center"><div><Image className="mx-auto text-orange-300" size={42}/><p className="mt-4 font-black text-white">Chưa có banner</p></div></div>:<div className="grid gap-5 xl:grid-cols-2">{filtered.map(item=><div key={item.id} className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.04]"><div className="relative h-56 bg-slate-900">{bannerImage(item)?<img src={bannerImage(item)} alt={item.title} className="h-full w-full object-cover opacity-80"/>:<div className="grid h-full place-items-center text-slate-500">Không có ảnh</div>}<div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 to-transparent"/><div className="absolute bottom-4 left-4 right-4"><p className="text-xs font-black uppercase tracking-[0.2em] text-orange-300">{item.subtitle||"Dynova"}</p><h3 className="mt-1 line-clamp-2 text-xl font-black text-white">{item.title}</h3></div></div><div className="flex items-center justify-between gap-3 p-4"><span className={(item.is_active===false||item.is_active===0?"bg-slate-500/10 text-slate-400":"bg-emerald-500/10 text-emerald-300")+" rounded-full px-3 py-1.5 text-xs font-black"}>{item.is_active===false||item.is_active===0?"Ẩn":"Hiển thị"}</span><div className="flex gap-2"><button onClick={()=>openEdit(item)} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/[0.06] text-slate-300 hover:bg-orange-500 hover:text-white"><Edit3 size={16}/></button><button onClick={()=>remove(item)} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/[0.06] text-rose-300 hover:bg-rose-500 hover:text-white"><Trash2 size={16}/></button></div></div></div>)}</div>}</section>{open&&<div className="fixed inset-0 z-[140] bg-slate-950/70 p-4 backdrop-blur-sm"><div className="mx-auto mt-10 max-w-2xl rounded-[32px] border border-white/10 bg-slate-950 p-6"><div className="mb-5 flex items-center justify-between"><h3 className="text-xl font-black text-white">{editing?"Cập nhật banner":"Thêm banner"}</h3><button onClick={()=>setOpen(false)} className="text-slate-400 hover:text-white"><X/></button></div><form onSubmit={submit} className="grid gap-4"><input value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none" placeholder="Tiêu đề"/><input value={form.subtitle} onChange={e=>setForm(p=>({...p,subtitle:e.target.value}))} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none" placeholder="Subtitle"/><textarea value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} rows={3} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none" placeholder="Mô tả"/><div className="grid gap-4 md:grid-cols-2"><input value={form.button_text} onChange={e=>setForm(p=>({...p,button_text:e.target.value}))} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none" placeholder="Text nút"/><input value={form.button_link} onChange={e=>setForm(p=>({...p,button_link:e.target.value}))} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-white outline-none" placeholder="Link nút"/></div><label className="rounded-2xl border border-dashed border-white/10 p-4 text-sm font-bold text-slate-400"><ImagePlus className="mb-2 text-orange-300"/><input type="file" accept="image/*" onChange={e=>setForm(p=>({...p,image:e.target.files?.[0]||null}))}/></label><label className="flex items-center gap-3 text-sm font-bold text-slate-300"><input type="checkbox" checked={form.is_active} onChange={e=>setForm(p=>({...p,is_active:e.target.checked}))}/> Hiển thị banner</label><button disabled={saving} className="rounded-2xl bg-orange-500 px-5 py-3 font-black text-white disabled:opacity-60">{saving?"Đang lưu...":"Lưu banner"}</button></form></div></div>}</div>;
 }

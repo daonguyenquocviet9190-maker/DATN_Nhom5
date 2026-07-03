@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ShippingController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\WishlistController;
+use App\Http\Controllers\Api\Admin\AdminSimpleController;
 
 /*
 |--------------------------------------------------------------------------
@@ -113,4 +114,41 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/wishlist/toggle', [WishlistController::class, 'toggle']);
     Route::delete('/wishlist/{productId}', [WishlistController::class, 'destroy']);
     Route::get('/wishlist/check/{productId}', [WishlistController::class, 'check']);
+});
+
+Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+    Route::get('/dashboard', [AdminSimpleController::class, 'dashboard']);
+
+    Route::get('/products', [AdminSimpleController::class, 'products']);
+    Route::post('/products', [AdminSimpleController::class, 'storeProduct']);
+    Route::put('/products/{id}', [AdminSimpleController::class, 'updateProduct']);
+    Route::delete('/products/{id}', [AdminSimpleController::class, 'deleteProduct']);
+
+    Route::get('/categories', [AdminSimpleController::class, 'categories']);
+    Route::post('/categories', [AdminSimpleController::class, 'storeCategory']);
+    Route::put('/categories/{id}', [AdminSimpleController::class, 'updateCategory']);
+    Route::delete('/categories/{id}', [AdminSimpleController::class, 'deleteCategory']);
+
+    Route::get('/brands', [AdminSimpleController::class, 'brands']);
+    Route::post('/brands', [AdminSimpleController::class, 'storeBrand']);
+    Route::put('/brands/{id}', [AdminSimpleController::class, 'updateBrand']);
+    Route::delete('/brands/{id}', [AdminSimpleController::class, 'deleteBrand']);
+
+    Route::get('/orders', [AdminSimpleController::class, 'orders']);
+    Route::patch('/orders/{id}/status', [AdminSimpleController::class, 'updateOrderStatus']);
+
+    Route::get('/customers', [AdminSimpleController::class, 'customers']);
+    Route::patch('/customers/{id}/status', [AdminSimpleController::class, 'updateCustomerStatus']);
+
+    Route::get('/banners', [AdminSimpleController::class, 'banners']);
+    Route::post('/banners', [AdminSimpleController::class, 'storeBanner']);
+    Route::put('/banners/{id}', [AdminSimpleController::class, 'updateBanner']);
+    Route::delete('/banners/{id}', [AdminSimpleController::class, 'deleteBanner']);
+
+    Route::get('/settings', [AdminSimpleController::class, 'settings']);
+    Route::put('/settings', [AdminSimpleController::class, 'updateSettings']);
+
+    Route::get('/inventory', [AdminSimpleController::class, 'inventory']);
+    Route::get('/promotions', [AdminSimpleController::class, 'promotions']);
+    Route::get('/ratings', [AdminSimpleController::class, 'ratings']);
 });

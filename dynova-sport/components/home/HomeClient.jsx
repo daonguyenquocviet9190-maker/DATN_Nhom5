@@ -20,9 +20,63 @@ import {
   Truck,
 } from "lucide-react";
 
+import {
+  getProductImage,
+  getCategoryImage,
+  PRODUCT_FALLBACK,
+  CATEGORY_FALLBACK,
+} from "@/utils/imageUrl";
+
 import { formatCurrency } from "@/data/shop";
 import { addToCart } from "@/utils/shopStorage";
 import { toggleWishlistApi } from "@/services/wishlist.service";
+
+const API_ORIGIN = (
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
+)
+  .replace(/\/api\/?$/, "")
+  .replace(/\/$/, "");
+
+function encodePath(path) {
+  return String(path)
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function getBannerImage(banner) {
+  const value =
+    banner?.image_url ||
+    banner?.imageUrl ||
+    banner?.image ||
+    banner?.thumbnail ||
+    banner?.background ||
+    "";
+
+  if (!value) return "";
+
+  const raw = String(value).trim();
+
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  if (raw.startsWith("/storage/")) {
+    return API_ORIGIN + encodePath(raw);
+  }
+
+  if (raw.startsWith("storage/")) {
+    return API_ORIGIN + "/" + encodePath(raw);
+  }
+
+  if (raw.startsWith("/images/")) {
+    return raw;
+  }
+
+  return `${API_ORIGIN}/storage/banners/${encodePath(raw.replace(/^\/+/, ""))}`;
+}
 
 export default function HomeClient({
   products = [],
@@ -74,13 +128,18 @@ export default function HomeClient({
   }, [safeProducts]);
 
   const heroBanners = useMemo(() => {
-    const source =
-      Array.isArray(banners) && banners.length > 0
-        ? banners
-        : [DEFAULT_BANNER];
+    const source = Array.isArray(banners) ? banners : [];
 
-    const normalized = [...source]
-      .filter((banner) => banner?.isActive !== false && banner?.is_active !== 0)
+    return [...source]
+      .filter((banner) => {
+        const isActive =
+          banner?.isActive !== false &&
+          banner?.is_active !== 0 &&
+          banner?.status !== "inactive" &&
+          banner?.status !== 0;
+
+        return isActive;
+      })
       .sort(
         (a, b) =>
           Number(a?.sortOrder || a?.sort_order || 0) -
@@ -93,24 +152,27 @@ export default function HomeClient({
           banner.name ||
           "Trang bị thể thao cho phong cách sống năng động",
         subtitle:
-          banner.subtitle || banner.tagline || "Sport Collection 2026",
+          banner.subtitle ||
+          banner.tagline ||
+          banner.sub_title ||
+          "Sport Collection",
         description:
           banner.description ||
+          banner.content ||
           "Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
-        image:
-          banner.image ||
-          banner.imageUrl ||
-          banner.image_url ||
-          DEFAULT_BANNER.image,
+        image: getBannerImage(banner),
         buttonText:
           banner.buttonText ||
+          banner.button_text ||
           banner.ctaText ||
           banner.cta_text ||
           "Mua sắm ngay",
         buttonLink:
           banner.buttonLink ||
+          banner.button_link ||
           banner.ctaLink ||
           banner.cta_link ||
+          banner.link ||
           "/shop",
         secondaryText:
           banner.secondaryText ||
@@ -121,11 +183,9 @@ export default function HomeClient({
           banner.secondary_link ||
           "/collections",
       }));
-
-    return normalized.length > 0 ? normalized : [DEFAULT_BANNER];
   }, [banners]);
 
-  const currentBanner = heroBanners[activeBanner] || heroBanners[0];
+  const currentBanner = heroBanners[activeBanner] || heroBanners[0] || null;
 
   useEffect(() => {
     if (activeBanner >= heroBanners.length) {
@@ -146,15 +206,6 @@ export default function HomeClient({
   const showNotice = (message) => {
     setNotice(message);
     setTimeout(() => setNotice(""), 1800);
-  };
-
-  const getProductImage = (product) => {
-    return (
-      product?.image ||
-      product?.image_url ||
-      product?.imageUrl ||
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
-    );
   };
 
   const getProductCategory = (product) => {
@@ -224,12 +275,12 @@ export default function HomeClient({
           : "Đã xóa khỏi danh sách yêu thích."
       );
     } catch (err) {
-      if (err.status === 401) {
+      if (err?.status === 401) {
         router.push("/login?redirect=/wishlist");
         return;
       }
 
-      showNotice(err.message || "Không thể cập nhật yêu thích.");
+      showNotice(err?.message || "Không thể cập nhật yêu thích.");
     } finally {
       setWishlistLoadingId(null);
     }
@@ -245,12 +296,16 @@ export default function HomeClient({
   };
 
   const goPrevBanner = () => {
+    if (heroBanners.length <= 1) return;
+
     setActiveBanner((prev) =>
       prev === 0 ? heroBanners.length - 1 : prev - 1
     );
   };
 
   const goNextBanner = () => {
+    if (heroBanners.length <= 1) return;
+
     setActiveBanner((prev) => (prev + 1) % heroBanners.length);
   };
 
@@ -266,6 +321,9 @@ export default function HomeClient({
           <img
             src={getProductImage(product)}
             alt={product.name}
+            onError={(e) => {
+              e.currentTarget.src = PRODUCT_FALLBACK;
+            }}
             className="aspect-[4/4.25] w-full object-cover transition duration-500 group-hover:scale-105"
           />
 
@@ -354,16 +412,18 @@ onClick={() => handleAdd(product)}
         onMouseLeave={() => setPauseBanner(false)}
       >
         <div className="absolute inset-0">
-          <div
-            key={currentBanner.id}
-            className="hero-soft-fade absolute inset-0"
-          >
-            <img
-              src={currentBanner.image}
-              alt={currentBanner.title}
-              className="h-full w-full object-cover opacity-40"
-            />
-          </div>
+          {currentBanner?.image && (
+            <div
+              key={currentBanner.id}
+              className="hero-soft-fade absolute inset-0"
+            >
+              <img
+                src={currentBanner.image}
+                alt={currentBanner.title}
+                className="h-full w-full object-cover opacity-40"
+              />
+            </div>
+          )}
 
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/58" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(249,115,22,0.18),transparent_32%),radial-gradient(circle_at_85%_18%,rgba(255,255,255,0.08),transparent_26%)]" />
@@ -373,15 +433,16 @@ onClick={() => handleAdd(product)}
           <div className="max-w-3xl">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
               <Sparkles size={14} />
-              {currentBanner.subtitle}
+              {currentBanner?.subtitle || "Dynova Sport"}
             </div>
 
             <h1 className="max-w-3xl text-4xl font-black uppercase leading-[1.02] tracking-[-0.045em] md:text-6xl">
-              {currentBanner.title}
+              {currentBanner?.title || "Cửa hàng thể thao Dynova Sport"}
             </h1>
 
             <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
-              {currentBanner.description}
+              {currentBanner?.description ||
+                "Banner sẽ được hiển thị tự động khi API trả dữ liệu từ database."}
             </p>
 
             <form
@@ -408,18 +469,18 @@ onClick={() => handleAdd(product)}
 
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href={currentBanner.buttonLink}
+                href={currentBanner?.buttonLink || "/shop"}
                 className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
               >
-                {currentBanner.buttonText}
+                {currentBanner?.buttonText || "Mua sắm ngay"}
                 <ArrowRight size={16} />
               </Link>
 
               <Link
-                href={currentBanner.secondaryLink}
+                href={currentBanner?.secondaryLink || "/collections"}
                 className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
               >
-                {currentBanner.secondaryText}
+                {currentBanner?.secondaryText || "Xem bộ sưu tập"}
               </Link>
             </div>
 
@@ -447,15 +508,26 @@ onClick={() => handleAdd(product)}
           <div className="hidden lg:block">
             <div className="hero-product-panel relative ml-auto max-w-[460px]">
               <div
-                key={"panel-" + currentBanner.id}
+                key={"panel-" + (currentBanner?.id || "empty")}
                 className="hero-card-fade overflow-hidden rounded-[36px] border border-white/10 bg-white/10 p-3 shadow-2xl shadow-slate-950/30 backdrop-blur"
               >
                 <div className="relative overflow-hidden rounded-[28px] bg-slate-900">
-                  <img
-                    src={currentBanner.image}
-                    alt={currentBanner.title}
-                    className="h-[430px] w-full object-cover"
-                  />
+                  {currentBanner?.image ? (
+                    <img
+                      src={currentBanner.image}
+                      alt={currentBanner.title}
+                      className="h-[430px] w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-[430px] place-items-center bg-slate-900">
+                      <div className="text-center">
+                        <Sparkles className="mx-auto text-orange-300" size={42} />
+                        <p className="mt-4 text-sm font-black uppercase tracking-[0.2em] text-slate-400">
+                          Đang chờ banner API
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent" />
 
@@ -466,15 +538,11 @@ onClick={() => handleAdd(product)}
                       </p>
 
                       <h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
-                        {currentBanner.title}
+                        {currentBanner?.title || "Banner từ API"}
                       </h3>
 
                       <div className="mt-4 grid grid-cols-3 gap-2">
-                        {[
-                          "Chính hãng",
-                          "Dễ mua",
-                          "Dễ đổi",
-                        ].map((item) => (
+                        {["Chính hãng", "Dễ mua", "Dễ đổi"].map((item) => (
                           <span
                             key={item}
                             className="rounded-2xl bg-slate-100 px-3 py-2 text-center text-[11px] font-black text-slate-700"
@@ -642,12 +710,11 @@ href="/shop"
             >
               <div className="h-40 overflow-hidden bg-slate-100">
                 <img
-                  src={
-                    category.image ||
-                    category.image_url ||
-                    "/images/categories/category-placeholder.jpg"
-                  }
+                  src={getCategoryImage(category)}
                   alt={category.name}
+                  onError={(e) => {
+                    e.currentTarget.src = CATEGORY_FALLBACK;
+                  }}
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                 />
               </div>
@@ -712,97 +779,172 @@ href="/shop"
         </div>
       </section>
 
-      <section className="container-page grid gap-6 py-16 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="flex min-h-[380px] flex-col justify-between overflow-hidden rounded-[32px] bg-slate-950 p-7 text-white">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-xs font-black uppercase tracking-wider">
-              <BadgePercent size={15} />
-              Ưu đãi thành viên
+      <section className="container-page py-16">
+        <div className="grid items-stretch gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="relative flex min-h-[430px] overflow-hidden rounded-[36px] bg-slate-950 p-7 text-white shadow-2xl shadow-slate-950/15 md:p-8">
+            <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-orange-500/20 blur-3xl" />
+            <div className="absolute -bottom-24 left-10 h-60 w-60 rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(249,115,22,0.22),transparent_35%)]" />
+
+            <div className="relative z-10 flex w-full flex-col justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-lg shadow-orange-500/20">
+                  <BadgePercent size={15} />
+                  Ưu đãi thành viên
+                </div>
+
+                <h2 className="mt-5 max-w-xl text-3xl font-black leading-tight tracking-[-0.04em] md:text-4xl">
+                  Nhập DYNOVANEW giảm ngay 100.000đ
+                </h2>
+
+                <p className="mt-3 max-w-lg text-sm leading-7 text-slate-300">
+                  Áp dụng cho đơn hàng từ 500.000đ. Ưu đãi giúp khách hàng mới
+                  dễ bắt đầu mua sắm và trải nghiệm Dynova Sport.
+                </p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  {[
+                    { value: "100K", label: "Giảm trực tiếp" },
+                    { value: "500K", label: "Đơn tối thiểu" },
+                    { value: "30 ngày", label: "Đổi trả" },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur"
+                    >
+                      <p className="text-xl font-black text-orange-300">
+                        {item.value}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-slate-400">
+                        {item.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/shop"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-black uppercase tracking-wider text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-500 hover:text-white"
+                >
+                  Mua ngay
+                  <ArrowRight size={16} />
+                </Link>
+
+                <Link
+                  href="/checkout"
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+                >
+                  Checkout
+                </Link>
+              </div>
             </div>
-
-            <h2 className="mt-5 max-w-xl text-3xl font-black leading-tight tracking-[-0.03em]">
-              Nhập DYNOVANEW giảm ngay 100.000đ cho đơn từ 500.000đ
-            </h2>
-
-            <p className="mt-4 max-w-lg text-sm leading-7 text-slate-300">
-              Khu vực khuyến mãi giúp trang chủ có điểm nhấn bán hàng nhưng vẫn
-              gọn gàng, không quá rối.
-            </p>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/shop"
-              className="rounded-2xl bg-white px-6 py-4 text-sm font-black uppercase tracking-wider text-slate-950 transition hover:bg-orange-500 hover:text-white"
-            >
-              Mua ngay
-            </Link>
+          <div className="rounded-[36px] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+            <div className="mb-5 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+                  Best seller
+                </p>
 
-            <Link
-              href="/checkout"
-              className="rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white transition hover:bg-white/20"
-            >
-              Checkout
-            </Link>
-          </div>
-        </div>
+                <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950 md:text-3xl">
+                  Sản phẩm bán chạy
+                </h2>
+              </div>
 
-        <div>
-          <div className="mb-5 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-                Best seller
-              </p>
-
-              <h2 className="mt-2 text-2xl font-black text-slate-950">
-                Sản phẩm bán chạy
-              </h2>
-            </div>
-
-            <Link
-              href="/shop"
-              className="text-sm font-black text-orange-600 hover:text-orange-700"
-            >
-              Xem thêm
-            </Link>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {bestSeller.map((product) => (
               <Link
-                key={product.id}
-                href={"/shop/product/" + product.id}
-                className="group flex h-full gap-4 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
+                href="/shop"
+                className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
               >
+<<<<<<< HEAD
 <img
                   src={getProductImage(product)}
                   alt={product.name}
                   className="h-28 w-28 shrink-0 rounded-2xl object-cover"
                 />
+=======
+                Xem thêm
+              </Link>
+            </div>
+>>>>>>> main
 
-                <div className="min-w-0 py-1">
-                  <p className="line-clamp-1 text-[11px] font-black uppercase tracking-wider text-orange-500">
-                    {getProductCategory(product)}
+            {bestSeller.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {bestSeller.map((product, index) => (
+                  <Link
+                    key={product.id}
+                    href={"/shop/product/" + product.id}
+                    className="group flex min-h-[150px] gap-4 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-3 transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:bg-white hover:shadow-xl"
+                  >
+                    <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-[22px] bg-slate-100 sm:h-32 sm:w-32">
+                      <img
+                        src={getProductImage(product)}
+                        alt={product.name}
+                        onError={(e) => {
+                          e.currentTarget.src = PRODUCT_FALLBACK;
+                        }}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+
+                      <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white shadow-lg">
+                        {index + 1}
+                      </span>
+                    </div>
+
+                    <div className="flex min-w-0 flex-1 flex-col py-1">
+                      <p className="line-clamp-1 text-[11px] font-black uppercase tracking-wider text-orange-500">
+                        {getProductCategory(product)}
+                      </p>
+
+                      <h3 className="mt-1 line-clamp-2 min-h-[44px] text-sm font-black leading-6 text-slate-950 transition group-hover:text-orange-600">
+                        {product.name}
+                      </h3>
+
+                      <p className="mt-1 line-clamp-1 text-xs font-bold text-slate-400">
+                        {getProductBrand(product)}
+                      </p>
+
+                      <div className="mt-auto flex items-end justify-between gap-3 pt-3">
+                        <div>
+                          <p className="text-base font-black text-slate-950">
+                            {formatCurrency(product.price || 0)}
+                          </p>
+
+                          {(product.compare_price || product.old_price) && (
+                            <p className="text-xs font-bold text-slate-400 line-through">
+                              {formatCurrency(
+                                product.compare_price || product.old_price
+                              )}
+                            </p>
+                          )}
+                        </div>
+
+                        <p className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-600">
+                          <Star
+                            size={13}
+                            className="fill-amber-400 text-amber-400"
+                          />
+                          {product.rating || 4.8}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="grid min-h-[310px] place-items-center rounded-[28px] border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                <div>
+                  <p className="text-lg font-black text-slate-950">
+                    Chưa có sản phẩm bán chạy
                   </p>
-
-                  <h3 className="mt-1 line-clamp-2 min-h-[44px] text-sm font-black leading-6 text-slate-950 group-hover:text-orange-600">
-                    {product.name}
-                  </h3>
-
-                  <p className="mt-2 text-base font-black text-slate-900">
-                    {formatCurrency(product.price || 0)}
-                  </p>
-
-                  <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-500">
-                    <Star
-                      size={13}
-                      className="fill-orange-400 text-orange-400"
-                    />
-                    {product.rating || 4.8} sao
+                  <p className="mt-2 text-sm text-slate-500">
+                    Khi có dữ liệu sản phẩm, khu vực này sẽ tự động hiển thị.
                   </p>
                 </div>
-              </Link>
-            ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -818,11 +960,6 @@ href="/shop"
               <h2 className="mt-2 max-w-2xl text-3xl font-black tracking-[-0.03em]">
                 Sẵn sàng nâng cấp trải nghiệm mua sắm thể thao?
               </h2>
-
-              <p className="mt-3 max-w-xl text-sm leading-7 text-slate-300">
-                Giao diện gọn, đều, dễ mở rộng backend Laravel và phù hợp trình
-                bày cho dự án tốt nghiệp.
-              </p>
             </div>
 
             <Link

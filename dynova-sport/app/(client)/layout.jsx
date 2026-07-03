@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
   BadgeCheck,
@@ -34,11 +34,11 @@ import {
 import {
   getCart,
   getCurrentUser,
-  getProducts,
   getSettings,
   logoutUser,
 } from "@/utils/shopStorage";
 import { getWishlist as getWishlistApi } from "@/services/wishlist.service";
+import HeaderSearchPopup from "@/components/header/HeaderSearchPopup";
 
 function SocialIcon({ type }) {
   if (type === "facebook") {
@@ -75,7 +75,6 @@ export default function ClientLayout({ children }) {
   const [openUser, setOpenUser] = useState(false);
   const [openMobile, setOpenMobile] = useState(false);
   const [openSearch, setOpenSearch] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [settings, setSettings] = useState(null);
@@ -102,7 +101,7 @@ export default function ClientLayout({ children }) {
     {
       title: "Mua sắm",
       links: [
-        { name: "Flash Sale", href: "/flash-sale" },
+        { name: "Flash Sale", href: "/sale" },
         { name: "Sản phẩm mới", href: "/shop" },
         { name: "Bộ sưu tập", href: "/collections" },
         { name: "Sản phẩm yêu thích", href: "/wishlist" },
@@ -119,12 +118,10 @@ export default function ClientLayout({ children }) {
       ],
     },
     {
-      title: "Tài khoản",
+      title: "CSKH",
       links: [
-        { name: "Hồ sơ cá nhân", href: "/profile" },
-        { name: "Đăng nhập", href: "/login" },
-        { name: "Đăng ký", href: "/register" },
-        { name: "Dashboard quản trị", href: "/admin" },
+        { name: "Chat với chúng tôi", href: "https://zalo.me/0866347730" },
+        { name: "FAQ (Câu hỏi thường gặp)", href: "/faq" },
       ],
     },
   ];
@@ -168,7 +165,7 @@ export default function ClientLayout({ children }) {
 
     setSettings(getSettings());
     loadWishlistCount();
-  };;
+  };
 
   useEffect(() => {
     syncState();
@@ -214,58 +211,6 @@ export default function ClientLayout({ children }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const products = useMemo(() => {
-    try {
-      return getProducts();
-    } catch {
-      return [];
-    }
-  }, [openSearch, searchTerm]);
-
-  const getProductImage = (product) => {
-    return (
-      product?.image ||
-      product?.image_url ||
-      product?.imageUrl ||
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80"
-    );
-  };
-
-  const getProductCategory = (product) => {
-    if (typeof product?.category === "string") return product.category;
-
-    return (
-      product?.category?.name ||
-      product?.category_name ||
-      product?.categoryName ||
-      "Dynova Sport"
-    );
-  };
-
-  const searchResults = products
-    .filter((product) => {
-      const keyword = searchTerm.trim().toLowerCase();
-      if (!keyword) return false;
-
-      const name = product?.name || "";
-      const category = getProductCategory(product);
-
-      return (
-        name.toLowerCase().includes(keyword) ||
-        category.toLowerCase().includes(keyword)
-      );
-    })
-    .slice(0, 5);
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-
-    const query = searchTerm.trim();
-    if (!query) return;
-
-    setOpenSearch(false);
-    router.push("/search?q=" + encodeURIComponent(query));
-  };
 
   const handleLogout = () => {
     logoutUser();
@@ -668,80 +613,10 @@ export default function ClientLayout({ children }) {
         </div>
       )}
 
-      {openSearch && (
-        <div className="fixed inset-0 z-[80] bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="float-in mx-auto mt-14 max-w-2xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <div>
-                <p className="text-sm font-black uppercase tracking-wider text-slate-950">
-                  Tìm kiếm sản phẩm
-                </p>
-                <p className="mt-1 text-xs font-medium text-slate-500">
-                  Nhập tên sản phẩm, danh mục hoặc thương hiệu.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setOpenSearch(false)}
-                className="rounded-2xl p-2 text-slate-500 transition hover:bg-slate-100"
-              >
-                <X size={19} />
-              </button>
-            </div>
-
-            <div className="p-4">
-              <form onSubmit={handleSearch} className="flex gap-2">
-                <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  autoFocus
-                  className="input-control"
-                  placeholder="Ví dụ: giày chạy bộ, áo thể thao..."
-                />
-
-                <button
-                  className="btn-primary rounded-2xl px-5"
-                  aria-label="Tìm"
-                >
-                  <Search size={18} />
-                </button>
-              </form>
-
-              <div className="mt-4 space-y-2">
-                {searchResults.map((product) => (
-                  <Link
-                    key={product.id}
-                    href={"/shop/product/" + product.id}
-                    onClick={() => setOpenSearch(false)}
-                    className="flex items-center gap-3 rounded-2xl p-2 transition hover:bg-slate-50"
-                  >
-                    <img
-                      src={getProductImage(product)}
-                      alt={product.name}
-                      className="h-14 w-14 rounded-2xl object-cover"
-                    />
-
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-slate-900">
-                        {product.name}
-                      </p>
-                      <p className="text-xs font-semibold text-slate-500">
-                        {getProductCategory(product)}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-
-                {searchTerm && searchResults.length === 0 && (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-                    Chưa tìm thấy sản phẩm phù hợp.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <HeaderSearchPopup
+        open={openSearch}
+        onClose={() => setOpenSearch(false)}
+      />
 
       <main className="min-h-screen bg-white">{children}</main>
 

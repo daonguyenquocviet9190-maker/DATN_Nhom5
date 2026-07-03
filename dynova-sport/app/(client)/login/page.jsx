@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { loginWithApi } from "@/services/auth.service";
+import { loginWithApi, normalizeAuthRole } from "@/services/auth.service";
 
 function Field({
   label,
@@ -24,6 +24,7 @@ function Field({
   onChange,
   placeholder,
   rightSlot,
+  autoComplete,
 }) {
   return (
     <label className="block">
@@ -43,6 +44,7 @@ function Field({
           value={value}
           onChange={onChange}
           placeholder={placeholder}
+          autoComplete={autoComplete}
           className="h-[54px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm font-bold text-slate-950 outline-none transition duration-300 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
         />
 
@@ -52,13 +54,43 @@ function Field({
   );
 }
 
+function resolveRedirectPath(role, redirectUrl) {
+  const safeRedirect =
+    typeof redirectUrl === "string" && redirectUrl.startsWith("/")
+      ? redirectUrl
+      : "";
+
+  if (role === "admin") {
+    if (safeRedirect && safeRedirect.startsWith("/admin")) {
+      return safeRedirect;
+    }
+
+    return "/admin";
+  }
+
+  if (safeRedirect && !safeRedirect.startsWith("/admin")) {
+    return safeRedirect;
+  }
+
+  return "/profile";
+}
+
+function getErrorMessage(error, fallback) {
+  if (!error) return fallback;
+
+  if (typeof error === "string") return error;
+
+  return error?.message || fallback;
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
   const [redirectUrl, setRedirectUrl] = useState("");
+
   const [form, setForm] = useState({
-    email: "demo@dynova.vn",
-    password: "123456",
+    email: "",
+    password: "",
     remember: true,
   });
 
@@ -75,16 +107,32 @@ export default function LoginPage() {
   const redirectLabel = useMemo(() => {
     if (redirectUrl.includes("checkout")) return "thanh toán";
     if (redirectUrl.includes("profile")) return "hồ sơ";
+    if (redirectUrl.includes("admin")) return "quản trị";
+
     return "tài khoản";
   }, [redirectUrl]);
+
+  const updateForm = (key, value) => {
+    setForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
+    setError("");
+    setSuccessText("");
+  };
 
   const submit = async (event) => {
     event.preventDefault();
 
+    if (loading) return;
+
     setError("");
     setSuccessText("");
 
-    if (!form.email.trim()) {
+    const email = form.email.trim();
+
+    if (!email) {
       setError("Vui lòng nhập email.");
       return;
     }
@@ -98,30 +146,32 @@ export default function LoginPage() {
 
     try {
       const auth = await loginWithApi({
-        email: form.email,
+        email,
         password: form.password,
         remember: form.remember,
       });
 
-      setSuccessText("Đăng nhập thành công. Đang chuyển trang...");
+      const role = normalizeAuthRole(auth?.user);
+      const nextPath = resolveRedirectPath(role, redirectUrl);
 
-      setTimeout(() => {
-        if (redirectUrl) {
-          router.push(redirectUrl);
-          return;
-        }
+      setSuccessText(
+        role === "admin"
+          ? "Đăng nhập quản trị thành công. Đang chuyển đến Admin..."
+          : "Đăng nhập thành công. Đang chuyển trang..."
+      );
 
-        router.push(auth.user?.role === "admin" ? "/admin" : "/profile");
-      }, 600);
+      window.setTimeout(() => {
+        router.replace(nextPath);
+      }, 650);
     } catch (err) {
-      setError(err.message || "Email hoặc mật khẩu không đúng.");
+      setError(getErrorMessage(err, "Email hoặc mật khẩu không đúng."));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#f7f8fb]">
+    <main className="min-h-screen overflow-hidden bg-[#f7f8fb]">
       <section className="container-page grid min-h-screen items-center gap-8 py-10 lg:grid-cols-[1.08fr_0.92fr]">
         <div className="relative hidden min-h-[660px] overflow-hidden rounded-[42px] bg-slate-950 text-white shadow-2xl shadow-slate-300/70 lg:block">
           <img
@@ -152,9 +202,9 @@ export default function LoginPage() {
 
             <div className="grid gap-3">
               {[
-                "Xác thực tài khoản qua Laravel API",
-                "Token đăng nhập dùng cho checkout và đơn hàng",
-                "Dữ liệu tài khoản được lưu trong database",
+                "Customer đăng nhập sẽ vào hồ sơ hoặc trang cần tiếp tục",
+                "Admin đăng nhập sẽ tự động chuyển vào trang quản trị",
+                "Token đăng nhập dùng cho checkout, wishlist và đơn hàng",
               ].map((item) => (
                 <div
                   key={item}
@@ -184,8 +234,8 @@ export default function LoginPage() {
               </h2>
 
               <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
-                Đăng nhập để tiếp tục {redirectLabel}. Phiên đăng nhập sẽ được
-                lưu bằng API token.
+                Đăng nhập để tiếp tục {redirectLabel}. Hệ thống sẽ tự kiểm tra
+                quyền admin hoặc customer.
               </p>
             </div>
 
@@ -207,10 +257,9 @@ export default function LoginPage() {
                 icon={Mail}
                 type="email"
                 value={form.email}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, email: e.target.value }))
-                }
-                placeholder="demo@dynova.vn"
+                onChange={(event) => updateForm("email", event.target.value)}
+                placeholder="Nhập email"
+                autoComplete="email"
               />
 
               <Field
@@ -218,15 +267,19 @@ export default function LoginPage() {
                 icon={Lock}
                 type={showPassword ? "text" : "password"}
                 value={form.password}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, password: e.target.value }))
+                onChange={(event) =>
+                  updateForm("password", event.target.value)
                 }
                 placeholder="Nhập mật khẩu"
+                autoComplete="current-password"
                 rightSlot={
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
+                    aria-label={
+                      showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"
+                    }
                   >
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
@@ -238,11 +291,8 @@ export default function LoginPage() {
                   <input
                     type="checkbox"
                     checked={form.remember}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        remember: e.target.checked,
-                      }))
+                    onChange={(event) =>
+                      updateForm("remember", event.target.checked)
                     }
                     className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
                   />
@@ -258,6 +308,7 @@ export default function LoginPage() {
               </div>
 
               <button
+                type="submit"
                 disabled={loading}
                 className="flex h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-orange-500/20 transition duration-300 hover:-translate-y-0.5 hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
@@ -277,8 +328,8 @@ export default function LoginPage() {
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
               <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
-              Sau khi đăng nhập, checkout có thể dùng token để gọi API tạo đơn
-              hàng và lưu vào database.
+              Admin sẽ được chuyển đến trang quản trị. Customer sẽ vào hồ sơ
+              hoặc trang đang cần đăng nhập.
             </div>
 
             <p className="mt-6 text-center text-sm text-slate-500">
@@ -293,6 +344,6 @@ export default function LoginPage() {
           </div>
         </div>
       </section>
-    </div>
+    </main>
   );
 }
