@@ -125,24 +125,28 @@ export default function AdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const token = getAuthToken();
-    const user = getStoredAuthUser();
-    const role = normalizeAuthRole(user);
+  const token = getAuthToken();
+  const user = getStoredAuthUser();
+  const role = normalizeAuthRole(user);
 
-    if (!token || !user) {
-      router.replace("/login?redirect=/admin");
-      return;
-    }
-
-    if (role !== "admin") {
-      router.replace("/");
-      return;
-    }
-
-    setAdminUser(user);
-    setAllowed(true);
+  if (!token || !user) {
+    setAllowed(false);
     setChecking(false);
-  }, [router]);
+    router.replace("/login?redirect=/admin");
+    return;
+  }
+
+  if (role !== "admin") {
+    setAllowed(false);
+    setChecking(false);
+    router.replace("/");
+    return;
+  }
+
+  setAdminUser(user);
+  setAllowed(true);
+  setChecking(false);
+}, [router]);
 
   useEffect(() => {
     setSidebarOpen(false);

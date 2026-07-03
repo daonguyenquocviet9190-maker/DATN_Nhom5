@@ -64,7 +64,7 @@ function safeDecode(value) {
 }
 
 function encodePath(value) {
-  return String(value)
+  return String(value || "")
     .replace(/\\/g, "/")
     .split("/")
     .map((part) => encodeURIComponent(safeDecode(part)))
@@ -74,11 +74,19 @@ function encodePath(value) {
 function toStorageProductImage(value) {
   const raw = String(value || "").trim();
 
-  if (!raw || raw.includes("product-placeholder")) {
+  if (!raw || raw === "null" || raw === "undefined") {
     return FALLBACK_IMAGE;
   }
 
-  if (/^(https?:)?\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
+  if (raw.includes("product-placeholder")) {
+    return FALLBACK_IMAGE;
+  }
+
+  if (
+    /^(https?:)?\/\//i.test(raw) ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:")
+  ) {
     return raw;
   }
 
@@ -94,6 +102,10 @@ function toStorageProductImage(value) {
 
   if (clean.startsWith("products/")) {
     return `${API_ORIGIN}/storage/${encodePath(clean)}`;
+  }
+
+  if (clean.startsWith("/products/")) {
+    return `${API_ORIGIN}/storage${encodePath(clean)}`;
   }
 
   if (clean.startsWith("/")) {
@@ -115,7 +127,6 @@ function extractItems(response, keys = []) {
     response?.data?.data,
     response?.data?.items,
     response?.data?.items?.data,
-
     response?.data?.products,
     response?.data?.products?.data,
 
@@ -128,9 +139,7 @@ function extractItems(response, keys = []) {
     response,
   ];
 
-  const found = candidates.find((item) => Array.isArray(item));
-
-  return found || [];
+  return candidates.find((item) => Array.isArray(item)) || [];
 }
 
 function getAuthHeaders() {
@@ -152,12 +161,27 @@ function getAuthHeaders() {
   };
 }
 
+function parseMaybeJson(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return null;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 function getProductIdFromItem(item) {
   return (
     item?.product_id ??
     item?.productId ??
     item?.product?.id ??
     item?.product?.product_id ??
+    item?.product_variant?.product_id ??
+    item?.productVariant?.product_id ??
+    item?.variant?.product_id ??
     null
   );
 }
@@ -166,9 +190,11 @@ function getVariantIdFromItem(item) {
   return (
     item?.variant_id ??
     item?.product_variant_id ??
+    item?.variation_id ??
     item?.productVariantId ??
     item?.product_variant?.id ??
     item?.productVariant?.id ??
+    item?.variant?.id ??
     null
   );
 }
@@ -186,6 +212,8 @@ function getProductVariants(product) {
 }
 
 function getProductRawImage(product) {
+  if (!product) return "";
+
   return (
     product?.variant_image ||
     product?.product_image ||
@@ -193,17 +221,21 @@ function getProductRawImage(product) {
     product?.image ||
     product?.thumbnail ||
     product?.thumb ||
+    product?.photo ||
     ""
   );
 }
 
 function getVariantRawImage(variant) {
+  if (!variant) return "";
+
   return (
     variant?.variant_image ||
     variant?.image_url ||
     variant?.image ||
     variant?.thumbnail ||
     variant?.thumb ||
+    variant?.photo ||
     ""
   );
 }
@@ -222,7 +254,10 @@ async function loadCatalogMaps() {
     const variantMap = {};
 
     products.forEach((product) => {
-      const productId = product?.id ?? product?.product_id ?? product?.productId;
+      const productId =
+        product?.id ??
+        product?.product_id ??
+        product?.productId;
 
       if (productId !== undefined && productId !== null) {
         productMap[String(productId)] = product;
@@ -256,26 +291,137 @@ async function loadCatalogMaps() {
   }
 }
 
-function getCatalogRawImage(item, catalogMaps = {}) {
-  const productMap = catalogMaps?.productMap || {};
+function getCatalogVariant(item, catalogMaps = {}) {
   const variantMap = catalogMaps?.variantMap || {};
-
   const variantId = getVariantIdFromItem(item);
+
+  if (variantId === undefined || variantId === null) return null;
+
+  return variantMap[String(variantId)] || null;
+}
+
+function getCatalogProduct(item, catalogMaps = {}) {
+  const productMap = catalogMaps?.productMap || {};
   const productId = getProductIdFromItem(item);
+  const catalogVariant = getCatalogVariant(item, catalogMaps);
 
-  const variant =
-    variantId !== undefined && variantId !== null
-      ? variantMap[String(variantId)]
-      : null;
+  if (productId !== undefined && productId !== null) {
+    return productMap[String(productId)] || catalogVariant?.product || null;
+  }
 
-  const product =
-    (productId !== undefined && productId !== null
-      ? productMap[String(productId)]
-      : null) ||
-    variant?.product ||
-    null;
+  return catalogVariant?.product || null;
+}
 
-  return getVariantRawImage(variant) || getProductRawImage(product) || "";
+function getCatalogRawImage(item, catalogMaps = {}) {
+  const catalogVariant = getCatalogVariant(item, catalogMaps);
+  const catalogProduct = getCatalogProduct(item, catalogMaps);
+
+  return getVariantRawImage(catalogVariant) || getProductRawImage(catalogProduct) || "";
+}
+
+function getOptionValue(item, names = []) {
+  const sources = [
+    item?.attributes,
+    item?.options,
+    item?.variant_attributes,
+    item?.selected_options,
+    item?.meta,
+    item?.metadata,
+  ];
+
+  for (const source of sources) {
+    const data = parseMaybeJson(source) || source;
+
+    if (!data) continue;
+
+    if (Array.isArray(data)) {
+      const found = data.find((entry) => {
+        const key = String(
+          entry?.name ||
+            entry?.key ||
+            entry?.label ||
+            entry?.attribute ||
+            entry?.title ||
+            ""
+        ).toLowerCase();
+
+        return names.some((name) => key.includes(name));
+      });
+
+      if (found) {
+        return found?.value || found?.option || found?.text || found?.name_value || "";
+      }
+    }
+
+    if (typeof data === "object") {
+      for (const name of names) {
+        if (data[name]) return data[name];
+      }
+
+      const keys = Object.keys(data);
+
+      const foundKey = keys.find((key) => {
+        const clean = String(key).toLowerCase();
+        return names.some((name) => clean.includes(name));
+      });
+
+      if (foundKey) return data[foundKey];
+    }
+  }
+
+  return "";
+}
+
+function getItemSize(item, catalogMaps = {}) {
+  const catalogVariant = getCatalogVariant(item, catalogMaps);
+
+  return (
+    item?.size ||
+    item?.variant_size ||
+    item?.size_name ||
+    item?.option_size ||
+    item?.attributes_size ||
+    getOptionValue(item, ["size", "kich_thuoc", "kích thước"]) ||
+    item?.product_variant?.size ||
+    item?.productVariant?.size ||
+    item?.variant?.size ||
+    catalogVariant?.size ||
+    "Freesize"
+  );
+}
+
+function getItemColor(item, catalogMaps = {}) {
+  const catalogVariant = getCatalogVariant(item, catalogMaps);
+
+  return (
+    item?.color ||
+    item?.variant_color ||
+    item?.color_name ||
+    item?.option_color ||
+    item?.attributes_color ||
+    getOptionValue(item, ["color", "mau", "màu", "mau_sac", "màu sắc"]) ||
+    item?.product_variant?.color ||
+    item?.productVariant?.color ||
+    item?.variant?.color ||
+    catalogVariant?.color ||
+    "Mặc định"
+  );
+}
+
+function getItemSku(item, catalogMaps = {}) {
+  const catalogVariant = getCatalogVariant(item, catalogMaps);
+  const catalogProduct = getCatalogProduct(item, catalogMaps);
+
+  return (
+    item?.sku ||
+    item?.variant_sku ||
+    item?.product_variant?.sku ||
+    item?.productVariant?.sku ||
+    item?.variant?.sku ||
+    catalogVariant?.sku ||
+    catalogProduct?.sku ||
+    ""
+  );
 }
 
 function extractOrder(response, fallbackOrder = null) {
@@ -291,7 +437,7 @@ function extractOrder(response, fallbackOrder = null) {
 }
 
 function normalizeStatus(status = "") {
-  const clean = String(status).trim().toLowerCase();
+  const clean = String(status || "").trim().toLowerCase();
 
   if (["hoàn thành", "completed", "done", "success"].includes(clean)) {
     return "completed";
@@ -379,7 +525,14 @@ function getPaymentLabel(method = "") {
 }
 
 function getOrderItems(order) {
-  return order?.items || order?.order_items || order?.details || [];
+  const items =
+    order?.items ||
+    order?.order_items ||
+    order?.details ||
+    order?.products ||
+    [];
+
+  return Array.isArray(items) ? items : [];
 }
 
 function getOrderTotal(order) {
@@ -409,13 +562,18 @@ function getOrderAddress(order) {
 }
 
 function getItemRawImage(item, catalogMaps = {}) {
-  const catalogImage = getCatalogRawImage(item, catalogMaps);
+  const catalogVariant = getCatalogVariant(item, catalogMaps);
+  const catalogProduct = getCatalogProduct(item, catalogMaps);
 
   return (
-    catalogImage ||
     item?.variant_image ||
+    item?.product_variant?.image_url ||
     item?.product_variant?.image ||
+    item?.productVariant?.image_url ||
     item?.productVariant?.image ||
+    item?.variant?.image_url ||
+    item?.variant?.image ||
+    getVariantRawImage(catalogVariant) ||
     item?.product_image ||
     item?.image_url ||
     item?.image ||
@@ -423,6 +581,8 @@ function getItemRawImage(item, catalogMaps = {}) {
     item?.product?.image_url ||
     item?.product?.image ||
     item?.product?.thumbnail ||
+    getProductRawImage(catalogProduct) ||
+    getCatalogRawImage(item, catalogMaps) ||
     ""
   );
 }
@@ -438,7 +598,13 @@ function handleImageError(event) {
 }
 
 function getItemName(item) {
-  return item?.product_name || item?.name || item?.product?.name || "Sản phẩm";
+  return (
+    item?.product_name ||
+    item?.name ||
+    item?.product_title ||
+    item?.product?.name ||
+    "Sản phẩm"
+  );
 }
 
 function getItemQuantity(item) {
@@ -459,7 +625,11 @@ function getItemTotal(item) {
 }
 
 function getOrderCode(order) {
-  return order?.order_code || order?.code || `DNV-${String(order?.id || "").padStart(6, "0")}`;
+  return (
+    order?.order_code ||
+    order?.code ||
+    `DNV-${String(order?.id || "").padStart(6, "0")}`
+  );
 }
 
 function getCreatedDate(order) {
@@ -506,30 +676,48 @@ function addItemsToCart(items = [], catalogMaps = {}) {
   const nextCart = [...currentCart];
 
   items.forEach((item) => {
-    const productId = item.product_id || item.product?.id || item.id || Date.now();
-    const variantId = item.variant_id || item.product_variant_id || item.productVariant?.id || null;
-    const size = item.size || item.product_variant?.size || "Freesize";
-    const color = item.color || item.product_variant?.color || "Mặc định";
-    const key = `${productId}-${variantId || "no-variant"}-${size}-${color}`;
+    const productId =
+      getProductIdFromItem(item) ||
+      item?.id ||
+      Date.now();
 
+    const variantId = getVariantIdFromItem(item);
+    const size = getItemSize(item, catalogMaps);
+    const color = getItemColor(item, catalogMaps);
+    const sku = getItemSku(item, catalogMaps);
+    const image = getItemImage(item, catalogMaps);
+
+    const key = `${productId}-${variantId || "no-variant"}-${size}-${color}`;
     const exists = nextCart.find((cartItem) => cartItem.key === key);
 
     if (exists) {
-      exists.quantity = Number(exists.quantity || 1) + Number(getItemQuantity(item));
+      exists.quantity =
+        Number(exists.quantity || 1) + Number(getItemQuantity(item));
     } else {
       nextCart.push({
         key,
+
         id: productId,
         product_id: productId,
+
         variantId,
         variant_id: variantId,
+        product_variant_id: variantId,
+
         name: getItemName(item),
         product_name: getItemName(item),
-        image: getItemImage(item, catalogMaps),
+
+        image,
+        product_image: image,
+        variant_image: image,
+
         size,
         color,
+        sku,
+
         quantity: getItemQuantity(item),
         price: getItemPrice(item),
+        sale_price: getItemPrice(item),
       });
     }
   });
@@ -561,7 +749,9 @@ function StatCard({ title, value, icon: Icon, tone = "orange" }) {
           </p>
         </div>
 
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClass}`}>
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClass}`}
+        >
           <Icon size={22} />
         </div>
       </div>
@@ -622,15 +812,21 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
           </div>
 
           <h2 className="mt-2 text-xl font-black text-slate-950">
-            {order.customer_name || order.customerName || "Khách hàng"}
+            {order.customer_name ||
+              order.customerName ||
+              order.receiver_name ||
+              "Khách hàng"}
           </h2>
 
           <p className="mt-1 text-sm font-bold text-slate-500">
-            {getCreatedDate(order)} • {getPaymentLabel(order.payment_method || order.paymentMethod)}
+            {getCreatedDate(order)} •{" "}
+            {getPaymentLabel(order.payment_method || order.paymentMethod)}
           </p>
         </div>
 
-        <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-2 text-xs font-black ${statusMeta.className}`}>
+        <span
+          className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-2 text-xs font-black ${statusMeta.className}`}
+        >
           <StatusIcon size={15} />
           {statusMeta.label}
         </span>
@@ -643,30 +839,50 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
               Chưa có sản phẩm trong đơn hàng.
             </div>
           ) : (
-            items.slice(0, 3).map((item, index) => (
-              <div key={item.id || index} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
-                <img
-                  src={getItemImage(item, catalogMaps)}
-                  alt={getItemName(item)}
-                  onError={handleImageError}
-                  className="h-16 w-16 rounded-xl object-cover"
-                />
+            items.slice(0, 3).map((item, index) => {
+              const size = getItemSize(item, catalogMaps);
+              const color = getItemColor(item, catalogMaps);
+              const sku = getItemSku(item, catalogMaps);
 
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 text-sm font-black text-slate-950">
-                    {getItemName(item)}
-                  </p>
+              return (
+                <div
+                  key={item.id || `${getProductIdFromItem(item)}-${index}`}
+                  className="flex gap-3 rounded-2xl bg-slate-50 p-3"
+                >
+                  <img
+                    src={getItemImage(item, catalogMaps)}
+                    alt={getItemName(item)}
+                    onError={handleImageError}
+                    className="h-16 w-16 rounded-xl object-cover"
+                  />
 
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    {getItemQuantity(item)} x {item.size || item.product_variant?.size || "Freesize"} / {item.color || item.product_variant?.color || "Mặc định"}
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-black text-slate-950">
+                      {getItemName(item)}
+                    </p>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-500">
+                      <span>SL: {getItemQuantity(item)}</span>
+                      <span>•</span>
+                      <span>Size: {size}</span>
+                      <span>•</span>
+                      <span>Màu: {color}</span>
+
+                      {sku && (
+                        <>
+                          <span>•</span>
+                          <span>SKU: {sku}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-sm font-black text-slate-900">
+                    {formatCurrency(getItemTotal(item))}
                   </p>
                 </div>
-
-                <p className="text-sm font-black text-slate-900">
-                  {formatCurrency(getItemTotal(item))}
-                </p>
-              </div>
-            ))
+              );
+            })
           )}
 
           {items.length > 3 && (
@@ -717,7 +933,9 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
               key={step.key}
               className={
                 "rounded-2xl p-3 text-xs font-black transition " +
-                (done ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400")
+                (done
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-slate-100 text-slate-400")
               }
             >
               {index + 1}. {step.label}
@@ -759,11 +977,21 @@ export default function OrdersPage() {
     return orders.reduce(
       (acc, order) => {
         const status = normalizeStatus(order.status);
+
         acc.total += 1;
         acc[status] = Number(acc[status] || 0) + 1;
+
         return acc;
       },
-      { total: 0, pending: 0, confirmed: 0, shipping: 0, completed: 0, cancelled: 0 }
+      {
+        total: 0,
+        pending: 0,
+        waiting_bank_transfer: 0,
+        confirmed: 0,
+        shipping: 0,
+        completed: 0,
+        cancelled: 0,
+      }
     );
   }, [orders]);
 
@@ -772,11 +1000,20 @@ export default function OrdersPage() {
       const status = normalizeStatus(order.status);
       const code = getOrderCode(order).toLowerCase();
       const phone = String(getOrderPhone(order) || "").toLowerCase();
-      const customer = String(order.customer_name || order.customerName || "").toLowerCase();
+      const customer = String(
+        order.customer_name ||
+          order.customerName ||
+          order.receiver_name ||
+          ""
+      ).toLowerCase();
 
       const matchStatus = activeFilter === "all" || status === activeFilter;
       const keyword = search.trim().toLowerCase();
-      const matchSearch = !keyword || code.includes(keyword) || phone.includes(keyword) || customer.includes(keyword);
+      const matchSearch =
+        !keyword ||
+        code.includes(keyword) ||
+        phone.includes(keyword) ||
+        customer.includes(keyword);
 
       return matchStatus && matchSearch;
     });
@@ -797,13 +1034,16 @@ export default function OrdersPage() {
         loadCatalogMaps(),
       ]);
 
-      const nextOrders = data?.orders || data?.data?.orders || data?.data || [];
+      const nextOrders = extractItems(data, ["orders", "items"]);
 
       setCatalogMaps(nextCatalogMaps);
       setOrders(Array.isArray(nextOrders) ? nextOrders : []);
       setStats(data?.stats || data?.data?.stats || {});
     } catch (err) {
-      setError(err?.message || "Không thể tải lịch sử đơn hàng. Vui lòng đăng nhập lại.");
+      setError(
+        err?.message ||
+          "Không thể tải lịch sử đơn hàng. Vui lòng đăng nhập lại."
+      );
     } finally {
       setPageLoading(false);
     }
@@ -814,7 +1054,9 @@ export default function OrdersPage() {
   }, []);
 
   const handleCancel = async (order) => {
-    const ok = window.confirm(`Bạn có chắc muốn hủy đơn ${getOrderCode(order)} không?`);
+    const ok = window.confirm(
+      `Bạn có chắc muốn hủy đơn ${getOrderCode(order)} không?`
+    );
 
     if (!ok) return;
 
@@ -823,6 +1065,7 @@ export default function OrdersPage() {
 
     try {
       const response = await cancelOrder(order.id);
+
       const updatedOrder = extractOrder(response, order) || {
         ...order,
         status: "cancelled",
@@ -831,7 +1074,11 @@ export default function OrdersPage() {
       setOrders((prev) =>
         prev.map((item) =>
           String(item.id) === String(order.id)
-            ? { ...item, ...updatedOrder, status: updatedOrder.status || "cancelled" }
+            ? {
+                ...item,
+                ...updatedOrder,
+                status: updatedOrder.status || "cancelled",
+              }
             : item
         )
       );
@@ -884,7 +1131,8 @@ export default function OrdersPage() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              Theo dõi trạng thái đơn hàng, phương thức thanh toán, sản phẩm đã mua và thao tác hủy đơn hoặc mua lại nhanh chóng.
+              Theo dõi trạng thái đơn hàng, phương thức thanh toán, sản phẩm đã
+              mua và thao tác hủy đơn hoặc mua lại nhanh chóng.
             </p>
           </div>
 
@@ -894,7 +1142,10 @@ export default function OrdersPage() {
               disabled={pageLoading}
               className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
-              <RefreshCw size={15} className={pageLoading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={15}
+                className={pageLoading ? "animate-spin" : ""}
+              />
               Làm mới
             </button>
 
@@ -909,16 +1160,46 @@ export default function OrdersPage() {
         </div>
 
         <div className="mb-6 grid gap-4 md:grid-cols-4">
-          <StatCard title="Tổng đơn" value={stats.total || computedStats.total} icon={PackageCheck} />
-          <StatCard title="Đang xử lý" value={stats.pending || computedStats.pending + computedStats.confirmed} icon={Clock3} tone="orange" />
-          <StatCard title="Đang giao" value={stats.shipping || computedStats.shipping} icon={Truck} tone="blue" />
-          <StatCard title="Hoàn thành" value={stats.completed || computedStats.completed} icon={CheckCircle2} tone="green" />
+          <StatCard
+            title="Tổng đơn"
+            value={stats.total || computedStats.total}
+            icon={PackageCheck}
+          />
+
+          <StatCard
+            title="Đang xử lý"
+            value={
+              stats.pending ||
+              computedStats.pending +
+                computedStats.waiting_bank_transfer +
+                computedStats.confirmed
+            }
+            icon={Clock3}
+            tone="orange"
+          />
+
+          <StatCard
+            title="Đang giao"
+            value={stats.shipping || computedStats.shipping}
+            icon={Truck}
+            tone="blue"
+          />
+
+          <StatCard
+            title="Hoàn thành"
+            value={stats.completed || computedStats.completed}
+            icon={CheckCircle2}
+            tone="green"
+          />
         </div>
 
         <div className="mb-6 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
             <div className="relative">
-              <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search
+                size={17}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
 
               <input
                 value={search}
@@ -964,7 +1245,9 @@ export default function OrdersPage() {
         {pageLoading ? (
           <div className="grid place-items-center rounded-[34px] border border-slate-200 bg-white p-16 shadow-sm">
             <Loader2 size={36} className="animate-spin text-orange-500" />
-            <p className="mt-4 text-sm font-black text-slate-500">Đang tải lịch sử đơn hàng...</p>
+            <p className="mt-4 text-sm font-black text-slate-500">
+              Đang tải lịch sử đơn hàng...
+            </p>
           </div>
         ) : filteredOrders.length === 0 ? (
           <EmptyState hasFilter={hasFilter} />
