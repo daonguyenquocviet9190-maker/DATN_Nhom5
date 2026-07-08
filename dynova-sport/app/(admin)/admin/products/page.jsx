@@ -260,9 +260,9 @@ export default function AdminProductsPage() {
               Products
             </p>
             <h2 className="mt-2 text-2xl font-black text-white">Quản lý sản phẩm</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">
+            {/* <p className="mt-1 text-sm font-semibold text-slate-500">
               Sản phẩm lấy từ API Laravel, có phân loại danh mục, thương hiệu và tồn kho biến thể.
-            </p>
+            </p> */}
           </div>
 
           <button

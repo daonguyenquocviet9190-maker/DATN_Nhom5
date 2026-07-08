@@ -79,7 +79,9 @@ export default function AdminBrandsPage() {
       {notice && <div className="fixed right-5 top-24 z-[120] rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white">{notice}</div>}
       <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div><p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">Brands</p><h2 className="mt-2 text-2xl font-black text-white">Quản lý thương hiệu</h2><p className="mt-1 text-sm font-semibold text-slate-500">Thương hiệu hiển thị ngoài website.</p></div>
+          <div><p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">Brands</p><h2 className="mt-2 text-2xl font-black text-white">Quản lý thương hiệu</h2>
+          {/* <p className="mt-1 text-sm font-semibold text-slate-500">Thương hiệu hiển thị ngoài website.</p> */}
+          </div>
           <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white"><Plus size={17}/> Thêm thương hiệu</button>
         </div>
         <div className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-slate-400"><Search size={18}/><input value={query} onChange={(e)=>setQuery(e.target.value)} className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-500" placeholder="Tìm thương hiệu..." /></div>

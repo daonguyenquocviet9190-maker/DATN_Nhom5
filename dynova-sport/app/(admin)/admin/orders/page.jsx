@@ -205,7 +205,7 @@ export default function AdminOrdersPage() {
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">Orders</p>
             <h2 className="mt-2 text-2xl font-black text-white">Quản lý đơn hàng</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Theo dõi đơn hàng từ API Laravel. Cập nhật trạng thái trong trang chi tiết đơn hàng.</p>
+            {/* <p className="mt-1 text-sm font-semibold text-slate-500">Theo dõi đơn hàng từ API Laravel. Cập nhật trạng thái trong trang chi tiết đơn hàng.</p> */}
           </div>
 
           <button

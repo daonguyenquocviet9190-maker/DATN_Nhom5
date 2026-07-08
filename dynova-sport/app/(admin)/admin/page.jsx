@@ -499,11 +499,11 @@ export default function AdminDashboard() {
               Tổng quan vận hành Dynova Sport
             </h2>
 
-            <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-slate-400">
+            {/* <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-slate-400">
               Dashboard đang lấy dữ liệu trực tiếp từ Laravel API: doanh thu,
               đơn hàng, sản phẩm, khách hàng và tồn kho. Không còn dùng dữ liệu
               demo trong localStorage.
-            </p>
+            </p> */}
 
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
@@ -577,9 +577,9 @@ export default function AdminDashboard() {
               <h3 className="text-lg font-black text-white">
                 Doanh thu theo tháng
               </h3>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              {/* <p className="mt-1 text-xs font-semibold text-slate-500">
                 Tính từ đơn hàng API theo ngày tạo đơn.
-              </p>
+              </p> */}
             </div>
 
             <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-black text-emerald-300">
@@ -612,9 +612,9 @@ export default function AdminDashboard() {
               <h3 className="text-lg font-black text-white">
                 Đơn mới tiếp nhận
               </h3>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              {/* <p className="mt-1 text-xs font-semibold text-slate-500">
                 5 đơn gần nhất từ API.
-              </p>
+              </p> */}
             </div>
 
             <Link
@@ -681,9 +681,9 @@ export default function AdminDashboard() {
               <h3 className="text-lg font-black text-white">
                 Sản phẩm bán chạy
               </h3>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              {/* <p className="mt-1 text-xs font-semibold text-slate-500">
                 Dựa theo số lượng đã bán từ bảng products.
-              </p>
+              </p> */}
             </div>
 
             <ShoppingBag className="text-orange-300" size={22} />
@@ -728,9 +728,9 @@ export default function AdminDashboard() {
               <h3 className="text-lg font-black text-white">
                 Cảnh báo tồn kho
               </h3>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              {/* <p className="mt-1 text-xs font-semibold text-slate-500">
                 Tính từ product_variants.stock.
-              </p>
+              </p> */}
             </div>
 
             <Boxes className="text-orange-300" size={22} />
