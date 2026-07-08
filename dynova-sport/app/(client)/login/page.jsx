@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  CheckCircle2,
   Eye,
   EyeOff,
   Lock,
@@ -77,7 +76,6 @@ function resolveRedirectPath(role, redirectUrl) {
 
 function getErrorMessage(error, fallback) {
   if (!error) return fallback;
-
   if (typeof error === "string") return error;
 
   return error?.message || fallback;
@@ -106,8 +104,9 @@ export default function LoginPage() {
 
   const redirectLabel = useMemo(() => {
     if (redirectUrl.includes("checkout")) return "thanh toán";
-    if (redirectUrl.includes("profile")) return "hồ sơ";
-    if (redirectUrl.includes("admin")) return "quản trị";
+    if (redirectUrl.includes("profile")) return "hồ sơ cá nhân";
+    if (redirectUrl.includes("orders")) return "đơn hàng";
+    if (redirectUrl.includes("wishlist")) return "danh sách yêu thích";
 
     return "tài khoản";
   }, [redirectUrl]);
@@ -154,11 +153,7 @@ export default function LoginPage() {
       const role = normalizeAuthRole(auth?.user);
       const nextPath = resolveRedirectPath(role, redirectUrl);
 
-      setSuccessText(
-        role === "admin"
-          ? "Đăng nhập quản trị thành công. Đang chuyển đến Admin..."
-          : "Đăng nhập thành công. Đang chuyển trang..."
-      );
+      setSuccessText("Đăng nhập thành công. Đang chuyển trang...");
 
       window.setTimeout(() => {
         router.replace(nextPath);
@@ -171,71 +166,45 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f7f8fb]">
-      <section className="container-page grid min-h-screen items-center gap-8 py-10 lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="relative hidden min-h-[660px] overflow-hidden rounded-[42px] bg-slate-950 text-white shadow-2xl shadow-slate-300/70 lg:block">
-          <img
-            src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1600&auto=format&fit=crop&q=85"
-            alt="Dynova login"
-            className="absolute inset-0 h-full w-full object-cover opacity-60"
-          />
+    <main className="relative min-h-screen overflow-hidden bg-[#f7f8fb]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-120px] top-[-120px] h-[330px] w-[330px] rounded-full bg-orange-200/45 blur-3xl" />
+        <div className="absolute bottom-[-140px] right-[-120px] h-[360px] w-[360px] rounded-full bg-slate-300/45 blur-3xl" />
+      </div>
 
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/85 to-orange-950/55" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(249,115,22,0.34),transparent_32%)]" />
-
-          <div className="relative z-10 flex h-full flex-col justify-between p-10">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-                <Sparkles size={15} />
-                Dynova Member
-              </div>
-
-              <h1 className="mt-8 max-w-xl text-6xl font-black uppercase leading-[0.95] tracking-[-0.06em]">
-                Đăng nhập để mua nhanh hơn
-              </h1>
-
-              <p className="mt-6 max-w-lg text-sm font-semibold leading-7 text-slate-300">
-                Lưu địa chỉ giao hàng, theo dõi đơn, quản lý wishlist và nhận ưu
-                đãi thành viên Dynova Sport.
-              </p>
-            </div>
-
-            <div className="grid gap-3">
-              {[
-                "Customer đăng nhập sẽ vào hồ sơ hoặc trang cần tiếp tục",
-                "Admin đăng nhập sẽ tự động chuyển vào trang quản trị",
-                "Token đăng nhập dùng cho checkout, wishlist và đơn hàng",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm font-bold text-slate-100 backdrop-blur"
-                >
-                  <CheckCircle2 size={18} className="text-orange-300" />
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mx-auto w-full max-w-[500px]">
-          <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 md:p-8">
-            <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-slate-950 text-sm font-black text-white shadow-xl shadow-slate-300">
+      <section className="container-page relative z-10 flex min-h-screen items-center justify-center py-10">
+        <div className="w-full max-w-[500px]">
+          <div className="mb-7 text-center">
+            <Link href="/" className="inline-flex items-center gap-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white shadow-xl shadow-slate-300">
                 DNV
               </div>
 
-              <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-                Welcome back
-              </p>
+              <div className="text-left">
+                <p className="text-xl font-black uppercase tracking-[-0.04em] text-slate-950">
+                  Dynova
+                </p>
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-orange-500">
+                  Sport Shop
+                </p>
+              </div>
+            </Link>
+          </div>
 
-              <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+          <div className="rounded-[36px] border border-slate-200 bg-white/95 p-6 shadow-2xl shadow-slate-200/80 backdrop-blur md:p-8">
+            <div className="text-center">
+              <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-orange-50 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-orange-600">
+                <Sparkles size={14} />
+                Chào mừng trở lại
+              </div>
+
+              <h1 className="mt-5 text-3xl font-black tracking-[-0.04em] text-slate-950">
                 Đăng nhập tài khoản
-              </h2>
+              </h1>
 
               <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
-                Đăng nhập để tiếp tục {redirectLabel}. Hệ thống sẽ tự kiểm tra
-                quyền admin hoặc customer.
+                Đăng nhập để tiếp tục {redirectLabel} và quản lý trải nghiệm mua
+                sắm của bạn tại Dynova Sport.
               </p>
             </div>
 
@@ -277,9 +246,7 @@ export default function LoginPage() {
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
-                    aria-label={
-                      showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"
-                    }
+                    aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                   >
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
@@ -315,7 +282,7 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                    Đang kiểm tra...
+                    Đang đăng nhập...
                   </>
                 ) : (
                   <>
@@ -328,8 +295,8 @@ export default function LoginPage() {
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
               <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
-              Admin sẽ được chuyển đến trang quản trị. Customer sẽ vào hồ sơ
-              hoặc trang đang cần đăng nhập.
+              Thông tin tài khoản của bạn được bảo vệ trong suốt quá trình sử
+              dụng Dynova Sport.
             </div>
 
             <p className="mt-6 text-center text-sm text-slate-500">
