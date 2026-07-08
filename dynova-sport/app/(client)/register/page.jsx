@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowRight,
-  CheckCircle2,
   Eye,
   EyeOff,
   Lock,
@@ -74,7 +73,6 @@ function isPhone(value) {
 
 function getErrorMessage(error, fallback) {
   if (!error) return fallback;
-
   if (typeof error === "string") return error;
 
   return error?.message || fallback;
@@ -223,7 +221,7 @@ export default function RegisterPage() {
       setErrors({
         submit: getErrorMessage(
           err,
-          "Không thể đăng ký tài khoản. Vui lòng kiểm tra API Laravel."
+          "Không thể đăng ký tài khoản. Vui lòng kiểm tra lại thông tin và thử lại."
         ),
       });
     } finally {
@@ -232,67 +230,45 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f7f8fb]">
-      <section className="container-page grid min-h-screen items-center gap-8 py-10 lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="relative hidden min-h-[680px] overflow-hidden rounded-[42px] bg-slate-950 text-white shadow-2xl shadow-slate-300/70 lg:block">
-          <img
-            src="https://images.unsplash.com/photo-1508609349937-5ec4ae374ebf?w=1600&auto=format&fit=crop&q=85"
-            alt="Dynova register"
-            className="absolute inset-0 h-full w-full object-cover opacity-60"
-          />
+    <main className="relative min-h-screen overflow-hidden bg-[#f7f8fb]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute right-[-120px] top-[-120px] h-[330px] w-[330px] rounded-full bg-orange-200/45 blur-3xl" />
+        <div className="absolute bottom-[-140px] left-[-120px] h-[360px] w-[360px] rounded-full bg-slate-300/45 blur-3xl" />
+      </div>
 
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/85 to-orange-950/55" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(249,115,22,0.34),transparent_32%)]" />
-
-          <div className="relative z-10 flex h-full flex-col justify-between p-10">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-                <Sparkles size={15} />
-                Dynova Club
+      <section className="container-page relative z-10 flex min-h-screen items-center justify-center py-10">
+        <div className="w-full max-w-[620px]">
+          <div className="mb-7 text-center">
+            <Link href="/" className="inline-flex items-center gap-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white shadow-xl shadow-slate-300">
+                DNV
               </div>
 
-              <h1 className="mt-8 max-w-xl text-6xl font-black uppercase leading-[0.95] tracking-[-0.06em]">
-                Tạo tài khoản thành viên
+              <div className="text-left">
+                <p className="text-xl font-black uppercase tracking-[-0.04em] text-slate-950">
+                  Dynova
+                </p>
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-orange-500">
+                  Sport Shop
+                </p>
+              </div>
+            </Link>
+          </div>
+
+          <div className="rounded-[36px] border border-slate-200 bg-white/95 p-6 shadow-2xl shadow-slate-200/80 backdrop-blur md:p-8">
+            <div className="text-center">
+              <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-orange-50 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-orange-600">
+                <Sparkles size={14} />
+                Thành viên mới
+              </div>
+
+              <h1 className="mt-5 text-3xl font-black tracking-[-0.04em] text-slate-950">
+                Đăng ký tài khoản
               </h1>
 
-              <p className="mt-6 max-w-lg text-sm font-semibold leading-7 text-slate-300">
-                Mua hàng nhanh hơn, lưu địa chỉ giao hàng, theo dõi đơn và nhận
-                ưu đãi riêng cho thành viên.
-              </p>
-            </div>
-
-            <div className="grid gap-3">
-              {[
-                "Lưu tài khoản vào bảng users",
-                "Mật khẩu được mã hóa bằng Laravel Hash",
-                "Đăng ký xong tự đăng nhập bằng token",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm font-bold text-slate-100 backdrop-blur"
-                >
-                  <CheckCircle2 size={18} className="text-orange-300" />
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mx-auto w-full max-w-[620px]">
-          <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 md:p-8">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-                Create account
-              </p>
-
-              <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
-                Đăng ký tài khoản
-              </h2>
-
-              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-                Tài khoản sẽ được lưu vào database Laravel. Sau khi đăng ký,
-                hệ thống tự đăng nhập và chuyển đến hồ sơ.
+              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">
+                Tạo tài khoản để mua sắm nhanh hơn, theo dõi đơn hàng và lưu
+                những sản phẩm thể thao bạn yêu thích.
               </p>
             </div>
 
@@ -314,9 +290,7 @@ export default function RegisterPage() {
                   label="Họ và tên"
                   icon={User}
                   value={form.fullName}
-                  onChange={(event) =>
-                    update("fullName", event.target.value)
-                  }
+                  onChange={(event) => update("fullName", event.target.value)}
                   placeholder="Nhập họ và tên"
                   error={errors.fullName}
                   autoComplete="name"
@@ -349,9 +323,7 @@ export default function RegisterPage() {
                 icon={Lock}
                 type={showPassword ? "text" : "password"}
                 value={form.password}
-                onChange={(event) =>
-                  update("password", event.target.value)
-                }
+                onChange={(event) => update("password", event.target.value)}
                 placeholder="Tối thiểu 6 ký tự"
                 error={errors.password}
                 autoComplete="new-password"
@@ -360,9 +332,7 @@ export default function RegisterPage() {
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
-                    aria-label={
-                      showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"
-                    }
+                    aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                   >
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
@@ -452,7 +422,8 @@ export default function RegisterPage() {
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
               <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
-              Mật khẩu sẽ được mã hóa trước khi lưu vào database.
+              Thông tin cá nhân của bạn được bảo vệ và chỉ sử dụng cho trải
+              nghiệm mua sắm tại Dynova Sport.
             </div>
 
             <p className="mt-6 text-center text-sm text-slate-500">
