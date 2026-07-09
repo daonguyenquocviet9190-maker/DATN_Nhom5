@@ -71,11 +71,11 @@ const sections = [
         href: "/admin/promotions",
         icon: Percent,
       },
-      {
-        name: "Tồn kho",
-        href: "/admin/inventory",
-        icon: Boxes,
-      },
+      // {
+      //   name: "Tồn kho",
+      //   href: "/admin/inventory",
+      //   icon: Boxes,
+      // },
     ],
   },
   {
@@ -407,41 +407,41 @@ export default function AdminLayout({ children }) {
                 <Menu size={20} />
               </button>
 
-              <div className="min-w-0">
+              {/* <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">
                   Dynova Sport
                 </p>
                 <h1 className="truncate text-xl font-black tracking-[-0.03em] text-white md:text-2xl">
                   {currentPage?.name || "Bảng quản trị"}
                 </h1>
-              </div>
+              </div> */}
             </div>
 
-            <div className="hidden max-w-md flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-slate-400 md:flex">
+            {/* <div className="hidden max-w-md flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-slate-400 md:flex">
               <Search size={17} />
               <input
                 className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-500"
                 placeholder="Tìm nhanh đơn hàng, sản phẩm, người dùng..."
               />
-            </div>
+            </div> */}
 
             <div className="flex items-center gap-2">
-              <Link
+              {/* <Link
                 href="/"
                 className="hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-black text-slate-200 transition hover:border-orange-400/40 hover:bg-orange-500 hover:text-white sm:flex"
               >
                 <ArrowLeft size={16} />
                 Website
-              </Link>
+              </Link> */}
 
-              <button
+              {/* <button
                 type="button"
                 onClick={handleLogout}
                 className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20 transition hover:bg-rose-500"
                 aria-label="Đăng xuất"
               >
                 <LogOut size={18} />
-              </button>
+              </button> */}
             </div>
           </div>
         </header>

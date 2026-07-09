@@ -1,17 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
-  Check,
   Loader2,
   PackageSearch,
   Search,
   ShoppingBag,
   SlidersHorizontal,
-  Star,
   X,
 } from "lucide-react";
 
@@ -21,14 +19,17 @@ import { getProducts } from "@/services/product.service";
 import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 
 function extractProducts(response) {
-  return (
-    response?.data?.products ||
-    response?.data?.data ||
-    response?.data ||
-    response?.products ||
-    response ||
-    []
-  );
+  const candidates = [
+    response?.data?.products,
+    response?.data?.data,
+    response?.data,
+    response?.products,
+    response,
+  ];
+
+  const result = candidates.find((item) => Array.isArray(item));
+
+  return result || [];
 }
 
 function getProductCategory(product) {
@@ -38,7 +39,7 @@ function getProductCategory(product) {
     product?.category?.name ||
     product?.category_name ||
     product?.categoryName ||
-    "Dynova Sport"
+    ""
   );
 }
 
@@ -50,8 +51,49 @@ function getProductBrand(product) {
     product?.brand_name ||
     product?.brandName ||
     product?.brand_data?.name ||
-    "Dynova"
+    ""
   );
+}
+
+function getProductStock(product) {
+  const directStock =
+    product?.stock ??
+    product?.total_stock ??
+    product?.quantity ??
+    product?.inventory ??
+    null;
+
+  if (directStock !== null && directStock !== undefined) {
+    return Number(directStock);
+  }
+
+  const variants =
+    product?.variants ||
+    product?.product_variants ||
+    product?.productVariants ||
+    [];
+
+  if (Array.isArray(variants) && variants.length > 0) {
+    return variants.reduce((total, variant) => {
+      return total + Number(variant?.stock || variant?.quantity || 0);
+    }, 0);
+  }
+
+  return null;
+}
+
+function getProductOldPrice(product) {
+  return (
+    product?.oldPrice ||
+    product?.compare_price ||
+    product?.old_price ||
+    product?.original_price ||
+    0
+  );
+}
+
+function getProductDescription(product) {
+  return product?.short_description || product?.description || "";
 }
 
 function normalizeProductForCart(product) {
@@ -62,15 +104,40 @@ function normalizeProductForCart(product) {
     image: getProductImage(product),
     category: getProductCategory(product),
     brand: getProductBrand(product),
-    oldPrice:
-      product.oldPrice ||
-      product.compare_price ||
-      product.old_price ||
-      product.original_price,
+    oldPrice: getProductOldPrice(product),
   };
 }
 
-export default function SearchPage() {
+function SearchLoading() {
+  return (
+    <main className="min-h-screen bg-[#f7f8fb] pb-16">
+      <section className="relative overflow-hidden bg-slate-950 text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(249,115,22,0.2),transparent_35%)]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/95 to-slate-900" />
+
+        <div className="container-page relative z-10 py-14">
+          <div className="h-12 w-40 animate-pulse rounded-2xl bg-white/10" />
+          <div className="mt-8 h-10 w-72 animate-pulse rounded-2xl bg-white/10" />
+          <div className="mt-4 h-5 w-full max-w-xl animate-pulse rounded-full bg-white/10" />
+          <div className="mt-8 h-16 w-full max-w-3xl animate-pulse rounded-[24px] bg-white/10" />
+        </div>
+      </section>
+
+      <section className="container-page py-10">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-[420px] animate-pulse rounded-[28px] bg-white"
+            />
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -87,26 +154,40 @@ export default function SearchPage() {
   }, [q]);
 
   useEffect(() => {
+    let mounted = true;
+
     async function loadProducts() {
       try {
         setLoading(true);
 
         const response = await getProducts({
-          per_page: 200,
+          page: 1,
+          per_page: 120,
         });
 
         const list = extractProducts(response);
 
-        setProducts(Array.isArray(list) ? list : []);
+        if (mounted) {
+          setProducts(Array.isArray(list) ? list : []);
+        }
       } catch (error) {
         console.log("Search products error:", error);
-        setProducts([]);
+
+        if (mounted) {
+          setProducts([]);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadProducts();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -134,19 +215,22 @@ export default function SearchPage() {
     }
 
     if (sort === "price-asc") {
-      result.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+      result.sort((a, b) => Number(a?.price || 0) - Number(b?.price || 0));
     }
 
     if (sort === "price-desc") {
-      result.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+      result.sort((a, b) => Number(b?.price || 0) - Number(a?.price || 0));
     }
 
-    if (sort === "rating") {
-      result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
-    }
+    if (sort === "newest") {
+      result.sort((a, b) => {
+        const dateA = new Date(a?.created_at || 0).getTime();
+        const dateB = new Date(b?.created_at || 0).getTime();
 
-    if (sort === "sold") {
-      result.sort((a, b) => Number(b.sold || 0) - Number(a.sold || 0));
+        if (dateA || dateB) return dateB - dateA;
+
+        return Number(b?.id || 0) - Number(a?.id || 0);
+      });
     }
 
     return result;
@@ -162,7 +246,10 @@ export default function SearchPage() {
 
     const value = keyword.trim();
 
-    if (!value) return;
+    if (!value) {
+      router.push("/search");
+      return;
+    }
 
     router.push("/search?q=" + encodeURIComponent(value));
   };
@@ -173,12 +260,20 @@ export default function SearchPage() {
   };
 
   const handleAddToCart = (product) => {
+    const stock = getProductStock(product);
+
+    if (stock === 0) {
+      showNotice("Sản phẩm hiện chưa có hàng.");
+      return;
+    }
+
     addToCart(normalizeProductForCart(product), {
       quantity: 1,
     });
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dynova:storage"));
+      window.dispatchEvent(new Event("dynova:cart"));
     }
 
     showNotice("Đã thêm sản phẩm vào giỏ hàng.");
@@ -239,6 +334,7 @@ export default function SearchPage() {
                   type="button"
                   onClick={clearSearch}
                   className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Xóa từ khóa"
                 >
                   <X size={17} />
                 </button>
@@ -260,7 +356,9 @@ export default function SearchPage() {
             </p>
 
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              Tìm thấy {filteredProducts.length} sản phẩm phù hợp
+              {loading
+                ? "Đang tải sản phẩm..."
+                : `Tìm thấy ${filteredProducts.length} sản phẩm phù hợp`}
             </p>
           </div>
 
@@ -273,8 +371,7 @@ export default function SearchPage() {
               className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10"
             >
               <option value="relevant">Liên quan nhất</option>
-              <option value="sold">Bán chạy</option>
-              <option value="rating">Đánh giá cao</option>
+              <option value="newest">Mới nhất</option>
               <option value="price-asc">Giá thấp đến cao</option>
               <option value="price-desc">Giá cao đến thấp</option>
             </select>
@@ -300,8 +397,8 @@ export default function SearchPage() {
               Không tìm thấy sản phẩm
             </h2>
 
-            <p className="mt-2 text-sm text-slate-500">
-              Hãy thử từ khóa khác hoặc quay lại cửa hàng để xem tất cả sản phẩm.
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+              Hãy thử từ khóa khác hoặc quay lại cửa hàng để xem thêm sản phẩm.
             </p>
 
             <Link
@@ -313,97 +410,111 @@ export default function SearchPage() {
           </div>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {filteredProducts.map((product) => (
-              <article
-                key={product.id}
-                className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
-              >
-                <Link
-                  href={"/shop/product/" + product.id}
-                  className="relative block overflow-hidden bg-slate-100"
+            {filteredProducts.map((product) => {
+              const category = getProductCategory(product);
+              const brand = getProductBrand(product);
+              const description = getProductDescription(product);
+              const oldPrice = Number(getProductOldPrice(product));
+              const price = Number(product?.price || 0);
+              const stock = getProductStock(product);
+              const isOutOfStock = stock === 0;
+
+              return (
+                <article
+                  key={product.id}
+                  className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
                 >
-                  <img
-                    src={getProductImage(product)}
-                    alt={product.name}
-                    onError={(event) => {
-                      event.currentTarget.src = PRODUCT_FALLBACK;
-                    }}
-                    className="aspect-[4/4.25] w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
+                  <Link
+                    href={"/shop/product/" + product.id}
+                    className="relative block overflow-hidden bg-slate-100"
+                  >
+                    <img
+                      src={getProductImage(product)}
+                      alt={product.name || "Sản phẩm Dynova Sport"}
+                      onError={(event) => {
+                        event.currentTarget.src = PRODUCT_FALLBACK;
+                      }}
+                      className="aspect-[4/4.25] w-full object-cover transition duration-500 group-hover:scale-105"
+                    />
 
-                  <span className="absolute left-3 top-3 rounded-full bg-slate-950 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white">
-                    Kết quả
-                  </span>
-                </Link>
-
-                <div className="flex flex-1 flex-col p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="line-clamp-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-500">
-                      {getProductCategory(product)}
-                    </p>
-
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-500">
-                      <Star size={13} className="fill-amber-400 text-amber-400" />
-                      {product.rating || 4.8}
-                    </span>
-                  </div>
-
-                  <Link href={"/shop/product/" + product.id}>
-                    <h3 className="mt-2 line-clamp-2 min-h-[44px] text-sm font-black leading-6 text-slate-950 transition hover:text-orange-600">
-                      {product.name}
-                    </h3>
+                    {category && (
+                      <span className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-orange-600 shadow-sm">
+                        {category}
+                      </span>
+                    )}
                   </Link>
 
-                  <p className="mt-2 text-xs font-bold text-slate-400">
-                    {getProductBrand(product)}
-                  </p>
+                  <div className="flex flex-1 flex-col p-4">
+                    {brand && (
+                      <p className="line-clamp-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-500">
+                        {brand}
+                      </p>
+                    )}
 
-                  <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">
-                    {product.short_description ||
-                      product.description ||
-                      "Sản phẩm thể thao chất lượng, phù hợp luyện tập hằng ngày."}
-                  </p>
+                    <Link href={"/shop/product/" + product.id}>
+                      <h3 className="mt-2 line-clamp-2 min-h-[44px] text-sm font-black leading-6 text-slate-950 transition hover:text-orange-600">
+                        {product.name}
+                      </h3>
+                    </Link>
 
-                  <div className="mt-auto pt-4">
-                    <div className="flex items-end justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-black text-slate-950">
-                          {formatCurrency(product.price || 0)}
-                        </p>
+                    {description && (
+                      <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">
+                        {description}
+                      </p>
+                    )}
 
-                        {(product.compare_price ||
-                          product.old_price ||
-                          product.oldPrice) && (
-                          <p className="text-xs font-bold text-slate-400 line-through">
-                            {formatCurrency(
-                              product.compare_price ||
-                                product.old_price ||
-                                product.oldPrice
-                            )}
+                    <div className="mt-auto pt-4">
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-black text-slate-950">
+                            {formatCurrency(price)}
                           </p>
+
+                          {oldPrice > price && (
+                            <p className="text-xs font-bold text-slate-400 line-through">
+                              {formatCurrency(oldPrice)}
+                            </p>
+                          )}
+                        </div>
+
+                        {stock !== null && (
+                          <span
+                            className={
+                              "rounded-full px-3 py-1 text-xs font-black " +
+                              (isOutOfStock
+                                ? "bg-rose-50 text-rose-600"
+                                : "bg-emerald-50 text-emerald-600")
+                            }
+                          >
+                            {isOutOfStock ? "Hết hàng" : `Còn ${stock}`}
+                          </span>
                         )}
                       </div>
 
-                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-600">
-                        <Check size={12} className="mr-1 inline" />
-                        Còn hàng
-                      </span>
+                      <button
+                        onClick={() => handleAddToCart(product)}
+                        disabled={isOutOfStock}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        <ShoppingBag size={15} />
+                        {isOutOfStock ? "Hết hàng" : "Thêm vào giỏ"}
+                      </button>
                     </div>
-
-                    <button
-                      onClick={() => handleAddToCart(product)}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500"
-                    >
-                      <ShoppingBag size={15} />
-                      Thêm vào giỏ
-                    </button>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
     </main>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<SearchLoading />}>
+      <SearchContent />
+    </Suspense>
   );
 }
