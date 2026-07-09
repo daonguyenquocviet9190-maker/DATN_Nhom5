@@ -471,10 +471,10 @@ export default function WishlistPage() {
               Sản phẩm yêu thích
             </h1>
 
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
+            {/* <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
               Lưu lại những sản phẩm bạn quan tâm, thêm nhanh vào giỏ hàng và
               quản lý danh sách yêu thích theo tài khoản.
-            </p>
+            </p> */}
           </div>
 
           <div className="flex flex-wrap gap-3">
