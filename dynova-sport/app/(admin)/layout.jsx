@@ -130,11 +130,15 @@ export default function AdminLayout({ children }) {
     const role = normalizeAuthRole(user);
 
     if (!token || !user) {
+      setAllowed(false);
+      setChecking(false);
       router.replace("/login?redirect=/admin");
       return;
     }
 
     if (role !== "admin") {
+      setAllowed(false);
+      setChecking(false);
       router.replace("/");
       return;
     }
@@ -168,18 +172,18 @@ export default function AdminLayout({ children }) {
 
   const SidebarContent = () => (
     <>
-      <div className="flex h-[78px] items-center justify-between border-b border-white/10 px-5">
-        <Link href="/admin" className="flex items-center gap-3">
-          <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-orange-500 text-xs font-black text-white shadow-lg shadow-orange-500/25">
+      <div className="relative z-10 flex h-[78px] shrink-0 items-center justify-between border-b border-white/10 bg-slate-950/80 px-5 backdrop-blur-2xl">
+        <Link href="/admin" className="flex min-w-0 items-center gap-3">
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-orange-500 text-xs font-black text-white shadow-lg shadow-orange-500/25">
             <span className="relative z-10">DNV</span>
             <span className="absolute inset-x-0 bottom-0 h-1/2 bg-white/15" />
           </div>
 
-          <div>
-            <p className="font-black uppercase tracking-[-0.03em] text-white">
+          <div className="min-w-0">
+            <p className="truncate font-black uppercase tracking-[-0.03em] text-white">
               Dynova Admin
             </p>
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-orange-300">
+            <p className="truncate text-[11px] font-extrabold uppercase tracking-[0.2em] text-orange-300">
               Commerce Console
             </p>
           </div>
@@ -195,11 +199,12 @@ export default function AdminLayout({ children }) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-5">
-        <div className="mb-6 rounded-[26px] border border-white/10 bg-white/[0.06] p-4">
+      <div className="admin-scroll admin-sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden scroll-smooth px-4 py-5">
+        <div className="mb-6 rounded-[26px] border border-white/10 bg-white/[0.06] p-4 shadow-sm shadow-black/10">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-sm font-black text-orange-300 ring-1 ring-white/10">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm font-black text-orange-300 ring-1 ring-white/10">
               {adminUser?.fullName?.charAt(0)?.toUpperCase() ||
+                adminUser?.name?.charAt(0)?.toUpperCase() ||
                 adminUser?.email?.charAt(0)?.toUpperCase() ||
                 "A"}
             </div>
@@ -214,13 +219,13 @@ export default function AdminLayout({ children }) {
             </div>
           </div>
 
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-orange-500/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-orange-300">
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-orange-500/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-orange-300 ring-1 ring-orange-400/10">
             <ShieldCheck size={13} />
             Quản trị viên
           </div>
         </div>
 
-        <nav className="space-y-6">
+        <nav className="space-y-6 pb-2">
           {sections.map((section) => (
             <div key={section.title}>
               <p className="mb-2 px-3 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
@@ -243,13 +248,17 @@ export default function AdminLayout({ children }) {
                       className={
                         "group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-300 " +
                         (active
-                          ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                          ? "bg-orange-500 text-white shadow-lg shadow-orange-500/25"
                           : "text-slate-400 hover:bg-white/[0.06] hover:text-white")
                       }
                     >
+                      {active && (
+                        <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-white/80" />
+                      )}
+
                       <span
                         className={
-                          "flex h-10 w-10 items-center justify-center rounded-2xl transition " +
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition " +
                           (active
                             ? "bg-white/15 text-white"
                             : "bg-white/[0.05] text-slate-400 group-hover:bg-white/10 group-hover:text-orange-300")
@@ -258,9 +267,9 @@ export default function AdminLayout({ children }) {
                         <Icon size={18} />
                       </span>
 
-                      <span className="flex-1">{item.name}</span>
+                      <span className="flex-1 truncate">{item.name}</span>
 
-                      {active && <ChevronRight size={16} />}
+                      {active && <ChevronRight size={16} className="shrink-0" />}
                     </Link>
                   );
                 })}
@@ -270,13 +279,13 @@ export default function AdminLayout({ children }) {
         </nav>
       </div>
 
-      <div className="border-t border-white/10 p-4">
+      <div className="relative z-10 shrink-0 border-t border-white/10 bg-slate-950/85 p-4 backdrop-blur-2xl">
         <Link
           href="/"
           className="mb-2 flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/[0.06] hover:text-orange-300"
         >
-          <Home size={18} />
-          Về website
+          {/* <Home size={18} />
+          Về website */}
         </Link>
 
         <button
@@ -309,6 +318,62 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <style jsx global>{`
+        .admin-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(249, 115, 22, 0.72) transparent;
+          scrollbar-gutter: stable;
+        }
+
+        .admin-scroll::-webkit-scrollbar {
+          width: 10px;
+        }
+
+        .admin-scroll::-webkit-scrollbar-track {
+          background: transparent;
+          border-radius: 999px;
+        }
+
+        .admin-scroll::-webkit-scrollbar-thumb {
+          min-height: 56px;
+          border: 3px solid transparent;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.1);
+          background-clip: padding-box;
+        }
+
+        .admin-scroll:hover::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #fb923c, #f97316);
+          background-clip: padding-box;
+        }
+
+        .admin-scroll::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, #fdba74, #ea580c);
+          background-clip: padding-box;
+        }
+
+        .admin-scroll::-webkit-scrollbar-corner {
+          background: transparent;
+        }
+
+        .admin-sidebar-scroll {
+          mask-image: linear-gradient(
+            to bottom,
+            transparent 0,
+            black 18px,
+            black calc(100% - 18px),
+            transparent 100%
+          );
+          -webkit-mask-image: linear-gradient(
+            to bottom,
+            transparent 0,
+            black 18px,
+            black calc(100% - 18px),
+            transparent 100%
+          );
+        }
+      `}</style>
+
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(249,115,22,0.16),transparent_30%),radial-gradient(circle_at_90%_20%,rgba(59,130,246,0.08),transparent_28%)]" />
 
       {sidebarOpen && (
@@ -322,7 +387,7 @@ export default function AdminLayout({ children }) {
 
       <aside
         className={
-          "fixed inset-y-0 left-0 z-[90] flex w-72 flex-col border-r border-white/10 bg-slate-950/90 backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0 " +
+          "fixed inset-y-0 left-0 z-[90] flex w-72 flex-col border-r border-white/10 bg-slate-950/92 shadow-2xl shadow-black/30 backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0 " +
           (sidebarOpen ? "translate-x-0" : "-translate-x-full")
         }
       >

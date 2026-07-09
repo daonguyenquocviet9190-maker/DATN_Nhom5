@@ -159,7 +159,7 @@ export default function HomeClient({
         description:
           banner.description ||
           banner.content ||
-          "Dynova Sport mang đến trải nghiệm mua sắm thể thao hiện đại, rõ ràng và dễ sử dụng.",
+          "Khám phá những sản phẩm thể thao nổi bật, phù hợp cho luyện tập, thi đấu và phong cách sống năng động.",
         image: getBannerImage(banner),
         buttonText:
           banner.buttonText ||
@@ -442,7 +442,7 @@ onClick={() => handleAdd(product)}
 
             <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
               {currentBanner?.description ||
-                "Banner sẽ được hiển thị tự động khi API trả dữ liệu từ database."}
+                "Khám phá bộ sưu tập thể thao mới nhất cùng Dynova Sport."}
             </p>
 
             <form
@@ -523,7 +523,7 @@ onClick={() => handleAdd(product)}
                       <div className="text-center">
                         <Sparkles className="mx-auto text-orange-300" size={42} />
                         <p className="mt-4 text-sm font-black uppercase tracking-[0.2em] text-slate-400">
-                          Đang chờ banner API
+                          Dynova Sport
                         </p>
                       </div>
                     </div>
@@ -538,7 +538,7 @@ onClick={() => handleAdd(product)}
                       </p>
 
                       <h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
-                        {currentBanner?.title || "Banner từ API"}
+                        {currentBanner?.title || "Dynova Collection"}
                       </h3>
 
                       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -687,8 +687,7 @@ text: "Có size, màu sắc, giá bán và tồn kho.",
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              Các danh mục được sắp xếp rõ ràng để người dùng dễ tìm sản phẩm
-              phù hợp.
+              Khám phá nhanh các nhóm sản phẩm phù hợp cho luyện tập, thi đấu và phong cách năng động.
             </p>
           </div>
 
@@ -747,8 +746,7 @@ href="/shop"
               </h2>
 
               <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-                Sản phẩm nổi bật giúp khách hàng vào chi tiết, thêm giỏ hàng
-                hoặc lưu yêu thích nhanh hơn.
+                Khám phá những sản phẩm được khách hàng quan tâm nhiều nhất tại Dynova Sport.
               </p>
             </div>
 
@@ -769,10 +767,10 @@ href="/shop"
           ) : (
 <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
               <p className="text-lg font-black text-slate-950">
-                Chưa có sản phẩm để hiển thị
+                Sản phẩm đang được cập nhật
               </p>
               <p className="mt-2 text-sm text-slate-500">
-                Hãy truyền dữ liệu products vào HomeClient.
+                Dynova Sport sẽ sớm bổ sung thêm nhiều sản phẩm mới.
               </p>
             </div>
           )}
@@ -798,8 +796,7 @@ href="/shop"
                 </h2>
 
                 <p className="mt-3 max-w-lg text-sm leading-7 text-slate-300">
-                  Áp dụng cho đơn hàng từ 500.000đ. Ưu đãi giúp khách hàng mới
-                  dễ bắt đầu mua sắm và trải nghiệm Dynova Sport.
+                  Áp dụng cho đơn hàng từ 500.000đ, giúp bạn mua sắm tiết kiệm hơn tại Dynova Sport.
                 </p>
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -931,10 +928,10 @@ href="/shop"
               <div className="grid min-h-[310px] place-items-center rounded-[28px] border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
                 <div>
                   <p className="text-lg font-black text-slate-950">
-                    Chưa có sản phẩm bán chạy
+                    Sản phẩm bán chạy đang được cập nhật
                   </p>
                   <p className="mt-2 text-sm text-slate-500">
-                    Khi có dữ liệu sản phẩm, khu vực này sẽ tự động hiển thị.
+                    Những lựa chọn được yêu thích nhất sẽ sớm xuất hiện tại đây.
                   </p>
                 </div>
               </div>
@@ -952,7 +949,7 @@ href="/shop"
               </p>
 
               <h2 className="mt-2 max-w-2xl text-3xl font-black tracking-[-0.03em]">
-                Sẵn sàng nâng cấp trải nghiệm mua sắm thể thao?
+                Sẵn sàng nâng cấp phong cách thể thao của bạn?
               </h2>
             </div>
 

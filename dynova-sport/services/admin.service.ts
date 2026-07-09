@@ -702,3 +702,7 @@ export function getNormalizedBrandName(
 
   return found?.name || "Chưa có thương hiệu";
 }
+
+export function getAdminOrderById(id: string | number) {
+  return adminFetch(`/admin/orders/${id}`);
+}

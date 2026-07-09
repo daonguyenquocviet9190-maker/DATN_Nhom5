@@ -29,7 +29,6 @@ import { addToCart } from "@/utils/shopStorage";
 
 import {
   getProductImage,
-  getStorageImage,
   PRODUCT_FALLBACK,
 } from "@/utils/imageUrl";
 
@@ -42,41 +41,126 @@ import ProductReviews from "@/components/reviews/ProductReviews";
 
 const API_HOST = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
-).replace("/api", "");
+).replace(/\/api\/?$/, "");
 
 const FALLBACK_IMAGE =
+  PRODUCT_FALLBACK ||
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
 
-function uniqueArray(list) {
-  return Array.from(new Set(list.filter(Boolean)));
+function uniqueArray(list = []) {
+  return Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function encodePath(value) {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => encodeURIComponent(safeDecode(part)))
+    .join("/");
 }
 
 function normalizeImage(image) {
-  if (!image || image.includes("product-placeholder")) {
+  const raw = String(image || "").trim();
+
+  if (!raw || raw === "null" || raw === "undefined") {
     return FALLBACK_IMAGE;
   }
 
-  if (image.startsWith("http://") || image.startsWith("https://")) {
-    return image;
+  if (raw.includes("product-placeholder")) {
+    return FALLBACK_IMAGE;
   }
 
-  if (image.startsWith("/storage")) {
-    return API_HOST + image;
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:")
+  ) {
+    return raw;
   }
 
-  if (image.startsWith("storage/")) {
-    return API_HOST + "/" + image;
+  const clean = raw.replace(/\\/g, "/");
+
+  if (clean.startsWith("/storage/")) {
+    return API_HOST + encodePath(clean);
   }
 
-  if (image.startsWith("/")) {
-    return image;
+  if (clean.startsWith("storage/")) {
+    return API_HOST + "/" + encodePath(clean);
   }
 
-  return API_HOST + "/storage/" + image;
+  if (clean.startsWith("products/")) {
+    return API_HOST + "/storage/" + encodePath(clean);
+  }
+
+  if (clean.startsWith("/products/")) {
+    return API_HOST + "/storage" + encodePath(clean);
+  }
+
+  if (clean.startsWith("/")) {
+    return clean;
+  }
+
+  return API_HOST + "/storage/products/" + encodePath(clean);
+}
+
+function normalizeVariantText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getProductVariants(product) {
+  const variants =
+    product?.variants ||
+    product?.product_variants ||
+    product?.productVariants ||
+    product?.variant_list ||
+    [];
+
+  return Array.isArray(variants) ? variants : [];
+}
+
+function getVariantImage(variant) {
+  const image =
+    variant?.image_url ||
+    variant?.image ||
+    variant?.thumbnail ||
+    variant?.photo ||
+    "";
+
+  return image ? normalizeImage(image) : "";
+}
+
+function getProductImageSafe(product) {
+  const image =
+    product?.image_url ||
+    product?.image ||
+    product?.thumbnail ||
+    product?.photo ||
+    product?.images?.[0]?.url ||
+    product?.images?.[0] ||
+    "";
+
+  if (image) return normalizeImage(image);
+
+  return getProductImage(product) || FALLBACK_IMAGE;
 }
 
 function getImage(product) {
-  return getProductImage(product);
+  return getProductImageSafe(product);
 }
 
 function getCategoryName(product) {
@@ -107,26 +191,34 @@ function getGallery(product) {
   const images = [];
 
   if (Array.isArray(product?.gallery)) {
-    images.push(...product.gallery);
+    images.push(...product.gallery.map((item) => normalizeImage(item)));
   }
 
   if (Array.isArray(product?.images)) {
-    images.push(...product.images);
+    images.push(
+      ...product.images.map((item) => {
+        if (typeof item === "string") return normalizeImage(item);
+
+        return normalizeImage(
+          item?.url ||
+            item?.image ||
+            item?.image_url ||
+            item?.thumbnail ||
+            ""
+        );
+      })
+    );
   }
 
   images.push(getImage(product));
 
-  if (Array.isArray(product?.variants)) {
-    product.variants.forEach((variant) => {
-      if (variant?.image) {
-        images.push(getStorageImage(variant.image, "products", PRODUCT_FALLBACK));
-      }
+  getProductVariants(product).forEach((variant) => {
+    const variantImage = getVariantImage(variant);
 
-      if (variant?.image_url) {
-        images.push(getStorageImage(variant.image_url, "products", PRODUCT_FALLBACK));
-      }
-    });
-  }
+    if (variantImage) {
+      images.push(variantImage);
+    }
+  });
 
   return uniqueArray(images);
 }
@@ -134,44 +226,129 @@ function getGallery(product) {
 function getProductRating(product) {
   return Number(
     product?.average_rating ||
-    product?.rating_average ||
-    product?.rating ||
-    0
+      product?.rating_average ||
+      product?.rating ||
+      0
   );
 }
 
 function getProductReviewCount(product) {
   return Number(
     product?.reviews_count ||
-    product?.review_count ||
-    product?.total_reviews ||
-    0
+      product?.review_count ||
+      product?.total_reviews ||
+      0
   );
 }
 
-function buildCartProduct(product, selectedVariant, displayPrice) {
+function getVariantStock(variant, product) {
+  const rawStock =
+    variant?.stock ??
+    variant?.quantity ??
+    variant?.qty ??
+    product?.stock ??
+    product?.quantity ??
+    product?.total_stock ??
+    0;
+
+  const stock = Number(rawStock);
+
+  return Number.isFinite(stock) ? stock : 0;
+}
+
+function findVariant(variants, selectedColor, selectedSize) {
+  if (!Array.isArray(variants) || variants.length === 0) return null;
+
+  const color = normalizeVariantText(selectedColor);
+  const size = normalizeVariantText(selectedSize);
+
+  const exact = variants.find((variant) => {
+    const variantColor = normalizeVariantText(variant?.color);
+    const variantSize = normalizeVariantText(variant?.size);
+
+    const colorMatched =
+      !color ||
+      color === "mặc định" ||
+      color === "default" ||
+      variantColor === color;
+
+    const sizeMatched =
+      !size ||
+      size === "freesize" ||
+      size === "default" ||
+      variantSize === size;
+
+    return colorMatched && sizeMatched;
+  });
+
+  if (exact) return exact;
+
+  const colorOnly = variants.find((variant) => {
+    const variantColor = normalizeVariantText(variant?.color);
+
+    return (
+      color &&
+      color !== "mặc định" &&
+      color !== "default" &&
+      variantColor === color
+    );
+  });
+
+  return colorOnly || null;
+}
+
+function buildCartProduct(
+  product,
+  selectedVariant,
+  displayPrice,
+  selectedSize,
+  selectedColor
+) {
+  const variantImage = getVariantImage(selectedVariant);
+  const productImage = getImage(product);
+  const finalImage = variantImage || productImage;
+
+  const size = selectedVariant?.size || selectedSize || "Freesize";
+  const color = selectedVariant?.color || selectedColor || "Mặc định";
+  const variantId = selectedVariant?.id || null;
+
   return {
     ...product,
-    id: product.id,
-    product_id: product.id,
-    name: product.name,
-    image: selectedVariant?.image_url
-      ? normalizeImage(selectedVariant.image_url)
-      : selectedVariant?.image
-        ? normalizeImage(selectedVariant.image)
-        : getImage(product),
-    price: Number(displayPrice || product.price || 0),
+
+    key: `${product?.id}-${variantId || "no-variant"}-${size}-${color}`,
+
+    id: product?.id,
+    product_id: product?.id,
+
+    name: product?.name || product?.product_name || "Sản phẩm",
+    product_name: product?.name || product?.product_name || "Sản phẩm",
+
+    image: finalImage,
+    product_image: productImage,
+    variant_image: variantImage,
+
+    price: Number(displayPrice || product?.price || 0),
+    sale_price: Number(displayPrice || product?.price || 0),
+
     oldPrice:
-      product.oldPrice ||
-      product.compare_price ||
-      product.old_price ||
-      product.original_price,
+      product?.oldPrice ||
+      product?.compare_price ||
+      product?.old_price ||
+      product?.original_price,
+
     category: getCategoryName(product),
-    categoryId: product.category_id || product.category?.id || null,
+    categoryId: product?.category_id || product?.category?.id || null,
+
     brand: getBrandName(product),
-    variantId: selectedVariant?.id || null,
-    variant_id: selectedVariant?.id || null,
-    sku: selectedVariant?.sku || product.sku || "DNV-" + product.id,
+
+    variantId,
+    variant_id: variantId,
+    product_variant_id: variantId,
+
+    size,
+    color,
+
+    sku: selectedVariant?.sku || product?.sku || "DNV-" + product?.id,
   };
 }
 
@@ -185,8 +362,8 @@ function RelatedCard({ product }) {
         <img
           src={getImage(product)}
           alt={product.name}
-          onError={(e) => {
-            e.currentTarget.src = PRODUCT_FALLBACK;
+          onError={(event) => {
+            event.currentTarget.src = FALLBACK_IMAGE;
           }}
           className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105"
         />
@@ -217,11 +394,12 @@ export default function ProductDetailClient({
 }) {
   const router = useRouter();
 
-  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const variants = useMemo(() => getProductVariants(product), [product]);
+
   const gallery = useMemo(() => getGallery(product), [product]);
 
   const colorOptions = useMemo(() => {
-    const fromVariants = uniqueArray(variants.map((item) => item.color));
+    const fromVariants = uniqueArray(variants.map((item) => item?.color));
     const fromProduct = Array.isArray(product?.colors) ? product.colors : [];
 
     const result = uniqueArray([...fromVariants, ...fromProduct]);
@@ -230,7 +408,7 @@ export default function ProductDetailClient({
   }, [variants, product]);
 
   const [mainImage, setMainImage] = useState(gallery[0] || FALLBACK_IMAGE);
-  const [selectedColor, setSelectedColor] = useState(colorOptions[0]);
+  const [selectedColor, setSelectedColor] = useState(colorOptions[0] || "Mặc định");
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("description");
@@ -243,10 +421,13 @@ export default function ProductDetailClient({
     const matchedVariants = variants.filter((variant) => {
       if (!selectedColor || selectedColor === "Mặc định") return true;
 
-      return variant.color === selectedColor;
+      return (
+        normalizeVariantText(variant?.color) ===
+        normalizeVariantText(selectedColor)
+      );
     });
 
-    const fromVariants = uniqueArray(matchedVariants.map((item) => item.size));
+    const fromVariants = uniqueArray(matchedVariants.map((item) => item?.size));
     const fromProduct = Array.isArray(product?.sizes) ? product.sizes : [];
 
     const result = uniqueArray([...fromVariants, ...fromProduct]);
@@ -255,50 +436,28 @@ export default function ProductDetailClient({
   }, [variants, product, selectedColor]);
 
   const selectedVariant = useMemo(() => {
-    if (variants.length === 0) return null;
-
-    const exact = variants.find((variant) => {
-      const colorMatched =
-        !selectedColor ||
-        selectedColor === "Mặc định" ||
-        variant.color === selectedColor;
-
-      const sizeMatched =
-        !selectedSize ||
-        selectedSize === "Freesize" ||
-        variant.size === selectedSize;
-
-      return colorMatched && sizeMatched;
-    });
-
-    return exact || variants[0];
+    return findVariant(variants, selectedColor, selectedSize);
   }, [variants, selectedColor, selectedSize]);
 
   const displayPrice = Number(
     selectedVariant?.sale_price ||
-    selectedVariant?.price ||
-    product?.sale_price ||
-    product?.price ||
-    0
+      selectedVariant?.price ||
+      product?.sale_price ||
+      product?.price ||
+      0
   );
 
   const comparePrice = Number(
     selectedVariant?.compare_price ||
-    product?.oldPrice ||
-    product?.compare_price ||
-    product?.old_price ||
-    product?.original_price ||
-    0
+      product?.oldPrice ||
+      product?.compare_price ||
+      product?.old_price ||
+      product?.original_price ||
+      0
   );
 
-  const stock = Number(
-    selectedVariant?.stock ??
-    product?.stock ??
-    product?.quantity ??
-    99
-  );
-
-  const sold = Number(product?.sold || 0);
+  const stock = getVariantStock(selectedVariant, product);
+  const sold = Number(product?.sold || product?.sold_count || product?.total_sold || 0);
   const productRating = getProductRating(product);
   const reviewCount = getProductReviewCount(product);
 
@@ -307,20 +466,32 @@ export default function ProductDetailClient({
   }, [gallery]);
 
   useEffect(() => {
+    const variantImage = getVariantImage(selectedVariant);
+
+    if (variantImage) {
+      setMainImage(variantImage);
+    }
+  }, [selectedVariant]);
+
+  useEffect(() => {
     if (!colorOptions.includes(selectedColor)) {
-      setSelectedColor(colorOptions[0]);
+      setSelectedColor(colorOptions[0] || "Mặc định");
     }
   }, [colorOptions, selectedColor]);
 
   useEffect(() => {
     if (!sizeOptions.includes(selectedSize)) {
-      setSelectedSize(sizeOptions[0]);
+      setSelectedSize(sizeOptions[0] || "Freesize");
     }
   }, [sizeOptions, selectedSize]);
 
   useEffect(() => {
     if (quantity > stock && stock > 0) {
       setQuantity(stock);
+    }
+
+    if (stock <= 0 && quantity !== 1) {
+      setQuantity(1);
     }
   }, [stock, quantity]);
 
@@ -355,22 +526,36 @@ export default function ProductDetailClient({
   };
 
   const handleAdd = (buyNow = false) => {
+    if (!product?.id) {
+      showNotice("Không tìm thấy sản phẩm.");
+      return;
+    }
+
+    if (variants.length > 0 && !selectedVariant) {
+      showNotice("Vui lòng chọn đúng màu sắc và kích thước.");
+      return;
+    }
+
     if (stock <= 0) {
-      showNotice("Sản phẩm hiện đang hết hàng.");
+      showNotice("Biến thể này hiện đang hết hàng.");
       return;
     }
 
     const cartProduct = buildCartProduct(
       product,
       selectedVariant,
-      displayPrice
+      displayPrice,
+      selectedSize,
+      selectedColor
     );
 
     addToCart(cartProduct, {
-      size: selectedSize,
-      color: selectedColor,
+      size: cartProduct.size,
+      color: cartProduct.color,
       quantity,
-      variantId: selectedVariant?.id || null,
+      variantId: cartProduct.variant_id,
+      variant_id: cartProduct.variant_id,
+      product_variant_id: cartProduct.product_variant_id,
     });
 
     if (typeof window !== "undefined") {
@@ -382,7 +567,7 @@ export default function ProductDetailClient({
       return;
     }
 
-    showNotice("Đã thêm sản phẩm vào giỏ hàng.");
+    showNotice("Đã thêm đúng biến thể vào giỏ hàng.");
   };
 
   const handleWishlist = async () => {
@@ -444,8 +629,8 @@ export default function ProductDetailClient({
           <img
             src={getImage(product)}
             alt={product.name}
-            onError={(e) => {
-              e.currentTarget.src = PRODUCT_FALLBACK;
+            onError={(event) => {
+              event.currentTarget.src = FALLBACK_IMAGE;
             }}
             className="h-full w-full object-cover opacity-20 blur-sm"
           />
@@ -514,8 +699,8 @@ export default function ProductDetailClient({
                   <img
                     src={image}
                     alt="Ảnh sản phẩm"
-                    onError={(e) => {
-                      e.currentTarget.src = PRODUCT_FALLBACK;
+                    onError={(event) => {
+                      event.currentTarget.src = FALLBACK_IMAGE;
                     }}
                     className="h-full w-full object-cover"
                   />
@@ -527,8 +712,8 @@ export default function ProductDetailClient({
               <img
                 src={mainImage}
                 alt={product.name}
-                onError={(e) => {
-                  e.currentTarget.src = PRODUCT_FALLBACK;
+                onError={(event) => {
+                  event.currentTarget.src = FALLBACK_IMAGE;
                 }}
                 className="product-main-image absolute inset-0 h-full w-full object-cover"
               />
@@ -638,7 +823,10 @@ export default function ProductDetailClient({
                     {colorOptions.map((item) => (
                       <button
                         key={item}
-                        onClick={() => setSelectedColor(item)}
+                        onClick={() => {
+                          setSelectedColor(item);
+                          setQuantity(1);
+                        }}
                         className={
                           "rounded-2xl border px-4 py-2.5 text-sm font-black transition " +
                           (selectedColor === item
@@ -665,20 +853,39 @@ export default function ProductDetailClient({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {sizeOptions.map((item) => (
-                      <button
-                        key={item}
-                        onClick={() => setSelectedSize(item)}
-                        className={
-                          "flex h-12 min-w-12 items-center justify-center rounded-2xl border px-4 text-sm font-black transition " +
-                          (selectedSize === item
-                            ? "border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-950/10"
-                            : "border-slate-200 text-slate-700 hover:border-orange-500 hover:text-orange-600")
-                        }
-                      >
-                        {item}
-                      </button>
-                    ))}
+                    {sizeOptions.map((item) => {
+                      const temporaryVariant = findVariant(
+                        variants,
+                        selectedColor,
+                        item
+                      );
+
+                      const temporaryStock = getVariantStock(
+                        temporaryVariant,
+                        product
+                      );
+
+                      const disabled = variants.length > 0 && temporaryStock <= 0;
+
+                      return (
+                        <button
+                          key={item}
+                          disabled={disabled}
+                          onClick={() => {
+                            setSelectedSize(item);
+                            setQuantity(1);
+                          }}
+                          className={
+                            "flex h-12 min-w-12 items-center justify-center rounded-2xl border px-4 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-40 " +
+                            (selectedSize === item
+                              ? "border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-950/10"
+                              : "border-slate-200 text-slate-700 hover:border-orange-500 hover:text-orange-600")
+                          }
+                        >
+                          {item}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -687,15 +894,17 @@ export default function ProductDetailClient({
                     <p className="text-xs font-black uppercase tracking-wider text-slate-500">
                       Số lượng
                     </p>
+
                     <p className="mt-1 text-xs font-semibold text-slate-400">
-                      Còn {stock} sản phẩm
+                      {stock > 0 ? `Còn ${stock} sản phẩm` : "Biến thể đã hết hàng"}
                     </p>
                   </div>
 
                   <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     <button
                       onClick={decreaseQuantity}
-                      className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                      disabled={stock <= 0}
+                      className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Giảm số lượng"
                     >
                       <Minus size={15} />
@@ -707,7 +916,8 @@ export default function ProductDetailClient({
 
                     <button
                       onClick={increaseQuantity}
-                      className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                      disabled={stock <= 0}
+                      className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Tăng số lượng"
                     >
                       <Plus size={15} />
@@ -718,7 +928,8 @@ export default function ProductDetailClient({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     onClick={() => handleAdd(true)}
-                    className="btn-primary flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider"
+                    disabled={stock <= 0}
+                    className="btn-primary flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Zap size={16} />
                     Mua ngay
@@ -726,7 +937,8 @@ export default function ProductDetailClient({
 
                   <button
                     onClick={() => handleAdd(false)}
-                    className="btn-ghost flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider"
+                    disabled={stock <= 0}
+                    className="btn-ghost flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ShoppingBag size={16} />
                     Thêm giỏ

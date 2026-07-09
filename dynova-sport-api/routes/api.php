@@ -135,6 +135,8 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::delete('/brands/{id}', [AdminSimpleController::class, 'deleteBrand']);
 
     Route::get('/orders', [AdminSimpleController::class, 'orders']);
+    // Route::patch('/orders/{id}/status', [AdminSimpleController::class, 'updateOrderStatus']);
+    Route::get('/orders/{id}', [AdminSimpleController::class, 'showOrder']);
     Route::patch('/orders/{id}/status', [AdminSimpleController::class, 'updateOrderStatus']);
 
     Route::get('/customers', [AdminSimpleController::class, 'customers']);
