@@ -987,3 +987,28 @@ textarea.contact-input {
 .admin-scroll::-webkit-scrollbar-corner{
     background:transparent;
 }
+/* =====================================================
+   HIDE NEXT.JS DEV INDICATOR / DEVTOOLS ICON
+   Chỉ dùng để ẩn icon Next.js ở môi trường dev
+===================================================== */
+
+nextjs-portal {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+[data-nextjs-dev-indicator],
+[data-nextjs-build-indicator],
+[data-nextjs-toast],
+[data-nextjs-dialog],
+[data-nextjs-dialog-overlay],
+[data-nextjs-terminal],
+[data-nextjs-dev-tools-button],
+[data-next-badge-root] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

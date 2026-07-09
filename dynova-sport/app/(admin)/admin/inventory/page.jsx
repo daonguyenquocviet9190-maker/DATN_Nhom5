@@ -298,10 +298,10 @@ export default function AdminInventoryPage() {
               Quản lý tồn kho
             </h1>
 
-            <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
+            {/* <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
               Theo dõi sản phẩm còn hàng, hết hàng, số biến thể, tổng tồn kho và
               tồn kho min/max. Dữ liệu được tính từ bảng product_variants.stock.
-            </p>
+            </p> */}
           </div>
 
           <button

@@ -284,8 +284,8 @@ export default function AdminLayout({ children }) {
           href="/"
           className="mb-2 flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/[0.06] hover:text-orange-300"
         >
-          <Home size={18} />
-          Về website
+          {/* <Home size={18} />
+          Về website */}
         </Link>
 
         <button
