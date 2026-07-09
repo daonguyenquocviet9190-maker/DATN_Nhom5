@@ -185,10 +185,10 @@ export default function LoginPage() {
 
           <div className="relative z-10 flex h-full flex-col justify-between p-10">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
+              {/* <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
                 <Sparkles size={15} />
                 Dynova Member
-              </div>
+              </div> */}
 
               <h1 className="mt-8 max-w-xl text-6xl font-black uppercase leading-[0.95] tracking-[-0.06em]">
                 Đăng nhập để mua nhanh hơn
@@ -202,9 +202,9 @@ export default function LoginPage() {
 
             <div className="grid gap-3">
               {[
-                "Customer đăng nhập sẽ vào hồ sơ hoặc trang cần tiếp tục",
-                "Admin đăng nhập sẽ tự động chuyển vào trang quản trị",
-                "Token đăng nhập dùng cho checkout, wishlist và đơn hàng",
+                "Theo dõi trạng thái đơn hàng, xem lại lịch sử mua sắm và lưu lại danh sách sản phẩm yêu thích.",
+                "Nhận các mã giảm giá độc quyền, tích điểm thành viên và lưu sẵn thông tin thanh toán, địa chỉ để mua hàng nhanh chóng.",
+                "Nhận gợi ý sản phẩm phù hợp với bộ môn thể thao bạn yêu thích và tham gia đánh giá, bình luận về sản phẩm.",
               ].map((item) => (
                 <div
                   key={item}
@@ -221,8 +221,12 @@ export default function LoginPage() {
         <div className="mx-auto w-full max-w-[500px]">
           <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 md:p-8">
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-slate-950 text-sm font-black text-white shadow-xl shadow-slate-300">
-                DNV
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[26px] bg-white p-3 shadow-xl shadow-slate-200 ring-1 ring-slate-100">
+                <img
+                  src="/images/dynova-logo.jpg"
+                  alt="Dynova Sport"
+                  className="h-full w-full object-contain"
+                />
               </div>
 
               <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-orange-500">
@@ -328,8 +332,7 @@ export default function LoginPage() {
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
               <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
-              Admin sẽ được chuyển đến trang quản trị. Customer sẽ vào hồ sơ
-              hoặc trang đang cần đăng nhập.
+              Hệ thống sử dụng mã hóa bảo mật tối cao giúp bảo vệ tuyệt đối thông tin cá nhân và dữ liệu tài khoản của bạn.
             </div>
 
             <p className="mt-6 text-center text-sm text-slate-500">
