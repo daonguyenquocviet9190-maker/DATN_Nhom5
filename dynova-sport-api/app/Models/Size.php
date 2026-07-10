@@ -7,31 +7,29 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Brand extends Model
+class Size extends Model
 {
     use HasFactory;
 
-    protected $table = 'brands';
+    protected $table = 'sizes';
 
     protected $fillable = [
         'name',
-        'slug',
-        'description',
-        'logo',
-        'is_active',
+        'type',
         'sort_order',
+        'is_active',
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
         'sort_order' => 'integer',
+        'is_active' => 'boolean',
     ];
 
-    public function products(): HasMany
+    public function variants(): HasMany
     {
         return $this->hasMany(
-            Product::class,
-            'brand_id',
+            ProductVariant::class,
+            'size_id',
             'id'
         );
     }
