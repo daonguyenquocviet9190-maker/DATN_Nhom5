@@ -3,154 +3,60 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Product;
+use App\Models\Wishlist;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class WishlistController extends Controller
 {
-    private function getCurrentUser(Request $request)
+    public function index(Request $request): JsonResponse
     {
-        return $request->user();
-    }
+        $user = $request->user();
 
-    private function productExists($productId): bool
-    {
-        if (!Schema::hasTable('products')) {
-            return false;
-        }
+        $wishlists = Wishlist::query()
+            ->where('user_id', $user->id)
+            ->with([
+                'product' => function ($productQuery) {
+                    $productQuery
+                        ->with([
+                            'category:id,name,slug',
+                            'brand:id,name,slug,logo',
+                            'variants' => function ($variantQuery) {
+                                $variantQuery
+                                    ->active()
+                                    ->with([
+                                        'size:id,name,type,sort_order',
+                                        'color:id,name,code,hex,sort_order',
+                                    ])
+                                    ->orderBy('color_id')
+                                    ->orderBy('size_id');
+                            },
+                        ]);
+                },
+            ])
+            ->latest('id')
+            ->get();
 
-        return DB::table('products')
-            ->where('id', $productId)
-            ->exists();
-    }
+        $items = $wishlists
+            ->filter(fn (Wishlist $wishlist) => $wishlist->product !== null)
+            ->map(function (Wishlist $wishlist) {
+                $product = $wishlist->product;
 
-    private function productSelectColumns(): array
-    {
-        $columns = [
-            'products.id',
-        ];
+                if ($product?->brand) {
+                    $product->setAttribute('brand_data', $product->brand);
+                }
 
-        $possibleColumns = [
-            'name',
-            'slug',
-            'description',
-            'short_description',
-            'price',
-            'sale_price',
-            'old_price',
-            'compare_price',
-            'image',
-            'image_url',
-            'thumbnail',
-            'stock',
-            'quantity',
-            'status',
-            'category_id',
-            'brand_id',
-            'created_at',
-        ];
-
-        foreach ($possibleColumns as $column) {
-            if (Schema::hasColumn('products', $column)) {
-                $columns[] = 'products.' . $column;
-            }
-        }
-
-        return $columns;
-    }
-
-    private function normalizeProduct($product)
-    {
-        if (!$product) {
-            return null;
-        }
-
-        $image = $product->image_url
-            ?? $product->image
-            ?? $product->thumbnail
-            ?? null;
-
-        $price = $product->sale_price
-            ?? $product->price
-            ?? 0;
-
-        $oldPrice = $product->old_price
-            ?? $product->compare_price
-            ?? null;
-
-        return [
-            'id' => $product->id,
-            'name' => $product->name ?? 'Sản phẩm',
-            'slug' => $product->slug ?? null,
-            'description' => $product->description ?? null,
-            'short_description' => $product->short_description ?? null,
-            'price' => (float) $price,
-            'old_price' => $oldPrice ? (float) $oldPrice : null,
-            'image' => $image,
-            'image_url' => $image,
-            'stock' => $product->stock ?? $product->quantity ?? null,
-            'status' => $product->status ?? null,
-            'category_id' => $product->category_id ?? null,
-            'brand_id' => $product->brand_id ?? null,
-            'created_at' => $product->created_at ?? null,
-        ];
-    }
-
-    public function index(Request $request)
-    {
-        $user = $this->getCurrentUser($request);
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bạn cần đăng nhập để xem danh sách yêu thích.',
-            ], 401);
-        }
-
-        if (!Schema::hasTable('wishlists')) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Danh sách yêu thích chưa được khởi tạo.',
-                'data' => [
-                    'items' => [],
-                    'total' => 0,
-                ],
-            ]);
-        }
-
-        if (!Schema::hasTable('products')) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Chưa có bảng sản phẩm.',
-                'data' => [
-                    'items' => [],
-                    'total' => 0,
-                ],
-            ]);
-        }
-
-        $items = DB::table('wishlists')
-            ->join('products', 'products.id', '=', 'wishlists.product_id')
-            ->where('wishlists.user_id', $user->id)
-            ->orderByDesc('wishlists.id')
-            ->select(array_merge(
-                [
-                    'wishlists.id as wishlist_id',
-                    'wishlists.product_id',
-                    'wishlists.created_at as wishlisted_at',
-                ],
-                $this->productSelectColumns()
-            ))
-            ->get()
-            ->map(function ($item) {
                 return [
-                    'wishlist_id' => $item->wishlist_id,
-                    'product_id' => $item->product_id,
-                    'wishlisted_at' => $item->wishlisted_at,
-                    'product' => $this->normalizeProduct($item),
+                    'wishlist_id' => $wishlist->id,
+                    'product_id' => $wishlist->product_id,
+                    'wishlisted_at' => $wishlist->created_at,
+                    'product' => $product,
                 ];
-            });
+            })
+            ->values();
 
         return response()->json([
             'success' => true,
@@ -162,140 +68,136 @@ class WishlistController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
-        return $this->toggle($request);
-    }
-
-    public function toggle(Request $request)
-    {
-        $user = $this->getCurrentUser($request);
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bạn cần đăng nhập để lưu sản phẩm yêu thích.',
-            ], 401);
-        }
-
-        if (!Schema::hasTable('wishlists')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bảng wishlists chưa tồn tại.',
-            ], 500);
-        }
-
         $validated = $request->validate([
-            'product_id' => ['required', 'integer'],
+            'product_id' => [
+                'required',
+                'integer',
+                Rule::exists('products', 'id')->where(
+                    fn ($query) => $query->where('status', 'active')
+                ),
+            ],
         ], [
             'product_id.required' => 'Thiếu mã sản phẩm.',
             'product_id.integer' => 'Mã sản phẩm không hợp lệ.',
+            'product_id.exists' => 'Sản phẩm không tồn tại hoặc đã bị ẩn.',
         ]);
 
+        $user = $request->user();
         $productId = (int) $validated['product_id'];
 
-        if (!$this->productExists($productId)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Sản phẩm không tồn tại.',
-                'data' => [
-                    'product_id' => $productId,
-                    'wishlisted' => false,
-                ],
-            ], 422);
-        }
-
-        $wishlist = DB::table('wishlists')
-            ->where('user_id', $user->id)
-            ->where('product_id', $productId)
-            ->first();
-
-        if ($wishlist) {
-            DB::table('wishlists')
-                ->where('id', $wishlist->id)
-                ->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Đã xóa sản phẩm khỏi danh sách yêu thích.',
-                'data' => [
-                    'product_id' => $productId,
-                    'wishlisted' => false,
-                ],
-            ]);
-        }
-
-        DB::table('wishlists')->insert([
+        $wishlist = Wishlist::query()->firstOrCreate([
             'user_id' => $user->id,
             'product_id' => $productId,
-            'created_at' => now(),
-            'updated_at' => now(),
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Đã thêm sản phẩm vào danh sách yêu thích.',
+            'message' => $wishlist->wasRecentlyCreated
+                ? 'Đã thêm sản phẩm vào danh sách yêu thích.'
+                : 'Sản phẩm đã có trong danh sách yêu thích.',
             'data' => [
+                'wishlist_id' => $wishlist->id,
                 'product_id' => $productId,
                 'wishlisted' => true,
+            ],
+        ], $wishlist->wasRecentlyCreated ? 201 : 200);
+    }
+
+    public function toggle(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'product_id' => [
+                'required',
+                'integer',
+                Rule::exists('products', 'id')->where(
+                    fn ($query) => $query->where('status', 'active')
+                ),
+            ],
+        ], [
+            'product_id.required' => 'Thiếu mã sản phẩm.',
+            'product_id.integer' => 'Mã sản phẩm không hợp lệ.',
+            'product_id.exists' => 'Sản phẩm không tồn tại hoặc đã bị ẩn.',
+        ]);
+
+        $user = $request->user();
+        $productId = (int) $validated['product_id'];
+
+        $result = DB::transaction(function () use ($user, $productId) {
+            $wishlist = Wishlist::query()
+                ->where('user_id', $user->id)
+                ->where('product_id', $productId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($wishlist) {
+                $wishlist->delete();
+
+                return [
+                    'wishlist_id' => null,
+                    'wishlisted' => false,
+                ];
+            }
+
+            $created = Wishlist::query()->create([
+                'user_id' => $user->id,
+                'product_id' => $productId,
+            ]);
+
+            return [
+                'wishlist_id' => $created->id,
+                'wishlisted' => true,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['wishlisted']
+                ? 'Đã thêm sản phẩm vào danh sách yêu thích.'
+                : 'Đã xóa sản phẩm khỏi danh sách yêu thích.',
+            'data' => [
+                'wishlist_id' => $result['wishlist_id'],
+                'product_id' => $productId,
+                'wishlisted' => $result['wishlisted'],
             ],
         ]);
     }
 
-    public function destroy(Request $request, $productId)
+    public function destroy(Request $request, int $productId): JsonResponse
     {
-        $user = $this->getCurrentUser($request);
+        $user = $request->user();
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bạn cần đăng nhập để xóa sản phẩm yêu thích.',
-            ], 401);
-        }
-
-        if (Schema::hasTable('wishlists')) {
-            DB::table('wishlists')
-                ->where('user_id', $user->id)
-                ->where('product_id', (int) $productId)
-                ->delete();
-        }
+        Wishlist::query()
+            ->where('user_id', $user->id)
+            ->where('product_id', $productId)
+            ->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Đã xóa sản phẩm khỏi danh sách yêu thích.',
             'data' => [
-                'product_id' => (int) $productId,
+                'product_id' => $productId,
                 'wishlisted' => false,
             ],
         ]);
     }
 
-    public function check(Request $request, $productId)
+    public function check(Request $request, int $productId): JsonResponse
     {
-        $user = $this->getCurrentUser($request);
+        $user = $request->user();
 
-        if (!$user || !Schema::hasTable('wishlists')) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Chưa đăng nhập hoặc chưa có bảng yêu thích.',
-                'data' => [
-                    'product_id' => (int) $productId,
-                    'wishlisted' => false,
-                ],
-            ]);
-        }
-
-        $exists = DB::table('wishlists')
+        $wishlisted = Wishlist::query()
             ->where('user_id', $user->id)
-            ->where('product_id', (int) $productId)
+            ->where('product_id', $productId)
             ->exists();
 
         return response()->json([
             'success' => true,
             'message' => 'Kiểm tra yêu thích thành công.',
             'data' => [
-                'product_id' => (int) $productId,
-                'wishlisted' => $exists,
+                'product_id' => $productId,
+                'wishlisted' => $wishlisted,
             ],
         ]);
     }
