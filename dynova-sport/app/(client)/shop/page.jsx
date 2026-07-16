@@ -3,8 +3,8 @@
 import "./shop.css";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -60,6 +60,7 @@ function extractCategories(response) {
 
 export default function ShopPage() {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [items, setItems] = useState([]);
   const [apiCategories, setApiCategories] = useState([]);
@@ -74,8 +75,12 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [stateReady, setStateReady] = useState(false);
+  const skipFirstPageReset = useRef(true);
 
   const PAGE_SIZE = 12;
+  const SHOP_SCROLL_KEY = "dynova_shop_scroll_y";
+  const SHOP_CACHE_KEY = "dynova_shop_cache_v1";
 
   useEffect(() => {
     let mounted = true;
@@ -91,9 +96,48 @@ export default function ShopPage() {
 
         const categoryParam = params.get("category");
         const keywordParam = params.get("q");
+        const brandParam = params.get("brand");
+        const rawMaxPriceParam = params.get("maxPrice");
+        const maxPriceParam =
+          rawMaxPriceParam !== null &&
+          rawMaxPriceParam.trim() !== ""
+            ? Number(rawMaxPriceParam)
+            : null;
+        const sortParam = params.get("sort");
+        const pageParam = Number(params.get("page"));
 
-        if (categoryParam) setCategory(categoryParam);
-        if (keywordParam) setQuery(keywordParam);
+        setCategory(categoryParam || "all");
+        setQuery(keywordParam || "");
+        setBrand(brandParam || "all");
+        setSort(sortParam || "newest");
+
+        if (Number.isFinite(pageParam) && pageParam > 0) {
+          setCurrentPage(pageParam);
+        }
+
+        const cached = sessionStorage.getItem(SHOP_CACHE_KEY);
+
+        if (cached) {
+          try {
+            const cacheData = JSON.parse(cached);
+
+            if (
+              Array.isArray(cacheData?.products) &&
+              Date.now() - Number(cacheData?.savedAt || 0) < 300000
+            ) {
+              setItems(cacheData.products);
+              setApiCategories(
+                Array.isArray(cacheData.categories) &&
+                  cacheData.categories.length > 0
+                  ? cacheData.categories
+                  : localCategories
+              );
+              setLoading(false);
+            }
+          } catch {
+            sessionStorage.removeItem(SHOP_CACHE_KEY);
+          }
+        }
 
         const [productResponse, categoryResponse] = await Promise.all([
           getProducts({ per_page: 100 }),
@@ -131,9 +175,27 @@ export default function ShopPage() {
             ? Math.max(...prices, 5000000)
             : 5000000;
 
-        setMaxPrice(highest);
-      } catch (error) {
-        console.log("Shop API error:", error);
+        setMaxPrice(
+          Number.isFinite(maxPriceParam) && maxPriceParam > 0
+            ? Math.min(
+                Math.max(maxPriceParam, 1),
+                highest
+              )
+            : highest
+        );
+
+        sessionStorage.setItem(
+          SHOP_CACHE_KEY,
+          JSON.stringify({
+            products: finalProducts,
+            categories:
+              Array.isArray(categoryList) && categoryList.length > 0
+                ? categoryList
+                : localCategories,
+            savedAt: Date.now(),
+          })
+        );
+      } catch {
 
         if (!mounted) return;
 
@@ -151,7 +213,21 @@ export default function ShopPage() {
             : 5000000
         );
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setStateReady(true);
+        }
+      }
+
+      const authToken =
+        localStorage.getItem("dynova_auth_token") ||
+        localStorage.getItem("auth_token") ||
+        localStorage.getItem("token") ||
+        "";
+
+      if (!authToken) {
+        if (mounted) setWishlist([]);
+        return;
       }
 
       try {
@@ -193,12 +269,104 @@ export default function ShopPage() {
   }, [items]);
 
   const highestPrice = useMemo(() => {
-    const prices = items.map(getProductDisplayPrice);
+    const prices = items
+      .map(getProductDisplayPrice)
+      .filter((price) => Number.isFinite(price) && price > 0);
 
     return prices.length > 0
       ? Math.max(...prices, 5000000)
       : 5000000;
   }, [items]);
+
+  const lowestPrice = useMemo(() => {
+    const prices = items
+      .map(getProductDisplayPrice)
+      .filter((price) => Number.isFinite(price) && price > 0);
+
+    if (prices.length === 0) return 0;
+
+    return Math.max(
+      0,
+      Math.floor(Math.min(...prices) / 50000) * 50000
+    );
+  }, [items]);
+
+  useEffect(() => {
+    if (!stateReady || typeof window === "undefined") return;
+
+    const params = new URLSearchParams();
+
+    if (query.trim()) params.set("q", query.trim());
+    if (category !== "all") params.set("category", category);
+    if (brand !== "all") params.set("brand", brand);
+    if (maxPrice > 0 && maxPrice < highestPrice) {
+      params.set("maxPrice", String(maxPrice));
+    }
+    if (sort !== "newest") params.set("sort", sort);
+    if (currentPage > 1) params.set("page", String(currentPage));
+
+    const nextUrl = params.toString()
+      ? `${pathname}?${params.toString()}`
+      : pathname;
+
+    const currentUrl =
+      window.location.pathname + window.location.search;
+
+    if (nextUrl !== currentUrl) {
+      router.replace(nextUrl, { scroll: false });
+    }
+  }, [
+    stateReady,
+    pathname,
+    router,
+    query,
+    category,
+    brand,
+    maxPrice,
+    sort,
+    currentPage,
+    highestPrice,
+  ]);
+
+  useEffect(() => {
+    if (!stateReady || loading || typeof window === "undefined") return;
+
+    const savedScroll = Number(
+      sessionStorage.getItem(SHOP_SCROLL_KEY) || 0
+    );
+
+    if (savedScroll > 0) {
+      requestAnimationFrame(() => {
+        window.scrollTo({
+          top: savedScroll,
+          behavior: "auto",
+        });
+        sessionStorage.removeItem(SHOP_SCROLL_KEY);
+      });
+    }
+  }, [stateReady, loading]);
+
+  const getProductDetailHref = (productId) => {
+    if (typeof window === "undefined") {
+      return `/shop/product/${productId}`;
+    }
+
+    const returnUrl =
+      window.location.pathname + window.location.search;
+
+    return `/shop/product/${productId}?from=${encodeURIComponent(
+      returnUrl
+    )}`;
+  };
+
+  const rememberShopPosition = () => {
+    if (typeof window === "undefined") return;
+
+    sessionStorage.setItem(
+      SHOP_SCROLL_KEY,
+      String(window.scrollY)
+    );
+  };
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -267,8 +435,15 @@ export default function ShopPage() {
   }, [items, query, category, brand, maxPrice, sort]);
 
   useEffect(() => {
+    if (!stateReady) return;
+
+    if (skipFirstPageReset.current) {
+      skipFirstPageReset.current = false;
+      return;
+    }
+
     setCurrentPage(1);
-  }, [query, category, brand, maxPrice, sort]);
+  }, [stateReady, query, category, brand, maxPrice, sort]);
 
   const selectedCategoryName = useMemo(() => {
     if (category === "all") return "Tất cả sản phẩm";
@@ -351,7 +526,8 @@ export default function ShopPage() {
       : [];
 
     if (variants.length !== 1) {
-      router.push(`/shop/product/${product.id}`);
+      rememberShopPosition();
+      router.push(getProductDetailHref(product.id));
       return;
     }
 
@@ -481,7 +657,7 @@ export default function ShopPage() {
             </h1>
 
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 md:text-base">
-              Lọc sản phẩm theo danh mục, thương hiệu và khoảng giá để chọn đúng trang bị.
+              Khám phá sản phẩm phù hợp với nhu cầu luyện tập và thi đấu.
             </p>
           </div>
 
@@ -664,7 +840,7 @@ export default function ShopPage() {
 
                 <input
                   type="range"
-                  min="0"
+                  min={lowestPrice}
                   max={highestPrice}
                   step="50000"
                   value={maxPrice}
@@ -756,7 +932,8 @@ export default function ShopPage() {
                     >
                       <div className="relative overflow-hidden bg-slate-100">
                         <Link
-                          href={`/shop/product/${product.id}`}
+                          href={getProductDetailHref(product.id)}
+                          onClick={rememberShopPosition}
                         >
                           <img
                             src={getProductImage(product)}
@@ -823,7 +1000,8 @@ export default function ShopPage() {
                         )}
 
                         <Link
-                          href={`/shop/product/${product.id}`}
+                          href={getProductDetailHref(product.id)}
+                          onClick={rememberShopPosition}
                         >
                           <h3 className="mt-2 line-clamp-2 min-h-11 text-base font-black leading-6 text-slate-950 transition hover:text-orange-600">
                             {product.name}

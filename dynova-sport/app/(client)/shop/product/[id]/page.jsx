@@ -1,6 +1,9 @@
 import Link from "next/link";
 import ProductDetailClient from "@/components/product/ProductDetailClient";
-import { getProductById, getProducts } from "@/services/product.service";
+import {
+  getProductById,
+  getProducts,
+} from "@/services/product.service";
 import {
   extractProduct,
   extractProducts,
@@ -44,14 +47,13 @@ function ErrorState({
 }
 
 export default async function ProductDetailPage({ params }) {
-  const resolvedParams = await params;
-  const productId = resolvedParams?.id;
+  const { id: productId } = await params;
 
   if (!productId) {
     return (
       <ErrorState
         title="Đường dẫn sản phẩm không hợp lệ"
-        description="Không xác định được mã sản phẩm trong đường dẫn."
+        description="Không xác định được sản phẩm cần hiển thị."
       />
     );
   }
@@ -62,25 +64,29 @@ export default async function ProductDetailPage({ params }) {
     const product = normalizeProduct(rawProduct);
 
     if (!product?.id) {
-      throw new Error("Không tìm thấy sản phẩm.");
+      return <ErrorState />;
     }
 
     let relatedProducts = [];
 
     if (product.category_id) {
-      const relatedResponse = await getProducts({
-        category: product.category_id,
-        per_page: 8,
-      });
+      try {
+        const relatedResponse = await getProducts({
+          category: product.category_id,
+          per_page: 8,
+        });
 
-      relatedProducts = extractProducts(relatedResponse)
-        .map(normalizeProduct)
-        .filter(
-          (item) =>
-            item?.id &&
-            Number(item.id) !== Number(product.id)
-        )
-        .slice(0, 8);
+        relatedProducts = extractProducts(relatedResponse)
+          .map(normalizeProduct)
+          .filter(
+            (item) =>
+              item?.id &&
+              Number(item.id) !== Number(product.id)
+          )
+          .slice(0, 8);
+      } catch {
+        relatedProducts = [];
+      }
     }
 
     return (
@@ -89,13 +95,7 @@ export default async function ProductDetailPage({ params }) {
         relatedProducts={relatedProducts}
       />
     );
-  } catch (error) {
-    console.log("Product detail API error:", error?.message || error);
-
-    return (
-      <ErrorState
-        description="Sản phẩm có thể đã bị ẩn hoặc API sản phẩm chưa trả đủ dữ liệu thương hiệu, size và màu."
-      />
-    );
+  } catch {
+    return <ErrorState />;
   }
 }

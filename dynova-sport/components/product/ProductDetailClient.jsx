@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -33,6 +33,7 @@ import {
   toggleWishlistApi,
 } from "@/services/wishlist.service";
 import ProductReviews from "@/components/reviews/ProductReviews";
+import { getAuthToken } from "@/services/auth.service";
 
 const API_HOST = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -512,6 +513,23 @@ export default function ProductDetailClient({
   relatedProducts = [],
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const returnToShop = () => {
+    const from = searchParams.get("from");
+
+    if (
+      from &&
+      from.startsWith("/shop") &&
+      !from.startsWith("//") &&
+      !from.includes("\\")
+    ) {
+      router.push(from);
+      return;
+    }
+
+    router.push("/shop");
+  };
 
   const variants = useMemo(() => {
     return getRawVariants(product)
@@ -761,7 +779,10 @@ export default function ProductDetailClient({
 
   useEffect(() => {
     async function loadWishlistStatus() {
-      if (!product?.id) return;
+      if (!product?.id || !getAuthToken()) {
+        setLiked(false);
+        return;
+      }
 
       try {
         const result = await checkWishlistItem(product.id);
@@ -983,12 +1004,13 @@ export default function ProductDetailClient({
 
             <ChevronRight size={14} />
 
-            <Link
-              href="/shop"
+            <button
+              type="button"
+              onClick={returnToShop}
               className="transition hover:text-orange-300"
             >
               Sản phẩm
-            </Link>
+            </button>
 
             <ChevronRight size={14} />
 
@@ -1019,13 +1041,14 @@ export default function ProductDetailClient({
       </section>
 
       <div className="container-page relative z-20 -mt-6">
-        <Link
-          href="/shop"
+        <button
+          type="button"
+          onClick={returnToShop}
           className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm transition hover:-translate-x-1 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
         >
           <ArrowLeft size={16} />
           Quay lại cửa hàng
-        </Link>
+        </button>
 
         <section className="product-detail-card grid gap-8 rounded-[34px] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
           <div className="grid gap-4 lg:grid-cols-[92px_1fr]">
@@ -1643,12 +1666,13 @@ export default function ProductDetailClient({
                 </h2>
               </div>
 
-              <Link
-                href="/shop"
+              <button
+                type="button"
+                onClick={returnToShop}
                 className="hidden rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 sm:inline-flex"
               >
                 Xem tất cả
-              </Link>
+              </button>
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
