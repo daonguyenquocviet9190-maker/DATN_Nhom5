@@ -52911,3 +52911,7 @@
 #64 E:/DATN_Nhom5/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('E://DATN_Nhom5//D...')
 #65 {main}
 "} 
+[2026-07-21 07:36:19] local.ERROR: Maximum execution time of 60 seconds exceeded {"exception":"[object] (Symfony\\Component\\ErrorHandler\\Error\\FatalError(code: 0): Maximum execution time of 60 seconds exceeded at F:/My-Front-end/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connectors/Connector.php:66)
+[stacktrace]
+#0 {main}
+"} 
