@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle,
+  AlertCircle,
   Minus,
   Plus,
   ShieldCheck,
@@ -17,18 +18,26 @@ import {
 
 import { formatCurrency } from "@/data/shop";
 import {
-  calculateOrder,
   getCart,
   removeCartItem,
   updateCartItem,
 } from "@/utils/shopStorage";
 
 const FREE_SHIPPING_TARGET = 799000;
+// URL API Backend Laravel của bạn
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export default function CartPage() {
   const [items, setItems] = useState([]);
   const [coupon, setCoupon] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
+  
+  // Quản lý thông tin giảm giá từ API
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState("");
+  const [isErrorCoupon, setIsErrorCoupon] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+
   const [notice, setNotice] = useState("");
 
   const syncCart = () => {
@@ -40,26 +49,39 @@ export default function CartPage() {
     syncCart();
   }, []);
 
-  const totals = useMemo(
-    () => calculateOrder(items, appliedCoupon),
-    [items, appliedCoupon]
-  );
+  // 1. Tính tổng giá trị giỏ hàng (Subtotal)
+  const subtotal = useMemo(() => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [items]);
+
+  // 2. Tính phí vận chuyển tạm tính
+  const shipping = subtotal >= FREE_SHIPPING_TARGET || subtotal === 0 ? 0 : 30000;
+
+  // 3. Tính tổng tiền cuối cùng
+  const finalTotal = useMemo(() => {
+    const totalAfterDiscount = subtotal - discountAmount;
+    return Math.max(0, totalAfterDiscount) + shipping;
+  }, [subtotal, discountAmount, shipping]);
 
   const progress = Math.min(
     100,
-    Math.round((totals.subtotal / FREE_SHIPPING_TARGET) * 100)
+    Math.round((subtotal / FREE_SHIPPING_TARGET) * 100)
   );
 
-  const missingFreeShip = Math.max(0, FREE_SHIPPING_TARGET - totals.subtotal);
+  const missingFreeShip = Math.max(0, FREE_SHIPPING_TARGET - subtotal);
 
   const showNotice = (text) => {
     setNotice(text);
-    setTimeout(() => setNotice(""), 1800);
+    setTimeout(() => setNotice(""), 2000);
   };
 
   const updateQty = (key, qty) => {
     updateCartItem(key, Math.max(1, qty));
     syncCart();
+    // Nếu đã áp dụng coupon, tự động tính toán lại với subtotal mới
+    if (appliedCoupon) {
+      reValidateCoupon(appliedCoupon, subtotal);
+    }
   };
 
   const remove = (key) => {
@@ -68,17 +90,88 @@ export default function CartPage() {
     showNotice("Đã xóa sản phẩm khỏi giỏ hàng.");
   };
 
-  const applyCoupon = () => {
-    const cleanCoupon = coupon.trim().toUpperCase();
+  // Hàm gọi API Backend kiểm tra mã giảm giá
+  const handleApplyCoupon = async (codeToApply) => {
+    const cleanCoupon = codeToApply.trim().toUpperCase();
 
     if (!cleanCoupon) {
-      setAppliedCoupon("");
-      showNotice("Vui lòng nhập mã giảm giá.");
+      removeAppliedCoupon();
+      setCouponMessage("Vui lòng nhập mã giảm giá.");
+      setIsErrorCoupon(true);
       return;
     }
 
-    setAppliedCoupon(cleanCoupon);
-    showNotice("Đã áp dụng mã giảm giá.");
+    setIsApplying(true);
+    setCouponMessage("");
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          code: cleanCoupon,
+          cart_total: subtotal,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setAppliedCoupon(data.data.code);
+        setDiscountAmount(data.data.discount_amount);
+        setCouponMessage(data.message || "Áp dụng mã giảm giá thành công!");
+        setIsErrorCoupon(false);
+        showNotice("Đã áp dụng mã giảm giá!");
+      } else {
+        setDiscountAmount(0);
+        setCouponMessage(data.message || "Mã giảm giá không hợp lệ.");
+        setIsErrorCoupon(true);
+      }
+    } catch (error) {
+      console.error("Voucher API Error:", error);
+      setDiscountAmount(0);
+      setCouponMessage("Không thể kết nối đến máy chủ.");
+      setIsErrorCoupon(true);
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  // Hàm tính lại giảm giá nếu người dùng thay đổi số lượng
+  const reValidateCoupon = (code, currentSubtotal) => {
+    fetch(`${API_BASE_URL}/vouchers/apply`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        code: code,
+        cart_total: currentSubtotal,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setDiscountAmount(data.data.discount_amount);
+        } else {
+          removeAppliedCoupon();
+          setCouponMessage(data.message || "Mã không còn đủ điều kiện.");
+          setIsErrorCoupon(true);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const removeAppliedCoupon = () => {
+    setAppliedCoupon("");
+    setCoupon("");
+    setDiscountAmount(0);
+    setCouponMessage("");
+    setIsErrorCoupon(false);
   };
 
   return (
@@ -276,35 +369,39 @@ export default function CartPage() {
                       setCoupon(e.target.value.toUpperCase())
                     }
                     className="h-[46px] min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black uppercase text-slate-950 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10"
-                    placeholder="DYNOVANEW"
+                    placeholder="SPORT10"
+                    disabled={isApplying}
                   />
 
                   <button
-                    onClick={applyCoupon}
-                    className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white transition hover:bg-orange-500"
+                    onClick={() => handleApplyCoupon(coupon)}
+                    disabled={isApplying}
+                    className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white transition hover:bg-orange-500 disabled:opacity-50"
                   >
-                    Áp dụng
+                    {isApplying ? "Đang xử lý..." : "Áp dụng"}
                   </button>
                 </div>
 
                 {appliedCoupon && (
-                  <div className="mt-3 flex items-center justify-between rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-500">
+                  <div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-black text-emerald-700">
                     <span>Đang áp dụng: {appliedCoupon}</span>
                     <button
-                      onClick={() => {
-                        setAppliedCoupon("");
-                        setCoupon("");
-                      }}
-                      className="text-slate-400 hover:text-rose-500"
+                      onClick={removeAppliedCoupon}
+                      className="text-emerald-500 hover:text-rose-500"
                     >
                       <X size={14} />
                     </button>
                   </div>
                 )}
 
-                {totals.message && (
-                  <p className="mt-2 text-xs font-bold text-slate-500">
-                    {totals.message}
+                {couponMessage && (
+                  <p
+                    className={`mt-2 flex items-center gap-1.5 text-xs font-bold ${
+                      isErrorCoupon ? "text-rose-500" : "text-emerald-600"
+                    }`}
+                  >
+                    {isErrorCoupon && <AlertCircle size={14} />}
+                    {couponMessage}
                   </p>
                 )}
               </div>
@@ -313,23 +410,21 @@ export default function CartPage() {
                 <div className="flex justify-between">
                   <span>Tạm tính</span>
                   <span className="text-slate-950">
-                    {formatCurrency(totals.subtotal)}
+                    {formatCurrency(subtotal)}
                   </span>
                 </div>
 
                 <div className="flex justify-between">
                   <span>Vận chuyển tạm tính</span>
                   <span className="text-slate-950">
-                    {totals.shipping === 0
-                      ? "Miễn phí"
-                      : formatCurrency(totals.shipping)}
+                    {shipping === 0 ? "Miễn phí" : formatCurrency(shipping)}
                   </span>
                 </div>
 
-                {totals.discount > 0 && (
-                  <div className="flex justify-between text-rose-600">
-                    <span>Giảm giá</span>
-                    <span>-{formatCurrency(totals.discount)}</span>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-rose-600 font-bold">
+                    <span>Giảm giá ({appliedCoupon})</span>
+                    <span>-{formatCurrency(discountAmount)}</span>
                   </div>
                 )}
               </div>
@@ -338,13 +433,16 @@ export default function CartPage() {
                 <div className="flex items-end justify-between">
                   <span className="font-black text-slate-950">Tổng cộng</span>
                   <span className="text-3xl font-black text-orange-600">
-                    {formatCurrency(totals.total)}
+                    {formatCurrency(finalTotal)}
                   </span>
                 </div>
               </div>
 
               <Link
-                href="/checkout"
+                href={{
+                  pathname: "/checkout",
+                  query: appliedCoupon ? { coupon: appliedCoupon } : {},
+                }}
                 className="mt-6 block rounded-2xl bg-orange-500 py-4 text-center text-xs font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600"
               >
                 Tiến hành thanh toán

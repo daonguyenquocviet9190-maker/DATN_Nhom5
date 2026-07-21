@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Banknote,
@@ -14,13 +14,14 @@ import {
   Phone,
   ShieldCheck,
   Smartphone,
+  Tag,
   Truck,
   User,
+  X,
 } from "lucide-react";
 
 import { bankAccount, formatCurrency } from "@/data/shop";
 import {
-  calculateOrder,
   clearCart,
   getCart,
   getCurrentUser,
@@ -36,6 +37,8 @@ import {
   getMergedProvinces,
   getProvinceWards,
 } from "@/services/address.service";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 const paymentMethods = [
   {
@@ -66,23 +69,18 @@ const paymentMethods = [
 
 function isEmail(value) {
   if (!value) return true;
-
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function isPhone(value) {
   return /^(0|\+84)[0-9]{8,10}$/.test(value.replace(/\s/g, ""));
 }
+
 function createVietQrUrl({ amount, orderCode, phone }) {
   const bankCode = bankAccount.bankCode || "MB";
-  const accountNumber = String(bankAccount.accountNumber || "").replace(
-    /\s/g,
-    ""
-  );
+  const accountNumber = String(bankAccount.accountNumber || "").replace(/\s/g, "");
   const accountName = encodeURIComponent(bankAccount.accountName || "");
-  const addInfo = encodeURIComponent(
-    `${orderCode || "DYNOVA"} ${phone || ""}`.trim()
-  );
+  const addInfo = encodeURIComponent(`${orderCode || "DYNOVA"} ${phone || ""}`.trim());
 
   return `https://img.vietqr.io/image/${bankCode}-${accountNumber}-compact2.png?amount=${Math.round(
     amount
@@ -111,7 +109,6 @@ function Field({ label, icon: Icon, error, children }) {
             className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
           />
         )}
-
         {children}
       </div>
 
@@ -120,12 +117,18 @@ function Field({ label, icon: Icon, error, children }) {
   );
 }
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
-  // console.log("BANK ACCOUNT CHECKOUT:", bankAccount);
+  const searchParams = useSearchParams();
 
   const [items, setItems] = useState([]);
-  const [coupon, setCoupon] = useState("");
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState("");
+  const [isErrorCoupon, setIsErrorCoupon] = useState(false);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -154,6 +157,13 @@ export default function CheckoutPage() {
     note: "",
   });
 
+  const subtotal = useMemo(() => {
+    return items.reduce(
+      (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+      0
+    );
+  }, [items]);
+
   useEffect(() => {
     const cart = getCart();
     const user = getCurrentUser();
@@ -170,7 +180,86 @@ export default function CheckoutPage() {
         address: user.address || "",
       }));
     }
-  }, []);
+
+    const urlCoupon = searchParams ? searchParams.get("coupon") : null;
+    const savedCoupon = urlCoupon || localStorage.getItem("applied_coupon") || "";
+
+    if (savedCoupon) {
+      setCouponInput(savedCoupon);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (subtotal > 0 && couponInput) {
+      verifyCoupon(couponInput, subtotal);
+    }
+  }, [subtotal]);
+
+  const verifyCoupon = async (codeToVerify, currentSubtotal) => {
+    const cleanCode = codeToVerify.trim().toUpperCase();
+    if (!cleanCode) return;
+
+    setIsApplyingCoupon(true);
+    setCouponMessage("");
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          code: cleanCode,
+          coupon: cleanCode,
+          cart_total: currentSubtotal,
+          subtotal: currentSubtotal,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && (data.success || data.status)) {
+        const discountVal =
+          data.data?.discount_amount ?? data.data?.discount_value ?? data.discount ?? 0;
+
+        setAppliedCoupon(cleanCode);
+        setDiscountAmount(Number(discountVal));
+        setCouponMessage(data.message || "Áp dụng mã giảm giá thành công!");
+        setIsErrorCoupon(false);
+
+        localStorage.setItem("applied_coupon", cleanCode);
+        localStorage.setItem("discount_amount", discountVal);
+      } else {
+        removeCouponState();
+        setCouponMessage(data.message || "Mã giảm giá không tồn tại hoặc không đủ điều kiện.");
+        setIsErrorCoupon(true);
+      }
+    } catch {
+      setCouponMessage("Lỗi kết nối tới máy chủ khi kiểm tra mã.");
+      setIsErrorCoupon(true);
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
+
+  const removeCouponState = () => {
+    setAppliedCoupon("");
+    setDiscountAmount(0);
+    localStorage.removeItem("applied_coupon");
+    localStorage.removeItem("discount_amount");
+  };
+
+  const handleApplyCoupon = (e) => {
+    e.preventDefault();
+    if (!couponInput.trim()) {
+      removeCouponState();
+      setCouponMessage("Vui lòng nhập mã giảm giá.");
+      setIsErrorCoupon(true);
+      return;
+    }
+    verifyCoupon(couponInput, subtotal);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -181,7 +270,6 @@ export default function CheckoutPage() {
         setAddressError("");
 
         const data = await getMergedProvinces();
-
         if (!mounted) return;
 
         setProvinces(data);
@@ -193,7 +281,6 @@ export default function CheckoutPage() {
 
         if (defaultProvince) {
           const defaultWards = getProvinceWards(defaultProvince);
-
           setWards(defaultWards);
 
           setForm((prev) => ({
@@ -205,27 +292,17 @@ export default function CheckoutPage() {
           }));
         }
       } catch {
-        setAddressError(
-          "Không tải được dữ liệu địa chỉ. Bạn có thể thử lại sau."
-        );
+        setAddressError("Không tải được dữ liệu địa chỉ.");
       } finally {
-        if (mounted) {
-          setAddressLoading(false);
-        }
+        if (mounted) setAddressLoading(false);
       }
     }
 
     loadAddressData();
-
     return () => {
       mounted = false;
     };
   }, []);
-
-  const localTotals = useMemo(
-    () => calculateOrder(items, coupon),
-    [items, coupon]
-  );
 
   const totalWeight = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -234,15 +311,9 @@ export default function CheckoutPage() {
     }, 0);
   }, [items]);
 
-  const finalShipping =
-    shippingFee !== null ? Number(shippingFee) : Number(localTotals.shipping);
-
-  const finalTotal = Math.max(
-    0,
-    Number(localTotals.subtotal) -
-    Number(localTotals.discount || 0) +
-    Number(finalShipping)
-  );
+  const defaultShipping = subtotal >= 799000 || subtotal === 0 ? 0 : 30000;
+  const finalShipping = shippingFee !== null ? Number(shippingFee) : defaultShipping;
+  const finalTotal = Math.max(0, subtotal - discountAmount) + finalShipping;
 
   const bankQrUrl = useMemo(() => {
     return createVietQrUrl({
@@ -254,29 +325,16 @@ export default function CheckoutPage() {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    setErrors((prev) => ({
-      ...prev,
-      [name]: "",
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleProvinceChange = (event) => {
     const provinceCode = event.target.value;
-
-    const province = provinces.find(
-      (item) => String(item.code) === String(provinceCode)
-    );
-
+    const province = provinces.find((item) => String(item.code) === String(provinceCode));
     const nextWards = getProvinceWards(province);
 
     setWards(nextWards);
-
     setForm((prev) => ({
       ...prev,
       provinceCode,
@@ -287,17 +345,10 @@ export default function CheckoutPage() {
 
     setShippingFee(null);
     setShippingMessage("");
-
-    setErrors((prev) => ({
-      ...prev,
-      province: "",
-      ward: "",
-    }));
   };
 
   const handleWardChange = (event) => {
     const wardCode = event.target.value;
-
     const ward = wards.find((item) => String(item.code) === String(wardCode));
 
     setForm((prev) => ({
@@ -308,52 +359,29 @@ export default function CheckoutPage() {
 
     setShippingFee(null);
     setShippingMessage("");
-
-    setErrors((prev) => ({
-      ...prev,
-      ward: "",
-    }));
   };
 
   const validate = () => {
     const nextErrors = {};
 
-    if (!form.fullName.trim()) {
-      nextErrors.fullName = "Vui lòng nhập họ tên.";
-    }
-
+    if (!form.fullName.trim()) nextErrors.fullName = "Vui lòng nhập họ tên.";
     if (!form.phone.trim()) {
       nextErrors.phone = "Vui lòng nhập số điện thoại.";
     } else if (!isPhone(form.phone)) {
       nextErrors.phone = "Số điện thoại chưa đúng định dạng.";
     }
-
-    if (form.email && !isEmail(form.email)) {
-      nextErrors.email = "Email chưa đúng định dạng.";
-    }
-
-    if (!form.province.trim()) {
-      nextErrors.province = "Vui lòng chọn tỉnh/thành phố.";
-    }
-
-    if (!form.ward.trim()) {
-      nextErrors.ward = "Vui lòng chọn phường/xã.";
-    }
-
-    if (!form.address.trim()) {
-      nextErrors.address = "Vui lòng nhập địa chỉ nhận hàng.";
-    }
+    if (form.email && !isEmail(form.email)) nextErrors.email = "Email chưa đúng định dạng.";
+    if (!form.province.trim()) nextErrors.province = "Vui lòng chọn tỉnh/thành phố.";
+    if (!form.ward.trim()) nextErrors.ward = "Vui lòng chọn phường/xã.";
+    if (!form.address.trim()) nextErrors.address = "Vui lòng nhập địa chỉ nhận hàng.";
 
     setErrors(nextErrors);
-
     return Object.keys(nextErrors).length === 0;
   };
 
   const handleCalculateShipping = async () => {
     if (!form.province.trim() || !form.ward.trim() || !form.address.trim()) {
-      setShippingMessage(
-        "Vui lòng chọn tỉnh/thành, phường/xã và nhập địa chỉ trước."
-      );
+      setShippingMessage("Vui lòng nhập đầy đủ địa chỉ trước.");
       return;
     }
 
@@ -364,29 +392,21 @@ export default function CheckoutPage() {
       const response = await calculateShippingFee({
         province: form.province,
         provinceCode: form.provinceCode,
-
-        // Giữ district = ward để tương thích backend/GHTK cũ nếu backend còn bắt district.
         district: form.ward,
-
         ward: form.ward,
         wardCode: form.wardCode,
         address: form.address,
         weight: totalWeight,
-        value: localTotals.subtotal,
+        value: subtotal,
         items,
       });
 
       const fee = Number(response?.data?.fee ?? response?.fee ?? 0);
-
       setShippingFee(fee);
-      setShippingMessage(
-        response?.message || "Đã tính phí vận chuyển theo API."
-      );
+      setShippingMessage(response?.message || "Đã tính phí vận chuyển.");
     } catch {
-      setShippingFee(localTotals.shipping);
-      setShippingMessage(
-        "Chưa kết nối được API vận chuyển, đang dùng phí tạm tính demo."
-      );
+      setShippingFee(defaultShipping);
+      setShippingMessage("Dùng phí vận chuyển tiêu chuẩn.");
     } finally {
       setShippingLoading(false);
     }
@@ -398,14 +418,8 @@ export default function CheckoutPage() {
     if (!items.length) return;
 
     if (!currentUser) {
-      setErrors({
-        submit: "Bạn cần đăng nhập trước khi tạo đơn hàng.",
-      });
-
-      setTimeout(() => {
-        router.push("/login?redirect=/checkout");
-      }, 900);
-
+      setErrors({ submit: "Bạn cần đăng nhập trước khi tạo đơn hàng." });
+      setTimeout(() => router.push("/login?redirect=/checkout"), 900);
       return;
     }
 
@@ -422,20 +436,17 @@ export default function CheckoutPage() {
       shippingAddress: {
         province: form.province,
         provinceCode: form.provinceCode,
-
-        // Gửi thêm district để không lỗi nếu backend cũ vẫn còn validate district.
         district: form.ward,
-
         ward: form.ward,
         wardCode: form.wardCode,
         address: form.address,
         note: form.note,
       },
       items,
-      coupon,
+      coupon: appliedCoupon,
       paymentMethod,
-      subtotal: localTotals.subtotal,
-      discount: localTotals.discount,
+      subtotal,
+      discount: discountAmount,
       shippingFee: finalShipping,
       total: finalTotal,
       weight: totalWeight,
@@ -465,14 +476,13 @@ export default function CheckoutPage() {
       }
 
       clearCart();
+      removeCouponState();
       window.dispatchEvent(new Event("dynova:storage"));
       setItems([]);
       setSuccessOrder(order);
     } catch (error) {
       setErrors({
-        submit:
-          error.message ||
-          "Không thể tạo đơn hàng. Vui lòng kiểm tra API backend.",
+        submit: error.message || "Không thể tạo đơn hàng. Vui lòng thử lại.",
       });
     } finally {
       setSubmitLoading(false);
@@ -488,20 +498,15 @@ export default function CheckoutPage() {
               <CheckCircle2 size={38} />
             </div>
 
-            <h1 className="mt-5 text-3xl font-black text-slate-950">
-              Đặt hàng thành công
-            </h1>
+            <h1 className="mt-5 text-3xl font-black text-slate-950">Đặt hàng thành công</h1>
 
             <p className="mt-2 text-sm leading-7 text-slate-500">
-              Mã đơn{" "}
-              <b>{successOrder.order_code || successOrder.id || "DNV-ORDER"}</b>{" "}
-              đã được tạo. Bạn có thể theo dõi trạng thái xử lý trong lịch sử
-              mua hàng.
+              Mã đơn <b>{successOrder.order_code || successOrder.id || "DNV-ORDER"}</b> đã được tạo. Bạn có thể theo dõi trong lịch sử mua hàng.
             </p>
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-5 text-left text-sm font-bold text-slate-600">
               <div className="flex justify-between">
-                <span>Thanh toán</span>
+                <span>Phương thức</span>
                 <span>{paymentMethod}</span>
               </div>
 
@@ -515,6 +520,7 @@ export default function CheckoutPage() {
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <button
+                type="button"
                 onClick={() => router.push("/orders")}
                 className="rounded-2xl bg-orange-500 px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
               >
@@ -541,25 +547,20 @@ export default function CheckoutPage() {
           <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-500">
             Checkout
           </p>
-
           <h1 className="mt-2 text-4xl font-black tracking-[-0.03em] text-slate-950">
             Đặt hàng & thanh toán
           </h1>
-
           <p className="mt-2 text-sm leading-7 text-slate-500">
-            Nhập thông tin nhận hàng, tính phí vận chuyển và chọn phương thức
-            thanh toán.
+            Nhập thông tin nhận hàng, tính phí vận chuyển và chọn phương thức thanh toán.
           </p>
         </div>
 
         {items.length === 0 ? (
           <div className="rounded-[34px] border border-slate-200 bg-white p-10 text-center shadow-sm">
             <PackageCheck className="mx-auto text-orange-500" size={42} />
-
             <h2 className="mt-4 text-2xl font-black text-slate-950">
               Không có sản phẩm để thanh toán
             </h2>
-
             <Link
               href="/shop"
               className="mt-6 inline-block rounded-2xl bg-orange-500 px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
@@ -568,15 +569,10 @@ export default function CheckoutPage() {
             </Link>
           </div>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="grid gap-6 lg:grid-cols-[1fr_400px]"
-          >
+          <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_420px]">
             <section className="space-y-6">
               <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="mb-5 text-xl font-black text-slate-950">
-                  Thông tin nhận hàng
-                </h2>
+                <h2 className="mb-5 text-xl font-black text-slate-950">Thông tin nhận hàng</h2>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Họ và tên *" icon={User} error={errors.fullName}>
@@ -617,11 +613,8 @@ export default function CheckoutPage() {
                       className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <option value="">
-                        {addressLoading
-                          ? "Đang tải tỉnh/thành..."
-                          : "Chọn tỉnh/thành phố"}
+                        {addressLoading ? "Đang tải tỉnh/thành..." : "Chọn tỉnh/thành phố"}
                       </option>
-
                       {provinces.map((province) => (
                         <option key={province.code} value={province.code}>
                           {province.name}
@@ -638,11 +631,8 @@ export default function CheckoutPage() {
                       className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <option value="">
-                        {form.provinceCode
-                          ? "Chọn phường/xã"
-                          : "Chọn tỉnh/thành trước"}
+                        {form.provinceCode ? "Chọn phường/xã" : "Chọn tỉnh/thành trước"}
                       </option>
-
                       {wards.map((ward) => (
                         <option key={ward.code} value={ward.code}>
                           {ward.name}
@@ -682,10 +672,7 @@ export default function CheckoutPage() {
               <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-black text-slate-950">
-                      Phí vận chuyển
-                    </h2>
-
+                    <h2 className="text-xl font-black text-slate-950">Phí vận chuyển</h2>
                     <p className="mt-1 text-sm text-slate-500">
                       Tính theo địa chỉ, trọng lượng và giá trị đơn hàng.
                     </p>
@@ -709,10 +696,7 @@ export default function CheckoutPage() {
                 <div className="rounded-3xl bg-slate-50 p-5">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-black text-slate-950">
-                        Giao hàng tiết kiệm
-                      </p>
-
+                      <p className="text-sm font-black text-slate-950">Giao hàng tiết kiệm</p>
                       <p className="mt-1 text-xs font-bold text-slate-400">
                         Trọng lượng tạm tính: {totalWeight}g
                       </p>
@@ -758,12 +742,8 @@ export default function CheckoutPage() {
                         }
                       >
                         <Icon className="text-orange-500" size={22} />
-                        <p className="mt-3 font-black text-slate-950">
-                          {method.name}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {method.desc}
-                        </p>
+                        <p className="mt-3 font-black text-slate-950">{method.name}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{method.desc}</p>
                       </button>
                     );
                   })}
@@ -783,34 +763,22 @@ export default function CheckoutPage() {
                       <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-300">
                         QR chuyển khoản
                       </p>
-
-                      <h3 className="mt-2 text-2xl font-black">
-                        Quét mã để thanh toán
-                      </h3>
+                      <h3 className="mt-2 text-2xl font-black">Quét mã để thanh toán</h3>
 
                       <div className="mt-5 grid gap-3 text-sm text-slate-300">
                         <p>
-                          Ngân hàng:{" "}
-                          <b className="text-white">{bankAccount.bank}</b>
+                          Ngân hàng: <b className="text-white">{bankAccount.bank}</b>
                         </p>
-
                         <p>
-                          Số tài khoản:{" "}
-                          <b className="text-white">{bankAccount.accountNumber}</b>
+                          Số tài khoản: <b className="text-white">{bankAccount.accountNumber}</b>
                         </p>
-
                         <p>
-                          Chủ tài khoản:{" "}
-                          <b className="text-white">{bankAccount.accountName}</b>
+                          Chủ tài khoản: <b className="text-white">{bankAccount.accountName}</b>
                         </p>
-
                         <p>
                           Số tiền:{" "}
-                          <b className="text-orange-300">
-                            {formatCurrency(finalTotal)}
-                          </b>
+                          <b className="text-orange-300">{formatCurrency(finalTotal)}</b>
                         </p>
-
                         <p>
                           Nội dung:{" "}
                           <b className="text-orange-300">
@@ -818,19 +786,13 @@ export default function CheckoutPage() {
                           </b>
                         </p>
                       </div>
-
-                      <div className="mt-5 rounded-2xl bg-white/10 p-4 text-xs font-bold leading-6 text-slate-300">
-                        Sau khi khách chuyển khoản, đơn hàng sẽ được lưu vào hệ thống với trạng
-                        thái chờ xác nhận chuyển khoản. Muốn tự động xác nhận đã nhận tiền thì
-                        cần tích hợp thêm webhook ngân hàng như PayOS, Casso, SePay hoặc cổng
-                        thanh toán thật.
-                      </div>
                     </div>
                   </div>
                 )}
               </div>
             </section>
 
+            {/* CỘT ĐƠN HÀNG */}
             <aside className="h-fit rounded-[30px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 lg:sticky lg:top-24">
               <h2 className="text-xl font-black text-slate-950">Đơn hàng</h2>
 
@@ -848,8 +810,7 @@ export default function CheckoutPage() {
                         {item.name}
                       </p>
                       <p className="text-xs font-semibold text-slate-500">
-                        {item.quantity} x {item.size || "Freesize"} /{" "}
-                        {item.color || "Mặc định"}
+                        {item.quantity} x {item.size || "Freesize"} / {item.color || "Mặc định"}
                       </p>
                     </div>
 
@@ -860,47 +821,92 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
-              <input
-                value={coupon}
-                onChange={(e) => setCoupon(e.target.value.toUpperCase())}
-                className="mt-5 h-[50px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black uppercase text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
-                placeholder="Mã giảm giá"
-              />
+              {/* KHU VỰC NHẬP MÃ GIẢM GIÁ */}
+              <div className="mt-6 border-t border-slate-100 pt-5">
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Tag
+                      size={16}
+                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <input
+                      type="text"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-black uppercase tracking-wider text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
+                      placeholder="Mã giảm giá"
+                      disabled={isApplyingCoupon}
+                    />
+                  </div>
 
-              {localTotals.message && (
-                <p className="mt-2 text-xs font-bold text-slate-500">
-                  {localTotals.message}
-                </p>
-              )}
+                  <button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    disabled={isApplyingCoupon}
+                    className="flex h-12 items-center justify-center rounded-2xl bg-slate-950 px-5 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:opacity-60"
+                  >
+                    {isApplyingCoupon ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "Áp dụng"
+                    )}
+                  </button>
+                </div>
 
-              <div className="mt-5 space-y-3 text-sm font-bold text-slate-600">
+                {appliedCoupon && (
+                  <div className="mt-3 flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2 text-xs font-extrabold text-emerald-700">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 size={15} />
+                      <span>Đã áp dụng: <b>{appliedCoupon}</b></span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removeCouponState}
+                      className="text-emerald-500 transition hover:text-rose-500"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                )}
+
+                {couponMessage && (
+                  <p
+                    className={`mt-2.5 flex items-center gap-1.5 text-xs font-bold ${
+                      isErrorCoupon ? "text-rose-500" : "text-emerald-600"
+                    }`}
+                  >
+                    {isErrorCoupon && <AlertCircle size={14} className="shrink-0" />}
+                    {couponMessage}
+                  </p>
+                )}
+              </div>
+
+              {/* BẢNG TÍNH TIỀN */}
+              <div className="mt-5 space-y-3 text-sm font-bold text-slate-600 border-t border-slate-100 pt-5">
                 <div className="flex justify-between">
                   <span>Tạm tính</span>
-                  <span>{formatCurrency(localTotals.subtotal)}</span>
+                  <span className="text-slate-950">{formatCurrency(subtotal)}</span>
                 </div>
 
                 <div className="flex justify-between">
                   <span>Vận chuyển</span>
-                  <span>
-                    {finalShipping === 0
-                      ? "Miễn phí"
-                      : formatCurrency(finalShipping)}
+                  <span className="text-slate-950">
+                    {finalShipping === 0 ? "Miễn phí" : formatCurrency(finalShipping)}
                   </span>
                 </div>
 
-                {localTotals.discount > 0 && (
-                  <div className="flex justify-between text-rose-600">
-                    <span>Giảm giá</span>
-                    <span>-{formatCurrency(localTotals.discount)}</span>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between font-bold text-rose-600">
+                    <span>Giảm giá ({appliedCoupon})</span>
+                    <span>-{formatCurrency(discountAmount)}</span>
                   </div>
                 )}
               </div>
 
+              {/* TỔNG TIỀN */}
               <div className="mt-5 border-t border-dashed border-slate-200 pt-5">
                 <div className="flex items-end justify-between">
-                  <span className="font-black text-slate-950">
-                    Tổng thanh toán
-                  </span>
+                  <span className="font-black text-slate-950">Tổng thanh toán</span>
                   <span className="text-3xl font-black text-orange-600">
                     {formatCurrency(finalTotal)}
                   </span>
@@ -914,6 +920,7 @@ export default function CheckoutPage() {
               )}
 
               <button
+                type="submit"
                 disabled={submitLoading}
                 className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 py-4 text-xs font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
@@ -939,5 +946,13 @@ export default function CheckoutPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#f7f8fb] py-10 text-center font-bold text-slate-500">Đang tải trang thanh toán...</div>}>
+      <CheckoutContent />
+    </Suspense>
   );
 }

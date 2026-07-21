@@ -93,16 +93,16 @@ const sections = [
       },
     ],
   },
-  {
-    title: "Nội dung",
-    items: [
-      {
-        name: "Banner",
-        href: "/admin/banners",
-        icon: Image,
-      },
-    ],
-  },
+  // {
+  //   title: "Nội dung",
+  //   items: [
+  //     {
+  //       name: "Banner",
+  //       href: "/admin/banners",
+  //       icon: Image,
+  //     },
+  //   ],
+  // },
   {
     title: "Hệ thống",
     items: [

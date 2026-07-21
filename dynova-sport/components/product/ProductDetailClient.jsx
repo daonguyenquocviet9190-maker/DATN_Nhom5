@@ -1301,7 +1301,7 @@ export default function ProductDetailClient({
                   className="btn-ghost flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <ShoppingBag size={16} />
-                  Thêm giỏ
+                  Thêm vào giỏ
                 </button>
               </div>
 
