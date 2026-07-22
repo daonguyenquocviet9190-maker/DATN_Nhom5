@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ShippingController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\WishlistController;
+use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\Admin\AdminSimpleController;
 
 /*
@@ -21,15 +22,38 @@ use App\Http\Controllers\Api\Admin\AdminSimpleController;
 |--------------------------------------------------------------------------
 */
 
-Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/auth/register', [
+    AuthController::class,
+    'register',
+]);
 
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/auth/logout', [AuthController::class, 'logout']);
-    Route::get('/auth/me', [AuthController::class, 'me']);
-});
+Route::post('/auth/login', [
+    AuthController::class,
+    'login',
+]);
+
+Route::post('/auth/forgot-password', [
+    AuthController::class,
+    'forgotPassword',
+]);
+
+Route::post('/auth/reset-password', [
+    AuthController::class,
+    'resetPassword',
+]);
+
+Route::middleware('auth:sanctum')
+    ->group(function () {
+        Route::post('/auth/logout', [
+            AuthController::class,
+            'logout',
+        ]);
+
+        Route::get('/auth/me', [
+            AuthController::class,
+            'me',
+        ]);
+    });
 
 /*
 |--------------------------------------------------------------------------
@@ -37,18 +61,45 @@ Route::middleware('auth:sanctum')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::get('/home', [HomeController::class, 'index']);
+Route::get('/home', [
+    HomeController::class,
+    'index',
+]);
 
-Route::get('/products', [ProductController::class, 'index']);
-Route::get('/products/{id}', [ProductController::class, 'show']);
+Route::get('/products', [
+    ProductController::class,
+    'index',
+]);
 
-Route::get('/categories', [CategoryController::class, 'index']);
-Route::get('/brands', [BrandController::class, 'index']);
+Route::get('/products/{id}', [
+    ProductController::class,
+    'show',
+]);
 
-Route::get('/reviews', [ReviewController::class, 'index']);
+Route::get('/categories', [
+    CategoryController::class,
+    'index',
+]);
 
-Route::post('/shipping/fee', [ShippingController::class, 'fee']);
-Route::post('/payments/create', [PaymentController::class, 'create']);
+Route::get('/brands', [
+    BrandController::class,
+    'index',
+]);
+
+Route::get('/reviews', [
+    ReviewController::class,
+    'index',
+]);
+
+Route::post('/shipping/fee', [
+    ShippingController::class,
+    'fee',
+]);
+
+Route::post('/payments/create', [
+    PaymentController::class,
+    'create',
+]);
 
 /*
 |--------------------------------------------------------------------------
@@ -56,53 +107,161 @@ Route::post('/payments/create', [PaymentController::class, 'create']);
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
-    /*
-    |--------------------------------------------------------------------------
-    | PROFILE
-    |--------------------------------------------------------------------------
-    */
+Route::middleware('auth:sanctum')
+    ->group(function () {
+        /*
+        |--------------------------------------------------------------------------
+        | PROFILE
+        |--------------------------------------------------------------------------
+        */
 
-    Route::get('/profile', [ProfileController::class, 'show']);
-    Route::put('/profile', [ProfileController::class, 'update']);
-    Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
-    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
+        Route::get('/profile', [
+            ProfileController::class,
+            'show',
+        ]);
 
-    /*
-    |--------------------------------------------------------------------------
-    | ORDERS
-    |--------------------------------------------------------------------------
-    */
+        Route::put('/profile', [
+            ProfileController::class,
+            'update',
+        ]);
 
-    Route::post('/orders', [OrderController::class, 'store']);
-    Route::get('/orders', [OrderController::class, 'myOrders']);
-    Route::get('/orders/{id}', [OrderController::class, 'show']);
-    Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
-    Route::post('/orders/{id}/reorder', [OrderController::class, 'reorder']);
+        Route::put('/profile/password', [
+            ProfileController::class,
+            'updatePassword',
+        ]);
 
-    /*
-    |--------------------------------------------------------------------------
-    | REVIEWS
-    |--------------------------------------------------------------------------
-    */
+        Route::post('/profile/avatar', [
+            ProfileController::class,
+            'uploadAvatar',
+        ]);
 
-    Route::post('/reviews', [ReviewController::class, 'store']);
-    Route::get('/my-reviews', [ReviewController::class, 'myReviews']);
-    Route::put('/reviews/{id}', [ReviewController::class, 'update']);
-    Route::delete('/reviews/{id}', [ReviewController::class, 'destroy']);
+        /*
+        |--------------------------------------------------------------------------
+        | CART
+        |--------------------------------------------------------------------------
+        */
 
-    /*
-    |--------------------------------------------------------------------------
-    | WISHLIST
-    |--------------------------------------------------------------------------
-    */
+        Route::prefix('cart')
+            ->group(function () {
+                Route::get('/', [
+                    CartController::class,
+                    'index',
+                ]);
 
-    Route::get('/wishlist', [WishlistController::class, 'index']);
-    Route::post('/wishlist', [WishlistController::class, 'store']);
-    Route::post('/wishlist/toggle', [WishlistController::class, 'toggle']);
-    Route::delete('/wishlist/{productId}', [WishlistController::class, 'destroy']);
-    Route::get('/wishlist/check/{productId}', [WishlistController::class, 'check']);
-});
+                Route::post('/items', [
+                    CartController::class,
+                    'store',
+                ]);
+
+                Route::post('/merge', [
+                    CartController::class,
+                    'merge',
+                ]);
+
+                Route::patch('/items/{cartItem}', [
+                    CartController::class,
+                    'update',
+                ]);
+
+                Route::delete('/items/{cartItem}', [
+                    CartController::class,
+                    'destroy',
+                ]);
+
+                Route::delete('/', [
+                    CartController::class,
+                    'clear',
+                ]);
+            });
+
+        /*
+        |--------------------------------------------------------------------------
+        | ORDERS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::post('/orders', [
+            OrderController::class,
+            'store',
+        ]);
+
+        Route::get('/orders', [
+            OrderController::class,
+            'myOrders',
+        ]);
+
+        Route::get('/orders/{id}', [
+            OrderController::class,
+            'show',
+        ]);
+
+        Route::post('/orders/{id}/cancel', [
+            OrderController::class,
+            'cancel',
+        ]);
+
+        Route::post('/orders/{id}/reorder', [
+            OrderController::class,
+            'reorder',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | REVIEWS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::post('/reviews', [
+            ReviewController::class,
+            'store',
+        ]);
+
+        Route::get('/my-reviews', [
+            ReviewController::class,
+            'myReviews',
+        ]);
+
+        Route::put('/reviews/{id}', [
+            ReviewController::class,
+            'update',
+        ]);
+
+        Route::delete('/reviews/{id}', [
+            ReviewController::class,
+            'destroy',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | WISHLIST
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/wishlist', [
+            WishlistController::class,
+            'index',
+        ]);
+
+        Route::post('/wishlist', [
+            WishlistController::class,
+            'store',
+        ]);
+
+        Route::post('/wishlist/toggle', [
+            WishlistController::class,
+            'toggle',
+        ]);
+
+        Route::delete('/wishlist/{productId}', [
+            WishlistController::class,
+            'destroy',
+        ]);
+
+        Route::get('/wishlist/check/{productId}', [
+            WishlistController::class,
+            'check',
+        ]);
+    });
 
 /*
 |--------------------------------------------------------------------------
@@ -110,35 +269,163 @@ Route::middleware('auth:sanctum')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
-    Route::get('/dashboard', [AdminSimpleController::class, 'dashboard']);
+Route::middleware('auth:sanctum')
+    ->prefix('admin')
+    ->group(function () {
+        Route::get('/dashboard', [
+            AdminSimpleController::class,
+            'dashboard',
+        ]);
 
-    Route::get('/products', [AdminSimpleController::class, 'products']);
-    Route::post('/products', [AdminSimpleController::class, 'storeProduct']);
-    Route::put('/products/{id}', [AdminSimpleController::class, 'updateProduct']);
-    Route::delete('/products/{id}', [AdminSimpleController::class, 'deleteProduct']);
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUCTS
+        |--------------------------------------------------------------------------
+        */
 
-    Route::get('/categories', [AdminSimpleController::class, 'categories']);
-    Route::post('/categories', [AdminSimpleController::class, 'storeCategory']);
-    Route::put('/categories/{id}', [AdminSimpleController::class, 'updateCategory']);
-    Route::delete('/categories/{id}', [AdminSimpleController::class, 'deleteCategory']);
+        Route::get('/products', [
+            AdminSimpleController::class,
+            'products',
+        ]);
 
-    Route::get('/brands', [AdminSimpleController::class, 'brands']);
-    Route::post('/brands', [AdminSimpleController::class, 'storeBrand']);
-    Route::put('/brands/{id}', [AdminSimpleController::class, 'updateBrand']);
-    Route::delete('/brands/{id}', [AdminSimpleController::class, 'deleteBrand']);
+        Route::post('/products', [
+            AdminSimpleController::class,
+            'storeProduct',
+        ]);
 
-    Route::get('/orders', [AdminSimpleController::class, 'orders']);
-    Route::get('/orders/{id}', [AdminSimpleController::class, 'showOrder']);
-    Route::patch('/orders/{id}/status', [AdminSimpleController::class, 'updateOrderStatus']);
+        Route::put('/products/{id}', [
+            AdminSimpleController::class,
+            'updateProduct',
+        ]);
 
-    Route::get('/customers', [AdminSimpleController::class, 'customers']);
-    Route::patch('/customers/{id}/status', [AdminSimpleController::class, 'updateCustomerStatus']);
+        Route::delete('/products/{id}', [
+            AdminSimpleController::class,
+            'deleteProduct',
+        ]);
 
-    Route::get('/settings', [AdminSimpleController::class, 'settings']);
-    Route::put('/settings', [AdminSimpleController::class, 'updateSettings']);
+        /*
+        |--------------------------------------------------------------------------
+        | CATEGORIES
+        |--------------------------------------------------------------------------
+        */
 
-    Route::get('/inventory', [AdminSimpleController::class, 'inventory']);
-    Route::get('/promotions', [AdminSimpleController::class, 'promotions']);
-    Route::get('/ratings', [AdminSimpleController::class, 'ratings']);
-});
+        Route::get('/categories', [
+            AdminSimpleController::class,
+            'categories',
+        ]);
+
+        Route::post('/categories', [
+            AdminSimpleController::class,
+            'storeCategory',
+        ]);
+
+        Route::put('/categories/{id}', [
+            AdminSimpleController::class,
+            'updateCategory',
+        ]);
+
+        Route::delete('/categories/{id}', [
+            AdminSimpleController::class,
+            'deleteCategory',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | BRANDS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/brands', [
+            AdminSimpleController::class,
+            'brands',
+        ]);
+
+        Route::post('/brands', [
+            AdminSimpleController::class,
+            'storeBrand',
+        ]);
+
+        Route::put('/brands/{id}', [
+            AdminSimpleController::class,
+            'updateBrand',
+        ]);
+
+        Route::delete('/brands/{id}', [
+            AdminSimpleController::class,
+            'deleteBrand',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | ORDERS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/orders', [
+            AdminSimpleController::class,
+            'orders',
+        ]);
+
+        Route::get('/orders/{id}', [
+            AdminSimpleController::class,
+            'showOrder',
+        ]);
+
+        Route::patch('/orders/{id}/status', [
+            AdminSimpleController::class,
+            'updateOrderStatus',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | CUSTOMERS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/customers', [
+            AdminSimpleController::class,
+            'customers',
+        ]);
+
+        Route::patch('/customers/{id}/status', [
+            AdminSimpleController::class,
+            'updateCustomerStatus',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | SETTINGS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/settings', [
+            AdminSimpleController::class,
+            'settings',
+        ]);
+
+        Route::put('/settings', [
+            AdminSimpleController::class,
+            'updateSettings',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | OTHER ADMIN DATA
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/inventory', [
+            AdminSimpleController::class,
+            'inventory',
+        ]);
+
+        Route::get('/promotions', [
+            AdminSimpleController::class,
+            'promotions',
+        ]);
+
+        Route::get('/ratings', [
+            AdminSimpleController::class,
+            'ratings',
+        ]);
+    });
