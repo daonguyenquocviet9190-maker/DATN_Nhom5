@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -33,6 +33,7 @@ import {
   toggleWishlistApi,
 } from "@/services/wishlist.service";
 import ProductReviews from "@/components/reviews/ProductReviews";
+import { getAuthToken } from "@/services/auth.service";
 
 const API_HOST = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -41,6 +42,26 @@ const API_HOST = (
 const FALLBACK_IMAGE =
   PRODUCT_FALLBACK ||
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
+
+const SHOP_NAVIGATION_KEY = "dynova_shop_navigation_v2";
+const SHOP_RETURN_WINDOW = 30 * 60 * 1000;
+
+function getSafeShopReturnUrl(value) {
+  const path = String(value || "").trim();
+
+  if (
+    path === "/shop" ||
+    (
+      path.startsWith("/shop?") &&
+      !path.startsWith("//") &&
+      !path.includes("\\")
+    )
+  ) {
+    return path;
+  }
+
+  return "/shop";
+}
 
 function safeDecode(value) {
   try {
@@ -458,7 +479,7 @@ function buildCartProduct({
   };
 }
 
-function RelatedCard({ product }) {
+function RelatedCard({ product, returnUrl }) {
   const variants = useMemo(
     () =>
       getRawVariants(product)
@@ -472,7 +493,9 @@ function RelatedCard({ product }) {
 
   return (
     <Link
-      href={`/shop/product/${product.id}`}
+      href={`/shop/product/${product.id}?from=${encodeURIComponent(
+        returnUrl
+      )}`}
       className="group flex h-full flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
     >
       <div className="overflow-hidden rounded-[20px] bg-slate-100">
@@ -512,6 +535,72 @@ export default function ProductDetailClient({
   relatedProducts = [],
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const shopReturnUrl = useMemo(
+    () => getSafeShopReturnUrl(searchParams.get("from")),
+    [searchParams]
+  );
+
+  const returnToShop = () => {
+    if (typeof window === "undefined") {
+      router.replace(shopReturnUrl);
+      return;
+    }
+
+    let navigation = null;
+
+    try {
+      const raw = sessionStorage.getItem(SHOP_NAVIGATION_KEY);
+      navigation = raw ? JSON.parse(raw) : null;
+    } catch {
+      sessionStorage.removeItem(SHOP_NAVIGATION_KEY);
+    }
+
+    const cameDirectlyFromShop =
+      navigation?.from === shopReturnUrl &&
+      String(navigation?.productId || "") === String(product?.id || "") &&
+      Date.now() - Number(navigation?.savedAt || 0) <
+        SHOP_RETURN_WINDOW &&
+      window.history.length > 1;
+
+    if (cameDirectlyFromShop) {
+      router.back();
+      return;
+    }
+
+    router.replace(shopReturnUrl, {
+      scroll: false,
+    });
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let navigation = null;
+
+    try {
+      const raw = sessionStorage.getItem(SHOP_NAVIGATION_KEY);
+      navigation = raw ? JSON.parse(raw) : null;
+    } catch {
+      sessionStorage.removeItem(SHOP_NAVIGATION_KEY);
+    }
+
+    if (
+      navigation?.from === shopReturnUrl &&
+      String(navigation?.productId || "") === String(product?.id || "")
+    ) {
+      sessionStorage.setItem(
+        SHOP_NAVIGATION_KEY,
+        JSON.stringify({
+          ...navigation,
+          currentPath: pathname,
+          savedAt: Number(navigation.savedAt || Date.now()),
+        })
+      );
+    }
+  }, [pathname, product?.id, shopReturnUrl]);
 
   const variants = useMemo(() => {
     return getRawVariants(product)
@@ -761,7 +850,10 @@ export default function ProductDetailClient({
 
   useEffect(() => {
     async function loadWishlistStatus() {
-      if (!product?.id) return;
+      if (!product?.id || !getAuthToken()) {
+        setLiked(false);
+        return;
+      }
 
       try {
         const result = await checkWishlistItem(product.id);
@@ -983,12 +1075,13 @@ export default function ProductDetailClient({
 
             <ChevronRight size={14} />
 
-            <Link
-              href="/shop"
+            <button
+              type="button"
+              onClick={returnToShop}
               className="transition hover:text-orange-300"
             >
               Sản phẩm
-            </Link>
+            </button>
 
             <ChevronRight size={14} />
 
@@ -1019,13 +1112,14 @@ export default function ProductDetailClient({
       </section>
 
       <div className="container-page relative z-20 -mt-6">
-        <Link
-          href="/shop"
+        <button
+          type="button"
+          onClick={returnToShop}
           className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm transition hover:-translate-x-1 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
         >
           <ArrowLeft size={16} />
           Quay lại cửa hàng
-        </Link>
+        </button>
 
         <section className="product-detail-card grid gap-8 rounded-[34px] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
           <div className="grid gap-4 lg:grid-cols-[92px_1fr]">
@@ -1643,12 +1737,13 @@ export default function ProductDetailClient({
                 </h2>
               </div>
 
-              <Link
-                href="/shop"
+              <button
+                type="button"
+                onClick={returnToShop}
                 className="hidden rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 sm:inline-flex"
               >
                 Xem tất cả
-              </Link>
+              </button>
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -1658,6 +1753,7 @@ export default function ProductDetailClient({
                   <RelatedCard
                     key={item.id}
                     product={item}
+                    returnUrl={shopReturnUrl}
                   />
                 ))}
             </div>

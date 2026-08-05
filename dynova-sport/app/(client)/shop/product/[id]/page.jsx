@@ -1,6 +1,9 @@
 import Link from "next/link";
 import ProductDetailClient from "@/components/product/ProductDetailClient";
-import { getProductById, getProducts } from "@/services/product.service";
+import {
+  getProductById,
+  getProducts,
+} from "@/services/product.service";
 import {
   extractProduct,
   extractProducts,
@@ -11,9 +14,31 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
+function getSafeShopReturnUrl(value) {
+  const rawValue = Array.isArray(value)
+    ? value[0]
+    : value;
+
+  const path = String(rawValue || "").trim();
+
+  if (
+    path === "/shop" ||
+    (
+      path.startsWith("/shop?") &&
+      !path.startsWith("//") &&
+      !path.includes("\\")
+    )
+  ) {
+    return path;
+  }
+
+  return "/shop";
+}
+
 function ErrorState({
   title = "Không tìm thấy sản phẩm",
   description = "Sản phẩm có thể đã bị ẩn hoặc không còn tồn tại.",
+  returnUrl = "/shop",
 }) {
   return (
     <main className="min-h-screen bg-[#f7f8fb] py-16">
@@ -32,7 +57,8 @@ function ErrorState({
           </p>
 
           <Link
-            href="/shop"
+            href={returnUrl}
+            scroll={false}
             className="btn-primary mt-7 inline-flex rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
           >
             Quay lại cửa hàng
@@ -43,15 +69,24 @@ function ErrorState({
   );
 }
 
-export default async function ProductDetailPage({ params }) {
+export default async function ProductDetailPage({
+  params,
+  searchParams,
+}) {
   const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+
   const productId = resolvedParams?.id;
+  const returnUrl = getSafeShopReturnUrl(
+    resolvedSearchParams?.from
+  );
 
   if (!productId) {
     return (
       <ErrorState
         title="Đường dẫn sản phẩm không hợp lệ"
-        description="Không xác định được mã sản phẩm trong đường dẫn."
+        description="Không xác định được sản phẩm cần hiển thị."
+        returnUrl={returnUrl}
       />
     );
   }
@@ -62,25 +97,33 @@ export default async function ProductDetailPage({ params }) {
     const product = normalizeProduct(rawProduct);
 
     if (!product?.id) {
-      throw new Error("Không tìm thấy sản phẩm.");
+      return (
+        <ErrorState
+          returnUrl={returnUrl}
+        />
+      );
     }
 
     let relatedProducts = [];
 
     if (product.category_id) {
-      const relatedResponse = await getProducts({
-        category: product.category_id,
-        per_page: 8,
-      });
+      try {
+        const relatedResponse = await getProducts({
+          category: product.category_id,
+          per_page: 8,
+        });
 
-      relatedProducts = extractProducts(relatedResponse)
-        .map(normalizeProduct)
-        .filter(
-          (item) =>
-            item?.id &&
-            Number(item.id) !== Number(product.id)
-        )
-        .slice(0, 8);
+        relatedProducts = extractProducts(relatedResponse)
+          .map(normalizeProduct)
+          .filter(
+            (item) =>
+              item?.id &&
+              Number(item.id) !== Number(product.id)
+          )
+          .slice(0, 8);
+      } catch {
+        relatedProducts = [];
+      }
     }
 
     return (
@@ -89,12 +132,10 @@ export default async function ProductDetailPage({ params }) {
         relatedProducts={relatedProducts}
       />
     );
-  } catch (error) {
-    console.log("Product detail API error:", error?.message || error);
-
+  } catch {
     return (
       <ErrorState
-        description="Sản phẩm có thể đã bị ẩn hoặc API sản phẩm chưa trả đủ dữ liệu thương hiệu, size và màu."
+        returnUrl={returnUrl}
       />
     );
   }
