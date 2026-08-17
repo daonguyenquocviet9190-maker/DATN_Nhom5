@@ -58,87 +58,221 @@ function extractCategories(response) {
   return candidates.find(Array.isArray) || [];
 }
 
+const PAGE_SIZE = 12;
+const SHOP_SCROLL_KEY = "dynova_shop_scroll_y_v2";
+const SHOP_CACHE_KEY = "dynova_shop_cache_v2";
+const SHOP_STATE_KEY = "dynova_shop_state_v2";
+const SHOP_NAVIGATION_KEY = "dynova_shop_navigation_v2";
+const SHOP_CACHE_TTL = 5 * 60 * 1000;
+const SHOP_RETURN_WINDOW = 30 * 60 * 1000;
+
+let shopRuntimeCache = {
+  items: [],
+  categories: [],
+  wishlist: [],
+  state: null,
+  scrollY: 0,
+  savedAt: 0,
+};
+
+function readSessionObject(key) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
+}
+
+function buildShopUrl(pathname, state, highestPrice) {
+  const params = new URLSearchParams();
+
+  if (state.query.trim()) {
+    params.set("q", state.query.trim());
+  }
+
+  if (state.category !== "all") {
+    params.set("category", state.category);
+  }
+
+  if (state.brand !== "all") {
+    params.set("brand", state.brand);
+  }
+
+  if (
+    Number(state.maxPrice) > 0 &&
+    Number(state.maxPrice) < Number(highestPrice)
+  ) {
+    params.set("maxPrice", String(state.maxPrice));
+  }
+
+  if (state.sort !== "newest") {
+    params.set("sort", state.sort);
+  }
+
+  if (Number(state.currentPage) > 1) {
+    params.set("page", String(state.currentPage));
+  }
+
+  const queryString = params.toString();
+
+  return queryString
+    ? `${pathname}?${queryString}`
+    : pathname;
+}
+
 export default function ShopPage() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [items, setItems] = useState([]);
-  const [apiCategories, setApiCategories] = useState([]);
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
-  const [brand, setBrand] = useState("all");
-  const [maxPrice, setMaxPrice] = useState(5000000);
-  const [sort, setSort] = useState("newest");
-  const [wishlist, setWishlist] = useState([]);
+  const initialRuntime =
+    typeof window !== "undefined" &&
+    shopRuntimeCache?.state?.url ===
+      window.location.pathname + window.location.search
+      ? shopRuntimeCache
+      : null;
+
+  const [items, setItems] = useState(
+    () => initialRuntime?.items || []
+  );
+  const [apiCategories, setApiCategories] = useState(
+    () => initialRuntime?.categories || []
+  );
+  const [query, setQuery] = useState(
+    () => initialRuntime?.state?.query || ""
+  );
+  const [category, setCategory] = useState(
+    () => initialRuntime?.state?.category || "all"
+  );
+  const [brand, setBrand] = useState(
+    () => initialRuntime?.state?.brand || "all"
+  );
+  const [maxPrice, setMaxPrice] = useState(
+    () => initialRuntime?.state?.maxPrice || 5000000
+  );
+  const [sort, setSort] = useState(
+    () => initialRuntime?.state?.sort || "newest"
+  );
+  const [wishlist, setWishlist] = useState(
+    () => initialRuntime?.wishlist || []
+  );
   const [wishlistLoadingId, setWishlistLoadingId] = useState(null);
   const [notice, setNotice] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [stateReady, setStateReady] = useState(false);
+  const [loading, setLoading] = useState(
+    () => !initialRuntime?.items?.length
+  );
+  const [filterOpen, setFilterOpen] = useState(
+    () => Boolean(initialRuntime?.state?.filterOpen)
+  );
+  const [currentPage, setCurrentPage] = useState(
+    () => initialRuntime?.state?.currentPage || 1
+  );
+  const [stateReady, setStateReady] = useState(
+    () => Boolean(initialRuntime?.state)
+  );
   const skipFirstPageReset = useRef(true);
-
-  const PAGE_SIZE = 12;
-  const SHOP_SCROLL_KEY = "dynova_shop_scroll_y";
-  const SHOP_CACHE_KEY = "dynova_shop_cache_v1";
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadShopData() {
+    const currentUrl =
+      window.location.pathname + window.location.search;
+
+    const params = new URLSearchParams(window.location.search);
+    const categoryParam = params.get("category") || "all";
+    const keywordParam = params.get("q") || "";
+    const brandParam = params.get("brand") || "all";
+    const rawMaxPriceParam = params.get("maxPrice");
+    const maxPriceParam =
+      rawMaxPriceParam !== null &&
+      rawMaxPriceParam.trim() !== "" &&
+      Number(rawMaxPriceParam) > 0
+        ? Number(rawMaxPriceParam)
+        : null;
+    const sortParam = params.get("sort") || "newest";
+    const parsedPage = Number(params.get("page"));
+    const pageParam =
+      Number.isFinite(parsedPage) && parsedPage > 0
+        ? parsedPage
+        : 1;
+
+    const runtime =
+      shopRuntimeCache?.state?.url === currentUrl
+        ? shopRuntimeCache
+        : null;
+
+    const storedState = readSessionObject(SHOP_STATE_KEY);
+    const matchingStoredState =
+      storedState?.url === currentUrl
+        ? storedState
+        : null;
+
+    const cached = readSessionObject(SHOP_CACHE_KEY);
+    const cacheIsFresh =
+      Array.isArray(cached?.products) &&
+      Date.now() - Number(cached?.savedAt || 0) < SHOP_CACHE_TTL;
+
+    const warmProducts = Array.isArray(runtime?.items) && runtime.items.length
+      ? runtime.items
+      : cacheIsFresh
+        ? cached.products
+        : [];
+
+    const warmCategories =
+      Array.isArray(runtime?.categories) && runtime.categories.length
+        ? runtime.categories
+        : cacheIsFresh &&
+            Array.isArray(cached?.categories) &&
+            cached.categories.length
+          ? cached.categories
+          : localCategories;
+
+    const warmPrices = warmProducts
+      .map(getProductDisplayPrice)
+      .filter((price) => Number.isFinite(price) && price > 0);
+
+    const warmHighest =
+      warmPrices.length > 0
+        ? Math.max(...warmPrices, 5000000)
+        : 5000000;
+
+    setCategory(categoryParam);
+    setQuery(keywordParam);
+    setBrand(brandParam);
+    setSort(sortParam);
+    setCurrentPage(pageParam);
+    setFilterOpen(Boolean(matchingStoredState?.filterOpen));
+
+    if (warmProducts.length > 0) {
+      setItems(warmProducts);
+      setApiCategories(warmCategories);
+      setMaxPrice(
+        maxPriceParam
+          ? Math.min(maxPriceParam, warmHighest)
+          : warmHighest
+      );
+      setLoading(false);
+      setStateReady(true);
+    } else {
+      setLoading(true);
+    }
+
+    const navigation = readSessionObject(SHOP_NAVIGATION_KEY);
+    const returningFromDetail =
+      warmProducts.length > 0 &&
+      navigation?.from === currentUrl &&
+      Date.now() - Number(navigation?.savedAt || 0) <
+        SHOP_RETURN_WINDOW;
+
+    async function loadFreshShopData() {
+      if (returningFromDetail) {
+        return;
+      }
+
       try {
-        setLoading(true);
-
-        const params =
-          typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search)
-            : new URLSearchParams();
-
-        const categoryParam = params.get("category");
-        const keywordParam = params.get("q");
-        const brandParam = params.get("brand");
-        const rawMaxPriceParam = params.get("maxPrice");
-        const maxPriceParam =
-          rawMaxPriceParam !== null &&
-          rawMaxPriceParam.trim() !== ""
-            ? Number(rawMaxPriceParam)
-            : null;
-        const sortParam = params.get("sort");
-        const pageParam = Number(params.get("page"));
-
-        setCategory(categoryParam || "all");
-        setQuery(keywordParam || "");
-        setBrand(brandParam || "all");
-        setSort(sortParam || "newest");
-
-        if (Number.isFinite(pageParam) && pageParam > 0) {
-          setCurrentPage(pageParam);
-        }
-
-        const cached = sessionStorage.getItem(SHOP_CACHE_KEY);
-
-        if (cached) {
-          try {
-            const cacheData = JSON.parse(cached);
-
-            if (
-              Array.isArray(cacheData?.products) &&
-              Date.now() - Number(cacheData?.savedAt || 0) < 300000
-            ) {
-              setItems(cacheData.products);
-              setApiCategories(
-                Array.isArray(cacheData.categories) &&
-                  cacheData.categories.length > 0
-                  ? cacheData.categories
-                  : localCategories
-              );
-              setLoading(false);
-            }
-          } catch {
-            sessionStorage.removeItem(SHOP_CACHE_KEY);
-          }
-        }
-
         const [productResponse, categoryResponse] = await Promise.all([
           getProducts({ per_page: 100 }),
           getCategories(),
@@ -161,26 +295,25 @@ export default function ShopPage() {
             ? normalizedProducts
             : fallbackProducts;
 
-        setItems(finalProducts);
-
-        setApiCategories(
+        const finalCategories =
           Array.isArray(categoryList) && categoryList.length > 0
             ? categoryList
-            : localCategories
-        );
+            : localCategories;
 
-        const prices = finalProducts.map(getProductDisplayPrice);
+        const prices = finalProducts
+          .map(getProductDisplayPrice)
+          .filter((price) => Number.isFinite(price) && price > 0);
+
         const highest =
           prices.length > 0
             ? Math.max(...prices, 5000000)
             : 5000000;
 
+        setItems(finalProducts);
+        setApiCategories(finalCategories);
         setMaxPrice(
-          Number.isFinite(maxPriceParam) && maxPriceParam > 0
-            ? Math.min(
-                Math.max(maxPriceParam, 1),
-                highest
-              )
+          maxPriceParam
+            ? Math.min(maxPriceParam, highest)
             : highest
         );
 
@@ -188,29 +321,32 @@ export default function ShopPage() {
           SHOP_CACHE_KEY,
           JSON.stringify({
             products: finalProducts,
-            categories:
-              Array.isArray(categoryList) && categoryList.length > 0
-                ? categoryList
-                : localCategories,
+            categories: finalCategories,
             savedAt: Date.now(),
           })
         );
       } catch {
-
-        if (!mounted) return;
+        if (!mounted || warmProducts.length > 0) return;
 
         const fallbackProducts = getLocalProducts()
           .map(normalizeProduct)
           .filter(Boolean);
 
-        setItems(fallbackProducts);
-        setApiCategories(localCategories);
+        const prices = fallbackProducts
+          .map(getProductDisplayPrice)
+          .filter((price) => Number.isFinite(price) && price > 0);
 
-        const prices = fallbackProducts.map(getProductDisplayPrice);
-        setMaxPrice(
+        const highest =
           prices.length > 0
             ? Math.max(...prices, 5000000)
-            : 5000000
+            : 5000000;
+
+        setItems(fallbackProducts);
+        setApiCategories(localCategories);
+        setMaxPrice(
+          maxPriceParam
+            ? Math.min(maxPriceParam, highest)
+            : highest
         );
       } finally {
         if (mounted) {
@@ -218,10 +354,13 @@ export default function ShopPage() {
           setStateReady(true);
         }
       }
+    }
 
+    async function loadWishlistData() {
       const authToken =
         localStorage.getItem("dynova_auth_token") ||
         localStorage.getItem("auth_token") ||
+        localStorage.getItem("access_token") ||
         localStorage.getItem("token") ||
         "";
 
@@ -242,11 +381,20 @@ export default function ShopPage() {
 
         setWishlist(ids);
       } catch {
-        if (mounted) setWishlist([]);
+        if (mounted && !runtime?.wishlist?.length) {
+          setWishlist([]);
+        }
       }
     }
 
-    loadShopData();
+    if (!returningFromDetail) {
+      loadFreshShopData();
+    } else {
+      setLoading(false);
+      setStateReady(true);
+    }
+
+    loadWishlistData();
 
     return () => {
       mounted = false;
@@ -291,80 +439,165 @@ export default function ShopPage() {
     );
   }, [items]);
 
+  const currentShopUrl = useMemo(
+    () =>
+      buildShopUrl(
+        pathname,
+        {
+          query,
+          category,
+          brand,
+          maxPrice,
+          sort,
+          currentPage,
+        },
+        highestPrice
+      ),
+    [
+      pathname,
+      query,
+      category,
+      brand,
+      maxPrice,
+      sort,
+      currentPage,
+      highestPrice,
+    ]
+  );
+
   useEffect(() => {
     if (!stateReady || typeof window === "undefined") return;
 
-    const params = new URLSearchParams();
+    const snapshot = {
+      url: currentShopUrl,
+      query,
+      category,
+      brand,
+      maxPrice,
+      sort,
+      currentPage,
+      filterOpen,
+      savedAt: Date.now(),
+    };
 
-    if (query.trim()) params.set("q", query.trim());
-    if (category !== "all") params.set("category", category);
-    if (brand !== "all") params.set("brand", brand);
-    if (maxPrice > 0 && maxPrice < highestPrice) {
-      params.set("maxPrice", String(maxPrice));
-    }
-    if (sort !== "newest") params.set("sort", sort);
-    if (currentPage > 1) params.set("page", String(currentPage));
+    shopRuntimeCache = {
+      ...shopRuntimeCache,
+      items,
+      categories: safeCategories,
+      wishlist,
+      state: snapshot,
+      savedAt: Date.now(),
+    };
 
-    const nextUrl = params.toString()
-      ? `${pathname}?${params.toString()}`
-      : pathname;
-
-    const currentUrl =
-      window.location.pathname + window.location.search;
-
-    if (nextUrl !== currentUrl) {
-      router.replace(nextUrl, { scroll: false });
-    }
+    sessionStorage.setItem(
+      SHOP_STATE_KEY,
+      JSON.stringify(snapshot)
+    );
   }, [
     stateReady,
-    pathname,
-    router,
+    currentShopUrl,
     query,
     category,
     brand,
     maxPrice,
     sort,
     currentPage,
-    highestPrice,
+    filterOpen,
+    items,
+    safeCategories,
+    wishlist,
+  ]);
+
+  useEffect(() => {
+    if (!stateReady || typeof window === "undefined") return;
+
+    const currentUrl =
+      window.location.pathname + window.location.search;
+
+    if (currentShopUrl !== currentUrl) {
+      router.replace(currentShopUrl, { scroll: false });
+    }
+  }, [
+    stateReady,
+    router,
+    currentShopUrl,
   ]);
 
   useEffect(() => {
     if (!stateReady || loading || typeof window === "undefined") return;
 
     const savedScroll = Number(
-      sessionStorage.getItem(SHOP_SCROLL_KEY) || 0
+      sessionStorage.getItem(SHOP_SCROLL_KEY) ||
+        shopRuntimeCache.scrollY ||
+        0
     );
 
     if (savedScroll > 0) {
       requestAnimationFrame(() => {
-        window.scrollTo({
-          top: savedScroll,
-          behavior: "auto",
+        requestAnimationFrame(() => {
+          window.scrollTo({
+            top: savedScroll,
+            behavior: "auto",
+          });
+
+          shopRuntimeCache.scrollY = savedScroll;
+          sessionStorage.removeItem(SHOP_SCROLL_KEY);
         });
-        sessionStorage.removeItem(SHOP_SCROLL_KEY);
       });
     }
   }, [stateReady, loading]);
 
   const getProductDetailHref = (productId) => {
-    if (typeof window === "undefined") {
-      return `/shop/product/${productId}`;
-    }
-
-    const returnUrl =
-      window.location.pathname + window.location.search;
-
     return `/shop/product/${productId}?from=${encodeURIComponent(
-      returnUrl
+      currentShopUrl
     )}`;
   };
 
-  const rememberShopPosition = () => {
+  const rememberShopPosition = (productId) => {
     if (typeof window === "undefined") return;
+
+    const scrollY = window.scrollY;
+    const detailUrl = getProductDetailHref(productId);
+    const snapshot = {
+      url: currentShopUrl,
+      query,
+      category,
+      brand,
+      maxPrice,
+      sort,
+      currentPage,
+      filterOpen,
+      savedAt: Date.now(),
+    };
+
+    shopRuntimeCache = {
+      ...shopRuntimeCache,
+      items,
+      categories: safeCategories,
+      wishlist,
+      state: snapshot,
+      scrollY,
+      savedAt: Date.now(),
+    };
 
     sessionStorage.setItem(
       SHOP_SCROLL_KEY,
-      String(window.scrollY)
+      String(scrollY)
+    );
+
+    sessionStorage.setItem(
+      SHOP_STATE_KEY,
+      JSON.stringify(snapshot)
+    );
+
+    sessionStorage.setItem(
+      SHOP_NAVIGATION_KEY,
+      JSON.stringify({
+        from: currentShopUrl,
+        to: detailUrl,
+        productId: String(productId),
+        savedAt: Date.now(),
+      })
     );
   };
 
@@ -526,7 +759,7 @@ export default function ShopPage() {
       : [];
 
     if (variants.length !== 1) {
-      rememberShopPosition();
+      rememberShopPosition(product.id);
       router.push(getProductDetailHref(product.id));
       return;
     }
@@ -933,7 +1166,7 @@ export default function ShopPage() {
                       <div className="relative overflow-hidden bg-slate-100">
                         <Link
                           href={getProductDetailHref(product.id)}
-                          onClick={rememberShopPosition}
+                          onClick={() => rememberShopPosition(product.id)}
                         >
                           <img
                             src={getProductImage(product)}
@@ -1001,7 +1234,7 @@ export default function ShopPage() {
 
                         <Link
                           href={getProductDetailHref(product.id)}
-                          onClick={rememberShopPosition}
+                          onClick={() => rememberShopPosition(product.id)}
                         >
                           <h3 className="mt-2 line-clamp-2 min-h-11 text-base font-black leading-6 text-slate-950 transition hover:text-orange-600">
                             {product.name}

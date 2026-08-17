@@ -14,9 +14,31 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
+function getSafeShopReturnUrl(value) {
+  const rawValue = Array.isArray(value)
+    ? value[0]
+    : value;
+
+  const path = String(rawValue || "").trim();
+
+  if (
+    path === "/shop" ||
+    (
+      path.startsWith("/shop?") &&
+      !path.startsWith("//") &&
+      !path.includes("\\")
+    )
+  ) {
+    return path;
+  }
+
+  return "/shop";
+}
+
 function ErrorState({
   title = "Không tìm thấy sản phẩm",
   description = "Sản phẩm có thể đã bị ẩn hoặc không còn tồn tại.",
+  returnUrl = "/shop",
 }) {
   return (
     <main className="min-h-screen bg-[#f7f8fb] py-16">
@@ -35,7 +57,8 @@ function ErrorState({
           </p>
 
           <Link
-            href="/shop"
+            href={returnUrl}
+            scroll={false}
             className="btn-primary mt-7 inline-flex rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
           >
             Quay lại cửa hàng
@@ -46,14 +69,24 @@ function ErrorState({
   );
 }
 
-export default async function ProductDetailPage({ params }) {
-  const { id: productId } = await params;
+export default async function ProductDetailPage({
+  params,
+  searchParams,
+}) {
+  const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+
+  const productId = resolvedParams?.id;
+  const returnUrl = getSafeShopReturnUrl(
+    resolvedSearchParams?.from
+  );
 
   if (!productId) {
     return (
       <ErrorState
         title="Đường dẫn sản phẩm không hợp lệ"
         description="Không xác định được sản phẩm cần hiển thị."
+        returnUrl={returnUrl}
       />
     );
   }
@@ -64,7 +97,11 @@ export default async function ProductDetailPage({ params }) {
     const product = normalizeProduct(rawProduct);
 
     if (!product?.id) {
-      return <ErrorState />;
+      return (
+        <ErrorState
+          returnUrl={returnUrl}
+        />
+      );
     }
 
     let relatedProducts = [];
@@ -96,6 +133,10 @@ export default async function ProductDetailPage({ params }) {
       />
     );
   } catch {
-    return <ErrorState />;
+    return (
+      <ErrorState
+        returnUrl={returnUrl}
+      />
+    );
   }
 }

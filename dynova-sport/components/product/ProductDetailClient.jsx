@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -42,6 +42,26 @@ const API_HOST = (
 const FALLBACK_IMAGE =
   PRODUCT_FALLBACK ||
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
+
+const SHOP_NAVIGATION_KEY = "dynova_shop_navigation_v2";
+const SHOP_RETURN_WINDOW = 30 * 60 * 1000;
+
+function getSafeShopReturnUrl(value) {
+  const path = String(value || "").trim();
+
+  if (
+    path === "/shop" ||
+    (
+      path.startsWith("/shop?") &&
+      !path.startsWith("//") &&
+      !path.includes("\\")
+    )
+  ) {
+    return path;
+  }
+
+  return "/shop";
+}
 
 function safeDecode(value) {
   try {
@@ -459,7 +479,7 @@ function buildCartProduct({
   };
 }
 
-function RelatedCard({ product }) {
+function RelatedCard({ product, returnUrl }) {
   const variants = useMemo(
     () =>
       getRawVariants(product)
@@ -473,7 +493,9 @@ function RelatedCard({ product }) {
 
   return (
     <Link
-      href={`/shop/product/${product.id}`}
+      href={`/shop/product/${product.id}?from=${encodeURIComponent(
+        returnUrl
+      )}`}
       className="group flex h-full flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
     >
       <div className="overflow-hidden rounded-[20px] bg-slate-100">
@@ -513,23 +535,72 @@ export default function ProductDetailClient({
   relatedProducts = [],
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const returnToShop = () => {
-    const from = searchParams.get("from");
+  const shopReturnUrl = useMemo(
+    () => getSafeShopReturnUrl(searchParams.get("from")),
+    [searchParams]
+  );
 
-    if (
-      from &&
-      from.startsWith("/shop") &&
-      !from.startsWith("//") &&
-      !from.includes("\\")
-    ) {
-      router.push(from);
+  const returnToShop = () => {
+    if (typeof window === "undefined") {
+      router.replace(shopReturnUrl);
       return;
     }
 
-    router.push("/shop");
+    let navigation = null;
+
+    try {
+      const raw = sessionStorage.getItem(SHOP_NAVIGATION_KEY);
+      navigation = raw ? JSON.parse(raw) : null;
+    } catch {
+      sessionStorage.removeItem(SHOP_NAVIGATION_KEY);
+    }
+
+    const cameDirectlyFromShop =
+      navigation?.from === shopReturnUrl &&
+      String(navigation?.productId || "") === String(product?.id || "") &&
+      Date.now() - Number(navigation?.savedAt || 0) <
+        SHOP_RETURN_WINDOW &&
+      window.history.length > 1;
+
+    if (cameDirectlyFromShop) {
+      router.back();
+      return;
+    }
+
+    router.replace(shopReturnUrl, {
+      scroll: false,
+    });
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let navigation = null;
+
+    try {
+      const raw = sessionStorage.getItem(SHOP_NAVIGATION_KEY);
+      navigation = raw ? JSON.parse(raw) : null;
+    } catch {
+      sessionStorage.removeItem(SHOP_NAVIGATION_KEY);
+    }
+
+    if (
+      navigation?.from === shopReturnUrl &&
+      String(navigation?.productId || "") === String(product?.id || "")
+    ) {
+      sessionStorage.setItem(
+        SHOP_NAVIGATION_KEY,
+        JSON.stringify({
+          ...navigation,
+          currentPath: pathname,
+          savedAt: Number(navigation.savedAt || Date.now()),
+        })
+      );
+    }
+  }, [pathname, product?.id, shopReturnUrl]);
 
   const variants = useMemo(() => {
     return getRawVariants(product)
@@ -1682,6 +1753,7 @@ export default function ProductDetailClient({
                   <RelatedCard
                     key={item.id}
                     product={item}
+                    returnUrl={shopReturnUrl}
                   />
                 ))}
             </div>
