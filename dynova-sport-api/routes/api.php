@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\Admin\AdminSimpleController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
+use App\Http\Controllers\Api\Admin\AdminDashboardController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -86,7 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('auth:sanctum')
     ->prefix('admin')
     ->group(function () {
-        Route::get('/dashboard', [AdminSimpleController::class, 'dashboard']);
+        Route::get('/dashboard', [AdminDashboardController::class, 'index']);
 
         Route::get('/product-options', [AdminProductController::class, 'options']);
         Route::get('/products', [AdminProductController::class, 'index']);
