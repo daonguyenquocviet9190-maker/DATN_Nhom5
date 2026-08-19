@@ -17,6 +17,19 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\Admin\AdminSimpleController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
 use App\Http\Controllers\Api\Admin\AdminDashboardController;
+use App\Http\Controllers\Api\VoucherController;
+
+/*
+|--------------------------------------------------------------------------
+| MÃ GIẢM GIÁ
+|--------------------------------------------------------------------------
+*/
+// Endpoint cho khách hàng kiểm tra mã ở Giỏ hàng / Checkout
+Route::post('/vouchers/apply', [VoucherController::class, 'applyVoucher']);
+
+// Endpoint lấy danh sách mã giảm giá (Dùng cho cả Admin hoặc trang khuyến mãi)
+Route::get('/vouchers', [VoucherController::class, 'index']);
+
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -43,6 +56,26 @@ Route::post('/shipping/fee', [ShippingController::class, 'fee']);
 Route::post('/payments/create', [PaymentController::class, 'create']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    /*
+    |--------------------------------------------------------------------------
+    | ORDERS
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/orders', [OrderController::class, 'store']);             // Tạo đơn hàng mới
+    Route::get('/orders', [OrderController::class, 'index']);               // Lấy danh sách đơn hàng
+    Route::get('/my-orders', [OrderController::class, 'myOrders']);         // Alias lịch sử đơn hàng
+    Route::get('/orders/{id}', [OrderController::class, 'show']);           // Chi tiết đơn hàng
+    Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);   // Hủy đơn hàng
+    Route::post('/orders/{id}/reorder', [OrderController::class, 'reorder']); // Mua lại đơn hàng
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROFILE
+    |--------------------------------------------------------------------------
+    */
+
+
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);

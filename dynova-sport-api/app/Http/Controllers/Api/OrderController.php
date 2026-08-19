@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class OrderController extends Controller
 {
@@ -132,6 +133,11 @@ class OrderController extends Controller
             'ward' => $order->ward ?? null,
             'note' => $order->note ?? null,
 
+            'coupon' => $order->coupon 
+                ?? $order->voucher_code 
+                ?? $order->voucher 
+                ?? null,
+
             'subtotal' => (float) ($order->subtotal ?? $order->total_price ?? 0),
             'discount' => (float) ($order->discount ?? $order->discount_amount ?? 0),
             'shipping_fee' => (float) ($order->shipping_fee ?? 0),
@@ -252,12 +258,32 @@ class OrderController extends Controller
                 $province,
             ])->filter()->implode(', ');
 
+            $couponCode = !empty($validated['coupon']) ? strtoupper(trim($validated['coupon'])) : null;
+
+            // --- XỬ LÝ CẬP NHẬT LƯỢT DÙNG VOUCHER Ở BACKEND ---
+            if ($couponCode && Schema::hasTable('vouchers')) {
+                $voucher = DB::table('vouchers')
+                    ->where('code', $couponCode)
+                    ->where('is_active', 1)
+                    ->first();
+
+                if ($voucher) {
+                    if (Schema::hasColumn('vouchers', 'used_count')) {
+                        DB::table('vouchers')
+                            ->where('id', $voucher->id)
+                            ->increment('used_count');
+                    }
+                }
+            }
+
             $orderPayload = $this->onlyExistingOrderColumns([
                 'user_id' => $user->id,
 
                 'order_code' => $orderCode,
 
                 'customer_name' => $customerName,
+                'name' => $customerName,
+                'full_name' => $customerName,
 
                 'email' => $customerEmail,
                 'customer_email' => $customerEmail,
@@ -278,7 +304,11 @@ class OrderController extends Controller
                 'payment_status' => $paymentStatus,
                 'status' => $orderStatus,
 
-                'coupon' => $validated['coupon'] ?? null,
+                // Tự động map vào tên cột voucher có trong DB
+                'coupon' => $couponCode,
+                'voucher_code' => $couponCode,
+                'voucher' => $couponCode,
+                'coupon_code' => $couponCode,
 
                 'total_price' => $validated['subtotal'],
                 'discount_amount' => $validated['discount'] ?? 0,
