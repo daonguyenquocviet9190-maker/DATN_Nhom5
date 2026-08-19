@@ -380,37 +380,55 @@ function CheckoutContent() {
   };
 
   const handleCalculateShipping = async () => {
-    if (!form.province.trim() || !form.ward.trim() || !form.address.trim()) {
-      setShippingMessage("Vui lòng nhập đầy đủ địa chỉ trước.");
-      return;
-    }
+  // 1. Nếu đơn hàng >= 500k -> Tự động tính là 0đ (Freeship)
+  if (subtotal >= 500000) {
+    setShippingFee(0);
+    setShippingMessage("Đơn hàng trên 500.000 đ - Bạn được MIỄN PHÍ vận chuyển!");
+    return;
+  }
 
-    setShippingLoading(true);
-    setShippingMessage("");
+  // 2. Nếu đơn < 500k mới bắt buộc kiểm tra địa chỉ
+  if (!form.province || !form.ward || !form.address?.trim()) {
+    setShippingMessage("Vui lòng chọn Tỉnh/Thành, Phường/Xã và nhập Địa chỉ cụ thể.");
+    return;
+  }
 
-    try {
-      const response = await calculateShippingFee({
+  setShippingLoading(true);
+  setShippingMessage("");
+
+  try {
+    const response = await fetch("http://localhost:8000/api/shipping/fee", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
         province: form.province,
-        provinceCode: form.provinceCode,
         district: form.ward,
         ward: form.ward,
-        wardCode: form.wardCode,
         address: form.address,
-        weight: totalWeight,
+        weight: totalWeight || 600,
         value: subtotal,
-        items,
-      });
+      }),
+    });
 
-      const fee = Number(response?.data?.fee ?? response?.fee ?? 0);
-      setShippingFee(fee);
-      setShippingMessage(response?.message || "Đã tính phí vận chuyển.");
-    } catch {
-      setShippingFee(defaultShipping);
-      setShippingMessage("Dùng phí vận chuyển tiêu chuẩn.");
-    } finally {
-      setShippingLoading(false);
+    const resData = await response.json();
+
+    if (resData.success) {
+      const feeVal = Number(resData.fee ?? resData.data?.fee ?? 0);
+      setShippingFee(feeVal);
+      setShippingMessage(resData.message || "Đã tính phí giao hàng thành công!");
+    } else {
+      setShippingMessage(resData.message || "Không thể tính phí vận chuyển.");
     }
-  };
+  } catch (error) {
+    setShippingFee(30000); // Phí dự phòng
+    setShippingMessage("Áp dụng phí giao hàng tiêu chuẩn (30.000 đ).");
+  } finally {
+    setShippingLoading(false);
+  }
+};
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -572,102 +590,46 @@ function CheckoutContent() {
           <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_420px]">
             <section className="space-y-6">
               <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="mb-5 text-xl font-black text-slate-950">Thông tin nhận hàng</h2>
+  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h2 className="text-xl font-black text-slate-950">Phí vận chuyển</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Tính theo địa chỉ, trọng lượng và giá trị đơn hàng.
+      </p>
+    </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Họ và tên *" icon={User} error={errors.fullName}>
-                    <input
-                      name="fullName"
-                      value={form.fullName}
-                      onChange={handleChange}
-                      className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
-                      placeholder="Nguyễn Trọng Hoài"
-                    />
-                  </Field>
+    <button
+      type="button"
+      onClick={handleCalculateShipping}
+      disabled={shippingLoading}
+      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:opacity-70"
+    >
+      {shippingLoading ? "Đang tính..." : "Tính phí"}
+    </button>
+  </div>
 
-                  <Field label="Số điện thoại *" icon={Phone} error={errors.phone}>
-                    <input
-                      name="phone"
-                      value={form.phone}
-                      onChange={handleChange}
-                      className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
-                      placeholder="0866 347 730"
-                    />
-                  </Field>
+  <div className="rounded-3xl bg-slate-50 p-5">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-black text-slate-950">Giao hàng tiết kiệm / Chuẩn</p>
+        <p className="mt-1 text-xs font-bold text-slate-400">
+          Trọng lượng tạm tính: {totalWeight || 500}g
+        </p>
+      </div>
 
-                  <Field label="Email" error={errors.email}>
-                    <input
-                      name="email"
-                      value={form.email}
-                      onChange={handleChange}
-                      className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
-                      placeholder="name@email.com"
-                    />
-                  </Field>
+      <p className="text-xl font-black text-orange-600">
+        {shippingFee === 0 ? "MIỄN PHÍ" : `${shippingFee?.toLocaleString("vi-VN")} đ`}
+      </p>
+    </div>
 
-                  <Field label="Tỉnh / Thành phố *" error={errors.province}>
-                    <select
-                      value={form.provinceCode}
-                      onChange={handleProvinceChange}
-                      disabled={addressLoading}
-                      className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      <option value="">
-                        {addressLoading ? "Đang tải tỉnh/thành..." : "Chọn tỉnh/thành phố"}
-                      </option>
-                      {provinces.map((province) => (
-                        <option key={province.code} value={province.code}>
-                          {province.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Phường / Xã *" error={errors.ward}>
-                    <select
-                      value={form.wardCode}
-                      onChange={handleWardChange}
-                      disabled={addressLoading || !form.provinceCode}
-                      className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      <option value="">
-                        {form.provinceCode ? "Chọn phường/xã" : "Chọn tỉnh/thành trước"}
-                      </option>
-                      {wards.map((ward) => (
-                        <option key={ward.code} value={ward.code}>
-                          {ward.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  {addressError && (
-                    <div className="rounded-2xl bg-rose-50 p-3 text-xs font-bold text-rose-600 md:col-span-2">
-                      {addressError}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4">
-                  <Field label="Địa chỉ cụ thể *" error={errors.address}>
-                    <input
-                      name="address"
-                      value={form.address}
-                      onChange={handleChange}
-                      className="h-[52px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
-                      placeholder="Số nhà, tên đường..."
-                    />
-                  </Field>
-                </div>
-
-                <textarea
-                  name="note"
-                  value={form.note}
-                  onChange={handleChange}
-                  className="mt-4 min-h-24 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-bold leading-7 text-slate-950 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
-                  placeholder="Ghi chú cho cửa hàng hoặc đơn vị vận chuyển"
-                />
-              </div>
+    {shippingMessage && (
+      <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-600">
+        <span className="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
+        {shippingMessage}
+      </p>
+    )}
+  </div>
+</div>
 
               <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
