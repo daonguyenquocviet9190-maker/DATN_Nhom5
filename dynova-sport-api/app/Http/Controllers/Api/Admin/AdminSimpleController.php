@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Models\Voucher;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -1608,18 +1609,24 @@ class AdminSimpleController extends Controller
     }
 }
 
-    public function promotions(Request $request)
-    {
-        if ($deny = $this->checkAdmin($request)) return $deny;
+    public function promotions()
+{
+    try {
+        // Lấy tất cả danh sách mã giảm giá
+        $promotions = Voucher::all(); // Nếu đặt tên Model là Promotion thì sửa thành Promotion::all()
 
-        if (!$this->hasTable('promotions')) {
-            return $this->emptyList('promotions');
-        }
-
-        $items = DB::table('promotions')->orderByDesc('id')->get();
-
-        return $this->listResponse('promotions', $items, count($items));
+        return response()->json([
+            'success' => true,
+            'data' => $promotions
+        ], 200);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'data' => []
+        ], 500);
     }
+}
 
     public function ratings(Request $request)
     {
@@ -1741,5 +1748,43 @@ private function resolveOrderStatusForDb($rawStatus)
     }
 
     return null;
+}
+
+// 1. Hàm tạo mã giảm giá mới
+public function storePromotion(\Illuminate\Http\Request $request)
+{
+    $validated = $request->validate([
+        'code'            => 'required|string|unique:vouchers,code',
+        'name'            => 'nullable|string',
+        'type'            => 'required|string',
+        'value'           => 'required|numeric',
+        'min_order_value' => 'nullable|numeric',
+        'is_active'       => 'nullable|boolean',
+    ]);
+
+    // Nếu DB của bạn dùng bảng 'vouchers' hoặc 'promotions' (thay Model tương ứng)
+    $promotion = \App\Models\Voucher::create($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Thêm mã giảm giá thành công!',
+        'data'    => $promotion
+    ], 201);
+}
+
+// 2. Hàm xóa mã giảm giá
+public function deletePromotion($id)
+{
+    $promotion = \App\Models\Voucher::find($id);
+    if (!$promotion) {
+        return response()->json(['success' => false, 'message' => 'Không tìm thấy mã!'], 404);
+    }
+
+    $promotion->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Đã xóa mã giảm giá thành công!'
+    ]);
 }
 }

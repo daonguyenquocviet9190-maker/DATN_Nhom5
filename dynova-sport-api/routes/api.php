@@ -30,6 +30,10 @@ Route::post('/vouchers/apply', [VoucherController::class, 'applyVoucher']);
 // Endpoint lấy danh sách mã giảm giá (Dùng cho cả Admin hoặc trang khuyến mãi)
 Route::get('/vouchers', [VoucherController::class, 'index']);
 
+Route::get('/admin/promotions', [AdminSimpleController::class, 'promotions']);
+Route::post('/admin/promotions', [AdminSimpleController::class, 'storePromotion']);
+Route::delete('/admin/promotions/{id}', [AdminSimpleController::class, 'deletePromotion'])->whereNumber('id');
+
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
