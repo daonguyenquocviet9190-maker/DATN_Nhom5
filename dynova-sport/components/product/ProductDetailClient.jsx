@@ -1178,26 +1178,9 @@ export default function ProductDetailClient({
               </div>
 
 
-              <button
-                type="button"
-                onClick={returnToShop}
-                className="hidden rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 sm:inline-flex"
-              >
-                Xem tất cả
-              </button>
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {relatedProducts
-                .slice(0, 4)
-                .map((item) => (
-                  <RelatedCard
-                    key={item.id}
-                    product={item}
-                    returnUrl={shopReturnUrl}
-                  />
-                ))}
-
+            <div>
               <div className="flex gap-2">
                 <button
                   type="button"
