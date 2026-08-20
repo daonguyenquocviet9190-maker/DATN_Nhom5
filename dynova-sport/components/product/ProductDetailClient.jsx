@@ -1090,42 +1090,6 @@ export default function ProductDetailClient({
           <h1 className="mt-4 text-4xl font-black uppercase leading-tight tracking-[-0.04em] md:text-5xl">
             {product?.name}
           </h1>
-
-
-            <button
-              type="button"
-              onClick={returnToShop}
-              className="transition hover:text-orange-300"
-            >
-              Sản phẩm
-            </button>
-
-            <ChevronRight size={14} />
-
-            <span className="line-clamp-1 text-orange-300">
-              {product.name}
-            </span>
-          </div>
-
-          <div className="mt-8 max-w-3xl">
-            {brandName && (
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-                <Sparkles size={14} />
-                {brandName}
-              </div>
-            )}
-
-            <h1 className="mt-4 text-4xl font-black uppercase leading-tight tracking-[-0.04em] md:text-5xl">
-              {product.name}
-            </h1>
-
-            {product.short_description && (
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
-                {product.short_description}
-              </p>
-            )}
-          </div>
-
           {product?.short_description && (
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
               {product.short_description}
@@ -1135,18 +1099,6 @@ export default function ProductDetailClient({
         </div>
       </div>
     </section>
-
-
-      <div className="container-page relative z-20 -mt-6">
-        <button
-          type="button"
-          onClick={returnToShop}
-          className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm transition hover:-translate-x-1 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-        >
-          <ArrowLeft size={16} />
-          Quay lại cửa hàng
-        </button>
-
     {/* MAIN CONTENT SECTION */}
     <div className="container-page relative z-20 -mt-6">
       <Link
