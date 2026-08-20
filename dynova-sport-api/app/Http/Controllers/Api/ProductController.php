@@ -94,7 +94,7 @@ class ProductController extends Controller
 
         $perPage = min(
             max((int) $request->input('per_page', 12), 1),
-            100
+            400
         );
 
         $products = $query->paginate($perPage);
