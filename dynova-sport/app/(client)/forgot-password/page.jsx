@@ -183,8 +183,10 @@ export default function ForgotPasswordPage() {
       nextErrors.otp = "Vui lòng nhập mã xác thực.";
     }
 
-    if (form.password.length < 6) {
-      nextErrors.password = "Mật khẩu mới cần tối thiểu 6 ký tự.";
+    if (form.password.length < 8) {
+      nextErrors.password = "Mật khẩu mới cần tối thiểu 8 ký tự.";
+    } else if (!/[A-Za-z]/.test(form.password) || !/[0-9]/.test(form.password)) {
+      nextErrors.password = "Mật khẩu mới cần có ít nhất 1 chữ và 1 số.";
     }
 
     if (!form.confirmPassword) {
@@ -390,7 +392,7 @@ export default function ForgotPasswordPage() {
                   type={showPassword ? "text" : "password"}
                   value={form.password}
                   onChange={(event) => update("password", event.target.value)}
-                  placeholder="Tối thiểu 6 ký tự"
+                  placeholder="Tối thiểu 8 ký tự, có chữ và số"
                   error={errors.password}
                   autoComplete="new-password"
                   rightSlot={

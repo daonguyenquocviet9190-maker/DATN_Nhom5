@@ -1,0 +1,14 @@
+GHN REAL - DYNOVA SPORT
+
+- Checkout dùng địa chỉ Tỉnh/Quận/Phường từ GHN.
+- Phí vận chuyển gọi API GHN và backend tính lại khi tạo đơn.
+- Admin chuyển Đã xác nhận -> Đang giao: backend tự tạo vận đơn GHN.
+- Không nhập mã vận đơn thủ công.
+- Lưu mã vận đơn, trạng thái, phí GHN, ngày giao dự kiến và lịch sử vận chuyển vào database.
+- Chi tiết đơn khách hàng đồng bộ GHN và hiển thị hành trình giao hàng.
+- Khi đơn đang giao, frontend tự refresh tracking khoảng 60 giây/lần.
+- Có webhook GHN để nhận callback trạng thái khi triển khai backend bằng URL public HTTPS.
+- GHN báo delivered -> đơn nội bộ tự completed; COD tự paid.
+- Token/Shop ID/Client ID chỉ cấu hình trong .env backend, không đưa sang frontend.
+
+Đọc HUONG_DAN_GHN_THAT.md trước khi chạy GHN thật.

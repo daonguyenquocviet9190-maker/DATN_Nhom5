@@ -11,8 +11,11 @@ const AUTH_TOKEN_KEYS = [
 
 const AUTH_USER_KEYS = [
   "dynova_current_user",
-  "currentUser",
+  "dynova_auth_user",
   "dynova_user",
+  "auth_user",
+  "currentUser",
+  "current_user",
   "user",
 ];
 
@@ -289,12 +292,7 @@ export function getAuthToken(): string {
 export function getStoredAuthUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
 
-  if (
-    localStorage.getItem(LOGOUT_MARKER_KEY) === "1" ||
-    sessionStorage.getItem(LOGOUT_MARKER_KEY) === "1"
-  ) {
-    return null;
-  }
+  if (!getAuthToken()) return null;
 
   for (const storage of [localStorage, sessionStorage]) {
     for (const key of AUTH_USER_KEYS) {
@@ -352,12 +350,12 @@ export async function loginWithApi(payload: LoginPayload): Promise<LoginResult> 
   const rawUser = extractUser(data);
 
   if (!token) {
-    throw createApiError("API đăng nhập chưa trả token.", response.status, data);
+    throw createApiError("Không thể hoàn tất đăng nhập. Vui lòng thử lại.", response.status, data);
   }
 
   if (!rawUser) {
     throw createApiError(
-      "API đăng nhập chưa trả thông tin user.",
+      "Không thể tải thông tin tài khoản sau khi đăng nhập.",
       response.status,
       data
     );
@@ -418,7 +416,7 @@ export async function registerWithApi(
 
   if (!rawUser) {
     throw createApiError(
-      "API đăng ký chưa trả thông tin user.",
+      "Không thể tải thông tin tài khoản sau khi đăng ký.",
       response.status,
       data
     );
@@ -506,10 +504,13 @@ export async function fetchMeWithApi(): Promise<AuthUser | null> {
   const rawUser = extractUser(data) || data?.data || data;
   const user = normalizeAuthUser(rawUser);
 
+  const remember =
+    localStorage.getItem("dynova_remember_login") === "1";
+
   saveAuthSession({
     token,
     user,
-    remember: true,
+    remember,
   });
 
   return user;

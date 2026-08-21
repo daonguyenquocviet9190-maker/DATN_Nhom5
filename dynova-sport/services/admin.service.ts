@@ -40,6 +40,9 @@ function getToken(): string {
     localStorage.getItem("dynova_auth_token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("token") ||
+    sessionStorage.getItem("dynova_auth_token") ||
+    sessionStorage.getItem("auth_token") ||
+    sessionStorage.getItem("token") ||
     ""
   );
 }
@@ -118,7 +121,7 @@ function createAdminError(response: Response, data: any): AdminApiError {
     data?.errors?.status?.[0] ||
     data?.errors?.is_active?.[0] ||
     data?.errors?.code?.[0] ||
-    "Không thể gọi API quản trị.";
+    "Không thể xử lý yêu cầu quản trị.";
 
   const error: AdminApiError = new Error(message);
   error.status = response.status;
@@ -477,12 +480,14 @@ export function getAdminOrders(query: QueryParams = {}) {
 
 export function updateAdminOrderStatus(
   id: number | string,
-  status: string
+  status: string,
+  options: { tracking_code?: string; shipping_provider?: string } = {}
 ) {
   return adminFetch(`/admin/orders/${id}/status`, {
     method: "PATCH",
     body: {
       status,
+      ...options,
     },
   });
 }

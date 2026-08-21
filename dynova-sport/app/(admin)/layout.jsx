@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageCircle,
   Percent,
   Search,
   Settings,
@@ -71,11 +72,6 @@ const sections = [
         href: "/admin/promotions",
         icon: Percent,
       },
-      // {
-      //   name: "Tồn kho",
-      //   href: "/admin/inventory",
-      //   icon: Boxes,
-      // },
     ],
   },
   {
@@ -91,18 +87,13 @@ const sections = [
         href: "/admin/ratings",
         icon: BarChart3,
       },
+      {
+        name: "Chat khách hàng",
+        href: "/admin/chat",
+        icon: MessageCircle,
+      },
     ],
   },
-  // {
-  //   title: "Nội dung",
-  //   items: [
-  //     {
-  //       name: "Banner",
-  //       href: "/admin/banners",
-  //       icon: Image,
-  //     },
-  //   ],
-  // },
   {
     title: "Hệ thống",
     items: [

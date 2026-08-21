@@ -29,7 +29,11 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
-import { logoutWithApi } from "@/services/auth.service";
+import {
+  clearAuthSession,
+  getAuthToken,
+  logoutWithApi,
+} from "@/services/auth.service";
 import {
   getProfile,
   updateProfile,
@@ -124,7 +128,6 @@ function getPaymentLabel(method = "") {
     BANK: "Chuyển khoản ngân hàng",
     BANK_TRANSFER: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
-    MOMO: "MoMo",
   };
 
   return map[clean] || method || "Chưa xác định";
@@ -285,6 +288,16 @@ export default function ProfilePage() {
     setLoading(true);
     setError("");
 
+    if (!getAuthToken()) {
+      clearAuthSession();
+      setUser(null);
+      setStats({});
+      setRecentOrders([]);
+      setLoading(false);
+      router.replace("/login?redirect=/profile");
+      return;
+    }
+
     try {
       const data = await getProfile();
       const profileUser = data.user;
@@ -299,12 +312,11 @@ export default function ProfilePage() {
       fillForm(profileUser);
     } catch (err) {
       if (err.status === 401) {
-        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-
-        setTimeout(() => {
-          router.push("/login?redirect=/profile");
-        }, 900);
-
+        clearAuthSession();
+        setUser(null);
+        setStats({});
+        setRecentOrders([]);
+        router.replace("/login?redirect=/profile");
         return;
       }
 
@@ -447,14 +459,17 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    const ok = window.confirm("Bạn có chắc muốn đăng xuất không?");
-
-    if (!ok) return;
+    setUser(null);
+    setStats({});
+    setRecentOrders([]);
 
     try {
       await logoutWithApi();
+    } catch {
+      // Phiên local vẫn được xóa ngay cả khi backend tạm thời không phản hồi.
     } finally {
-      router.push("/login");
+      router.replace("/login");
+      router.refresh();
     }
   };
 

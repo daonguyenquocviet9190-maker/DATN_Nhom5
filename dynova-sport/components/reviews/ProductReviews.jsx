@@ -15,7 +15,9 @@ import {
 import {
   createReview,
   getProductReviews,
+  getReviewEligibility,
 } from "@/services/review.service";
+import { getAuthToken } from "@/services/auth.service";
 
 function StarRating({ value, onChange, readonly = false, size = 20 }) {
   return (
@@ -81,6 +83,8 @@ export default function ProductReviews({ productId, orderId = null }) {
 
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [eligibility, setEligibility] = useState(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -121,8 +125,43 @@ export default function ProductReviews({ productId, orderId = null }) {
     }
   };
 
+
+  const loadEligibility = async () => {
+    if (!productId) return;
+
+    if (!getAuthToken()) {
+      setEligibility({
+        can_review: false,
+        reason: "Đăng nhập để đánh giá sản phẩm đã mua.",
+      });
+      return;
+    }
+
+    try {
+      setEligibilityLoading(true);
+      const data = await getReviewEligibility(productId);
+      setEligibility(data);
+    } catch (err) {
+      if (err?.status === 401) {
+        setEligibility({
+          can_review: false,
+          reason: "Đăng nhập để đánh giá sản phẩm đã mua.",
+        });
+        return;
+      }
+
+      setEligibility({
+        can_review: false,
+        reason: "Chưa thể kiểm tra quyền đánh giá lúc này.",
+      });
+    } finally {
+      setEligibilityLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadReviews();
+    loadEligibility();
   }, [productId]);
 
   const showNotice = (message) => {
@@ -140,6 +179,16 @@ export default function ProductReviews({ productId, orderId = null }) {
     return;
   }
 
+  if (!eligibility?.can_review) {
+    if (!getAuthToken()) {
+      router.push(`/login?redirect=/shop/product/${productId}#reviews`);
+      return;
+    }
+
+    setError(eligibility?.reason || "Bạn chưa đủ điều kiện đánh giá sản phẩm này.");
+    return;
+  }
+
   if (!text || text.length < 5) {
     setError("Nội dung đánh giá phải có ít nhất 5 ký tự.");
     return;
@@ -151,24 +200,17 @@ export default function ProductReviews({ productId, orderId = null }) {
 
     const data = await createReview({
       product_id: productId,
-      order_id: orderId,
+      order_id: orderId || eligibility?.order_id || null,
+      order_item_id: eligibility?.order_item_id || null,
       rating,
       content: text,
     });
 
-    const newReview =
-      data?.review || {
-        id: "temp-" + Date.now(),
-        product_id: productId,
-        order_id: orderId,
-        rating,
-        content: text,
-        status: "approved",
-        created_at: new Date().toISOString(),
-        user: {
-          name: "Bạn",
-        },
-      };
+    const newReview = data?.review;
+
+    if (!newReview) {
+      throw new Error("Không nhận được dữ liệu đánh giá sau khi gửi.");
+    }
 
     setReviews((prev) => {
       const cleanPrev = prev.filter(
@@ -201,6 +243,7 @@ export default function ProductReviews({ productId, orderId = null }) {
 
     setTimeout(() => {
       loadReviews();
+      loadEligibility();
     }, 300);
   } catch (err) {
     if (err.status === 401) {
@@ -299,12 +342,18 @@ export default function ProductReviews({ productId, orderId = null }) {
               Viết đánh giá của bạn
             </p>
 
+            {!eligibilityLoading && eligibility && !eligibility.can_review && (
+              <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-xs font-bold leading-5 text-slate-500">
+                {eligibility.reason}
+              </p>
+            )}
+
             <div className="mt-4">
               <p className="mb-2 text-xs font-black uppercase tracking-wider text-slate-500">
                 Chọn số sao
               </p>
 
-              <StarRating value={rating} onChange={setRating} size={24} />
+              <StarRating value={rating} onChange={setRating} readonly={!eligibility?.can_review} size={24} />
             </div>
 
             <label className="mt-4 block">
@@ -314,6 +363,7 @@ export default function ProductReviews({ productId, orderId = null }) {
 
               <textarea
                 value={content}
+                disabled={!eligibility?.can_review}
                 onChange={(event) => setContent(event.target.value)}
                 rows={5}
                 placeholder="Chia sẻ cảm nhận về chất lượng, size, chất liệu, trải nghiệm sử dụng..."
@@ -329,7 +379,7 @@ export default function ProductReviews({ productId, orderId = null }) {
             )}
 
             <button
-              disabled={sending}
+              disabled={sending || eligibilityLoading || !eligibility?.can_review}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {sending ? (

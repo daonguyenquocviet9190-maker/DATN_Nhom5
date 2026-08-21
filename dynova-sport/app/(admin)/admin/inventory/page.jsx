@@ -196,7 +196,7 @@ export default function AdminInventoryPage() {
       setError(
         err?.data?.message ||
           err?.message ||
-          "Không thể tải dữ liệu tồn kho từ API."
+          "Không thể tải dữ liệu tồn kho. Vui lòng thử lại."
       );
       setItems([]);
     } finally {
@@ -394,7 +394,7 @@ export default function AdminInventoryPage() {
                       className="mx-auto mb-3 animate-spin text-orange-300"
                       size={30}
                     />
-                    Đang tải dữ liệu tồn kho...
+                    Đang tải tồn kho...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (

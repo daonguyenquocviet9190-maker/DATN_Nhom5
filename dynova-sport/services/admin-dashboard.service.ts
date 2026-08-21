@@ -64,7 +64,6 @@ export async function getAdminDashboardReport(
 
   const payload = data?.data;
 
-  // Không cho response cũ/không đúng schema âm thầm biến thành toàn số 0.
   if (!hasCurrentDashboardShape(payload)) {
     throw createDashboardError(
       "Dữ liệu Dashboard chưa đồng bộ với phiên bản hiện tại. Hãy kiểm tra route quản trị và tải lại.",

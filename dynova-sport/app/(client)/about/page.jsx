@@ -48,11 +48,8 @@ export default function AboutPage() {
 
   return (
     <div className={`${archivo.variable} ${inter.variable} min-h-screen bg-white text-[#0F0F0F] antialiased`} style={{ fontFamily: 'var(--font-inter)' }}>
-
-      {/* HERO — DIAGONAL ENERGY BLOCK */}
-      <section className="relative bg-[#0F0F0F] text-white overflow-hidden">
-        {/* diagonal orange slash */}
-        <div
+<section className="relative bg-[#0F0F0F] text-white overflow-hidden">
+<div
           className="absolute -right-32 -top-32 w-[60%] h-[160%] bg-[#FF5A1F]"
           style={{ transform: 'skewX(-12deg)' }}
         />
@@ -77,9 +74,7 @@ export default function AboutPage() {
           </p>
         </div>
       </section>
-
-      {/* LỜI CHÀO & CÂU CHUYỆN THƯƠNG HIỆU */}
-      <section className="px-6 md:px-12 py-16 md:py-20 max-w-6xl mx-auto">
+<section className="px-6 md:px-12 py-16 md:py-20 max-w-6xl mx-auto">
         <div className="max-w-3xl">
           <h2
             className="uppercase leading-tight mb-8"
@@ -115,9 +110,7 @@ export default function AboutPage() {
             </p>
           </div>
         </div>
-
-        {/* STATS */}
-        <div className="grid grid-cols-3 mt-10 bg-[#0F0F0F] text-white rounded-sm overflow-hidden">
+<div className="grid grid-cols-3 mt-10 bg-[#0F0F0F] text-white rounded-sm overflow-hidden">
           {stats.map((s, i) => (
             <div key={i} className={`py-8 px-4 text-center ${i !== stats.length - 1 ? 'border-r border-neutral-800' : ''}`}>
               <p
@@ -131,9 +124,7 @@ export default function AboutPage() {
           ))}
         </div>
       </section>
-
-      {/* DANH MỤC SẢN PHẨM + LÝ DO CHỌN */}
-      <section className="bg-neutral-50 border-y border-neutral-100">
+<section className="bg-neutral-50 border-y border-neutral-100">
         <div className="grid md:grid-cols-2 max-w-6xl mx-auto divide-y md:divide-y-0 md:divide-x divide-neutral-200">
           <div className="p-6 md:p-10 lg:p-12 space-y-6">
             <h3 className="font-extrabold uppercase text-xl" style={{ fontFamily: 'var(--font-archivo)' }}>
@@ -183,9 +174,7 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
-
-      {/* GIÁ TRỊ CỐT LÕI */}
-      <section className="px-6 md:px-12 py-16 md:py-20 max-w-6xl mx-auto">
+<section className="px-6 md:px-12 py-16 md:py-20 max-w-6xl mx-auto">
         <div className="flex items-end justify-between mb-12">
           <h2 className="uppercase font-extrabold text-2xl md:text-3xl" style={{ fontFamily: 'var(--font-archivo)' }}>
             Giá trị <span className="text-[#FF5A1F]">cốt lõi</span>
@@ -216,9 +205,7 @@ export default function AboutPage() {
           ))}
         </div>
       </section>
-
-      {/* HÀNH TRÌNH PHÁT TRIỂN */}
-      <section className="px-6 md:px-12 py-16 md:py-20 bg-neutral-50 border-y border-neutral-100">
+<section className="px-6 md:px-12 py-16 md:py-20 bg-neutral-50 border-y border-neutral-100">
         <div className="max-w-5xl mx-auto">
           <h2 className="uppercase font-extrabold text-2xl md:text-3xl mb-14 text-center" style={{ fontFamily: 'var(--font-archivo)' }}>
             Hành trình <span className="text-[#FF5A1F]">phát triển</span>
@@ -240,9 +227,7 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
-
-      {/* CTA */}
-      <section className="relative bg-[#FF5A1F] text-white px-6 md:px-12 py-16 md:py-24 overflow-hidden">
+<section className="relative bg-[#FF5A1F] text-white px-6 md:px-12 py-16 md:py-24 overflow-hidden">
         <div className="absolute -left-16 -bottom-24 w-64 h-64 rounded-full bg-white/10" />
         <div className="absolute right-10 top-10 w-24 h-24 rounded-full bg-[#0F0F0F]/10" />
 
@@ -266,9 +251,7 @@ export default function AboutPage() {
           </a>
         </div>
       </section>
-
-      {/* FOOTER */}
-      <footer className="px-6 md:px-12 py-6 text-center text-[11px] font-bold tracking-[0.2em] uppercase text-neutral-400">
+<footer className="px-6 md:px-12 py-6 text-center text-[11px] font-bold tracking-[0.2em] uppercase text-neutral-400">
         Dynova Sport — Năng lượng mới, bước tiến mới — 2026
       </footer>
     </div>

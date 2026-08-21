@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
-  CreditCard,
   Loader2,
   MapPin,
   PackageCheck,
@@ -167,7 +166,6 @@ function getPaymentMethod(order) {
     BANK: "Chuyển khoản ngân hàng",
     BANK_TRANSFER: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
-    MOMO: "MoMo",
   };
 
   return map[method] || method;
@@ -311,17 +309,40 @@ export default function AdminOrderDetailPage() {
 
       const response = await updateAdminOrderStatus(order.id, selectedStatus);
       const updatedOrder = extractOrder(response) || { ...order, status: selectedStatus };
-      const savedStatus = normalizeStatus(updatedOrder?.status || response?.saved_status || response?.data?.status || selectedStatus);
+      const savedStatus = normalizeStatus(
+        updatedOrder?.status ||
+          response?.saved_status ||
+          response?.data?.status ||
+          selectedStatus
+      );
 
-      setOrder({ ...order, ...updatedOrder, status: savedStatus });
+      const mergedOrder = { ...order, ...updatedOrder, status: savedStatus };
+      setOrder(mergedOrder);
 
       const nextOptions = ORDER_TRANSITIONS[savedStatus] || [];
       setSelectedStatus(nextOptions[0] || savedStatus);
 
-      showNotice("Đã cập nhật trạng thái đơn hàng.");
+      const trackingCode =
+        updatedOrder?.tracking_code ||
+        updatedOrder?.tracking?.order_code ||
+        response?.tracking_code ||
+        response?.data?.tracking_code;
+
+      showNotice(
+        savedStatus === "shipping" && trackingCode
+          ? `Đã tạo vận đơn GHN: ${trackingCode}`
+          : "Đã cập nhật trạng thái đơn hàng."
+      );
+
       await loadOrder();
     } catch (err) {
-      setError(getApiErrorMessage(err) || "Không thể cập nhật trạng thái đơn hàng.");
+      const message = getApiErrorMessage(err) || "Không thể cập nhật trạng thái đơn hàng.";
+      setError(message);
+
+      // Giữ nguyên lựa chọn Đang giao để admin có thể sửa cấu hình GHN rồi bấm thử lại.
+      if (selectedStatus !== "shipping") {
+        setSelectedStatus((ORDER_TRANSITIONS[currentStatus] || [])[0] || currentStatus);
+      }
     } finally {
       setSaving(false);
     }
@@ -394,10 +415,7 @@ export default function AdminOrderDetailPage() {
         <div className="space-y-6">
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-black text-white">Tiến trình đơn hàng</h3>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Không cho phép đổi ngược trạng thái.</p>
-              </div>
+              <h3 className="text-lg font-black text-white">Tiến trình đơn hàng</h3>
               <ShieldCheck className="text-orange-300" size={24} />
             </div>
 
@@ -427,7 +445,7 @@ export default function AdminOrderDetailPage() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-white">Sản phẩm trong đơn</h3>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Tổng cộng {items.length} dòng sản phẩm.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{items.length} sản phẩm</p>
               </div>
               <ClipboardList className="text-orange-300" size={24} />
             </div>
@@ -473,16 +491,20 @@ export default function AdminOrderDetailPage() {
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Cập nhật trạng thái</h3>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Luồng hợp lệ: Chờ xử lý → Đã xác nhận → Đang giao → Hoàn thành. Có thể hủy trước khi giao.</p>
 
             <div className="mt-5 space-y-3">
               {finalStatus ? (
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-sm font-black text-white">Đơn hàng đã ở trạng thái cuối.</p>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Đơn hàng đã hoàn thành hoặc đã hủy thì không thể đổi lại trạng thái cũ.</p>
+                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 text-sm font-black text-white">
+                  Đơn hàng đã ở trạng thái cuối.
                 </div>
               ) : (
                 <>
+                  {selectedStatus === "shipping" && order?.tracking_code && (
+                    <div className="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-3 text-xs font-black text-indigo-200">
+                      Mã vận đơn GHN: {order.tracking_code}
+                    </div>
+                  )}
+
                   <select
                     value={selectedStatus}
                     onChange={(event) => setSelectedStatus(event.target.value)}
@@ -502,7 +524,7 @@ export default function AdminOrderDetailPage() {
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
-                    Lưu trạng thái
+                    {saving ? "Đang lưu..." : "Lưu trạng thái"}
                   </button>
                 </>
               )}
@@ -548,6 +570,20 @@ export default function AdminOrderDetailPage() {
             </div>
           </section>
 
+          {(order?.tracking_code || order?.tracking) && (
+            <section className="rounded-[32px] border border-indigo-400/20 bg-indigo-500/10 p-6 backdrop-blur-xl">
+              <div className="flex items-center gap-3">
+                <Truck className="text-indigo-300" size={21} />
+                <h3 className="text-lg font-black text-white">Vận chuyển GHN</h3>
+              </div>
+              <div className="mt-4 space-y-2 text-sm">
+                {order?.tracking_code && <p className="font-bold text-slate-300">Mã vận đơn: <b className="text-white">{order.tracking_code}</b></p>}
+                {order?.tracking?.status_label && <p className="font-bold text-slate-300">Trạng thái: <b className="text-indigo-200">{order.tracking.status_label}</b></p>}
+                {order?.tracking?.leadtime && <p className="font-bold text-slate-300">Dự kiến giao: <b className="text-white">{new Date(order.tracking.leadtime).toLocaleString("vi-VN")}</b></p>}
+              </div>
+            </section>
+          )}
+
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Thanh toán</h3>
             <div className="mt-5 space-y-3 text-sm">
@@ -585,10 +621,6 @@ export default function AdminOrderDetailPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 rounded-3xl border border-orange-400/20 bg-orange-500/10 p-4">
-                <CreditCard className="mt-0.5 text-orange-300" size={20} />
-                <p className="text-xs font-semibold leading-5 text-orange-100/80">Sau khi cập nhật trạng thái, khách hàng sẽ thấy trạng thái mới ở trang lịch sử đơn hàng.</p>
-              </div>
             </div>
           </section>
         </aside>

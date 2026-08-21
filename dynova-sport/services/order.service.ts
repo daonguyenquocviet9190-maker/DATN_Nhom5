@@ -26,6 +26,35 @@ export type OrderItem = {
   line_total?: number;
 };
 
+export type OrderStatusHistory = {
+  id?: number | string;
+  from_status?: string | null;
+  to_status?: string | null;
+  source?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+};
+
+export type OrderTrackingLog = {
+  status?: string | null;
+  status_label?: string | null;
+  updated_date?: string | null;
+};
+
+export type OrderTracking = {
+  order_code?: string | null;
+  status?: string | null;
+  status_label?: string | null;
+  leadtime?: string | null;
+  expected_delivery_time?: string | null;
+  finish_date?: string | null;
+  updated_date?: string | null;
+  current_warehouse_id?: number | string | null;
+  next_warehouse_id?: number | string | null;
+  logs?: OrderTrackingLog[];
+  sync_error?: string | null;
+};
+
 export type Order = {
   id: number | string;
   order_code?: string;
@@ -63,6 +92,16 @@ export type Order = {
   created_at?: string;
   createdAt?: string;
   updated_at?: string;
+
+  shipping_provider?: string | null;
+  tracking_code?: string | null;
+  tracking?: OrderTracking | null;
+  ghn_status?: string | null;
+  ghn_expected_delivery_at?: string | null;
+  ghn_last_synced_at?: string | null;
+  shipping_status_history?: any[];
+  status_history?: OrderStatusHistory[];
+  payment_transactions?: any[];
 
   items?: OrderItem[];
   order_items?: OrderItem[];

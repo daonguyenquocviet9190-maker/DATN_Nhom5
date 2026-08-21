@@ -153,6 +153,9 @@ function getAuthHeaders() {
     localStorage.getItem("dynova_auth_token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("token") ||
+    sessionStorage.getItem("dynova_auth_token") ||
+    sessionStorage.getItem("auth_token") ||
+    sessionStorage.getItem("token") ||
     "";
 
   return {
@@ -528,7 +531,6 @@ function getPaymentLabel(method = "") {
     COD: "Thanh toán khi nhận hàng",
     BANK: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
-    MOMO: "MoMo",
   };
 
   return map[normalized] || method || "Chưa xác định";
@@ -819,27 +821,7 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
   const statusMeta = getStatusMeta(order.status);
   const StatusIcon = statusMeta.icon;
   const items = getOrderItems(order);
-  const [detailOpen, setDetailOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const params = new URLSearchParams(window.location.search);
-    const requestedOrderId = params.get("order");
-
-    if (String(requestedOrderId || "") === String(order?.id || "")) {
-      setDetailOpen(true);
-
-      window.setTimeout(() => {
-        document
-          .getElementById(`order-${order.id}`)
-          ?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-      }, 120);
-    }
-  }, [order?.id]);
+  const detailHref = `/orders/${encodeURIComponent(String(order?.id || ""))}`;
 
   return (
     <article
@@ -849,9 +831,13 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-black uppercase tracking-wider text-orange-500">
+            <Link
+              href={detailHref}
+              className="text-xs font-black uppercase tracking-wider text-orange-500 transition hover:text-orange-600"
+              aria-label={`Xem chi tiết đơn ${getOrderCode(order)}`}
+            >
               #{getOrderCode(order)}
-            </p>
+            </Link>
 
             <button
               type="button"
@@ -956,18 +942,17 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setDetailOpen((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:bg-orange-50 hover:text-orange-600"
-              aria-expanded={detailOpen}
-              aria-controls={`order-detail-${order.id}`}
+            <Link
+              href={detailHref}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-50 hover:text-orange-600"
             >
               <Eye size={15} />
-              {detailOpen ? "Thu gọn" : "Chi tiết"}
-            </button>
+              Chi tiết đơn
+              <ArrowRight size={14} />
+            </Link>
 
             <button
+              type="button"
               onClick={() => onReorder(order)}
               disabled={loading || items.length === 0}
               className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20 disabled:opacity-60"
@@ -978,110 +963,6 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
           </div>
         </div>
       </div>
-
-      {detailOpen && (
-        <div
-          id={`order-detail-${order.id}`}
-          className="mt-5 rounded-[28px] border border-slate-200 bg-slate-50 p-4 md:p-5"
-        >
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Mã đơn hàng
-              </p>
-              <p className="mt-2 text-sm font-black text-slate-950">
-                {getOrderCode(order)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Thanh toán
-              </p>
-              <p className="mt-2 text-sm font-black text-slate-950">
-                {getPaymentLabel(order.payment_method || order.paymentMethod)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Số điện thoại
-              </p>
-              <p className="mt-2 text-sm font-black text-slate-950">
-                {getOrderPhone(order) || "Chưa cập nhật"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Tổng thanh toán
-              </p>
-              <p className="mt-2 text-sm font-black text-orange-600">
-                {formatCurrency(getOrderTotal(order))}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl bg-white p-4">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-              Địa chỉ nhận hàng
-            </p>
-            <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
-              {getOrderAddress(order)}
-            </p>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {items.map((item, index) => {
-              const size = getItemSize(item, catalogMaps);
-              const color = getItemColor(item, catalogMaps);
-              const sku = getItemSku(item, catalogMaps);
-
-              return (
-                <div
-                  key={
-                    item.id ||
-                    `${getProductIdFromItem(item)}-detail-${index}`
-                  }
-                  className="flex flex-col gap-3 rounded-2xl bg-white p-4 sm:flex-row sm:items-center"
-                >
-                  <img
-                    src={getItemImage(item, catalogMaps)}
-                    alt={getItemName(item)}
-                    onError={handleImageError}
-                    className="h-20 w-20 rounded-2xl object-cover"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <p className="font-black text-slate-950">
-                      {getItemName(item)}
-                    </p>
-
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                      {[
-                        `SL: ${getItemQuantity(item)}`,
-                        `Size: ${size}`,
-                        `Màu: ${color}`,
-                        sku ? `SKU: ${sku}` : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" • ")}
-                    </p>
-
-                    <p className="mt-2 text-xs font-bold text-slate-400">
-                      Đơn giá: {formatCurrency(getItemPrice(item))}
-                    </p>
-                  </div>
-
-                  <p className="text-base font-black text-slate-950">
-                    {formatCurrency(getItemTotal(item))}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="mt-5 grid gap-2 sm:grid-cols-4">
         {orderSteps.map((step, index) => {
@@ -1105,6 +986,7 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
 
       {canCancelOrder(order) && (
         <button
+          type="button"
           onClick={() => onCancel(order)}
           disabled={loading}
           className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-xs font-black uppercase tracking-wider text-rose-600 transition hover:bg-rose-500 hover:text-white disabled:opacity-60"

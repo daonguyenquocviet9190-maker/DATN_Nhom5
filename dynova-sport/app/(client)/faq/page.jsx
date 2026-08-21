@@ -180,8 +180,7 @@ export default function FaqPage() {
 
     return (
         <div className="min-h-screen bg-[#F8F7F4]">
-            {/* Hero */}
-            <section className="bg-slate-950 px-6 py-16 sm:py-20">
+<section className="bg-slate-950 px-6 py-16 sm:py-20">
                 <div className="mx-auto max-w-3xl text-center">
                     <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-orange-400">
                         Câu hỏi thường gặp
@@ -206,9 +205,7 @@ export default function FaqPage() {
                     </div>
                 </div>
             </section>
-
-            {/* Category tags — shoe hangtag motif */}
-            {!isSearching && (
+{!isSearching && (
                 <section className="mx-auto -mt-7 max-w-5xl px-6">
                     <div className="flex flex-wrap justify-center gap-3">
                         {CATEGORIES.map((cat) => {
@@ -226,8 +223,7 @@ export default function FaqPage() {
                                             : "bg-white text-slate-700 hover:bg-orange-50"
                                         }`}
                                 >
-                                    {/* punch hole */}
-                                    <span
+<span
                                         className={`absolute left-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full ${active ? "bg-orange-600" : "bg-[#F8F7F4]"
                                             } ring-1 ${active ? "ring-orange-300" : "ring-slate-300"}`}
                                     />
@@ -242,9 +238,7 @@ export default function FaqPage() {
                     </div>
                 </section>
             )}
-
-            {/* FAQ content */}
-            <section className="mx-auto max-w-3xl px-6 py-12">
+<section className="mx-auto max-w-3xl px-6 py-12">
                 {visibleCategories.length === 0 && (
                     <p className="py-10 text-center text-sm text-slate-500">
                         Không tìm thấy câu hỏi phù hợp với “{query}”. Thử từ khoá khác
@@ -278,9 +272,7 @@ export default function FaqPage() {
                     </div>
                 ))}
             </section>
-
-            {/* Contact CTA */}
-            <section className="border-t border-slate-200 bg-white px-6 py-14">
+<section className="border-t border-slate-200 bg-white px-6 py-14">
                 <div className="mx-auto flex max-w-3xl flex-col items-center gap-4 text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50">
                         <MessageCircle className="h-6 w-6 text-orange-500" />

@@ -4,11 +4,9 @@ const API_ORIGIN = (
   .replace(/\/api\/?$/, "")
   .replace(/\/$/, "");
 
-export const PRODUCT_FALLBACK =
-  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
+export const PRODUCT_FALLBACK = "/images/product-placeholder.svg";
 
-export const CATEGORY_FALLBACK =
-  "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=900&auto=format&fit=crop&q=80";
+export const CATEGORY_FALLBACK = "/images/category-placeholder.svg";
 
 export const BRAND_FALLBACK =
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80";

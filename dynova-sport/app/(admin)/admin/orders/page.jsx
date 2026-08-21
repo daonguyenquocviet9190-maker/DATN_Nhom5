@@ -157,7 +157,7 @@ export default function AdminOrdersPage() {
 
       setOrders(Array.isArray(items) ? items : []);
     } catch (err) {
-      setError(getApiErrorMessage(err) || "Không thể tải đơn hàng. Cần có API /api/admin/orders.");
+      setError(getApiErrorMessage(err) || "Không thể tải danh sách đơn hàng. Vui lòng thử lại.");
       setOrders([]);
     } finally {
       setLoading(false);
@@ -205,8 +205,7 @@ export default function AdminOrdersPage() {
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">Orders</p>
             <h2 className="mt-2 text-2xl font-black text-white">Quản lý đơn hàng</h2>
-            {/* <p className="mt-1 text-sm font-semibold text-slate-500">Theo dõi đơn hàng từ API Laravel. Cập nhật trạng thái trong trang chi tiết đơn hàng.</p> */}
-          </div>
+</div>
 
           <button
             type="button"
@@ -276,7 +275,7 @@ export default function AdminOrdersPage() {
           <div className="grid h-72 place-items-center">
             <div className="text-center">
               <Loader2 className="mx-auto animate-spin text-orange-300" size={34} />
-              <p className="mt-4 text-sm font-black text-slate-400">Đang tải đơn hàng từ API...</p>
+              <p className="mt-4 text-sm font-black text-slate-400">Đang tải đơn hàng...</p>
             </div>
           </div>
         ) : filtered.length === 0 ? (
