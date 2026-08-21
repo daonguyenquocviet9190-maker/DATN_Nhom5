@@ -424,10 +424,10 @@ export default function ContactPage() {
               Gửi yêu cầu hỗ trợ
             </h2>
 
-            <p className="mt-2 text-sm leading-7 text-slate-500">
+            {/* <p className="mt-2 text-sm leading-7 text-slate-500">
               Thông tin được lưu demo vào localStorage để mô phỏng hệ thống tiếp
               nhận liên hệ.
-            </p>
+            </p> */}
 
             <span className="mt-4 inline-flex rounded-full bg-orange-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-orange-600">
               {activeType?.label}
