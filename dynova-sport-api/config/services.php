@@ -35,7 +35,15 @@ return [
         ],
     ],
     'ghn' => [
-        'base_url' => env('GHN_BASE_URL', 'https://online-gateway.ghn.vn'),
+        // DATN/local mặc định chạy GHN Staging để không tạo vận đơn giao thật.
+        'environment' => strtolower((string) env('GHN_ENV', 'staging')),
+        'base_url' => env('GHN_BASE_URL'),
+        'staging_base_url' => 'https://dev-online-gateway.ghn.vn',
+        'production_base_url' => 'https://online-gateway.ghn.vn',
+
+        // Khoá an toàn: mutation Production (tạo/hủy vận đơn) chỉ chạy khi bật rõ ràng.
+        'production_enabled' => filter_var(env('GHN_PRODUCTION_ENABLED', false), FILTER_VALIDATE_BOOL),
+
         'token' => env('GHN_TOKEN'),
         'shop_id' => env('GHN_SHOP_ID'),
         'client_id' => env('GHN_CLIENT_ID'),

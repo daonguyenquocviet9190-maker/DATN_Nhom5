@@ -38,14 +38,35 @@ class ShippingService
 
     public function configured(): bool
     {
-        return filled(config('services.ghn.token')) && filled(config('services.ghn.shop_id'));
+        if (!filled(config('services.ghn.token')) || !filled(config('services.ghn.shop_id'))) {
+            return false;
+        }
+
+        try {
+            $this->baseUrl();
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function configurationStatus(): array
     {
+        $configurationError = null;
+        $baseUrl = null;
+
+        try {
+            $baseUrl = $this->baseUrl();
+        } catch (\Throwable $e) {
+            $configurationError = $e->getMessage();
+        }
+
         return [
             'configured' => $this->configured(),
-            'environment' => str_contains((string) config('services.ghn.base_url'), 'dev-online') ? 'staging' : 'production',
+            'environment' => $this->environment(),
+            'base_url' => $baseUrl,
+            'configuration_error' => $configurationError,
+            'production_mutations_enabled' => (bool) config('services.ghn.production_enabled', false),
             'shop_id_configured' => filled(config('services.ghn.shop_id')),
             'client_id_configured' => filled(config('services.ghn.client_id')),
             'token_configured' => filled(config('services.ghn.token')),
@@ -166,6 +187,7 @@ class ShippingService
     public function createOrderForOrder(int $orderId): array
     {
         $this->assertConfigured();
+        $this->assertMutationAllowed('tạo vận đơn');
 
         $order = DB::table('orders')->where('id', $orderId)->first();
         if (!$order) {
@@ -344,6 +366,7 @@ class ShippingService
     public function cancelShipment(string $trackingCode): bool
     {
         $this->assertConfigured();
+        $this->assertMutationAllowed('hủy vận đơn');
         $json = $this->request('POST', '/shiip/public-api/v2/switch-status/cancel', [
             'order_codes' => [$trackingCode],
         ], true);
@@ -553,11 +576,7 @@ class ShippingService
             $headers['ShopId'] = (string) ((int) config('services.ghn.shop_id'));
         }
 
-        $baseUrl = rtrim(trim((string) config('services.ghn.base_url', 'https://online-gateway.ghn.vn')), '/');
-        if (!str_starts_with($baseUrl, 'https://') && !str_starts_with($baseUrl, 'http://')) {
-            throw new RuntimeException('GHN_BASE_URL không hợp lệ. Hãy dùng https://online-gateway.ghn.vn');
-        }
-
+        $baseUrl = $this->baseUrl();
         $url = $baseUrl . $path;
         $timeout = max(8, min(60, (int) config('services.ghn.timeout', 30)));
         $connectTimeout = max(3, min(30, (int) config('services.ghn.connect_timeout', 10)));
@@ -842,13 +861,71 @@ class ShippingService
         ]);
     }
 
+    private function environment(): string
+    {
+        $environment = strtolower(trim((string) config('services.ghn.environment', 'staging')));
+
+        return match ($environment) {
+            'production', 'prod' => 'production',
+            'staging', 'stage', 'test', 'testing', 'dev', 'development' => 'staging',
+            default => throw new RuntimeException(
+                'GHN_ENV không hợp lệ. Với DATN hãy dùng GHN_ENV=staging; chỉ dùng production khi triển khai giao hàng thật.'
+            ),
+        };
+    }
+
+    private function baseUrl(): string
+    {
+        $environment = $this->environment();
+        $expected = $environment === 'production'
+            ? rtrim((string) config('services.ghn.production_base_url', 'https://online-gateway.ghn.vn'), '/')
+            : rtrim((string) config('services.ghn.staging_base_url', 'https://dev-online-gateway.ghn.vn'), '/');
+
+        $configured = rtrim(trim((string) config('services.ghn.base_url', '')), '/');
+        $baseUrl = $configured !== '' ? $configured : $expected;
+
+        if (!filter_var($baseUrl, FILTER_VALIDATE_URL) || parse_url($baseUrl, PHP_URL_SCHEME) !== 'https') {
+            throw new RuntimeException('GHN_BASE_URL không hợp lệ. GHN API phải dùng HTTPS.');
+        }
+
+        $actualHost = strtolower((string) parse_url($baseUrl, PHP_URL_HOST));
+        $expectedHost = strtolower((string) parse_url($expected, PHP_URL_HOST));
+
+        if ($actualHost !== $expectedHost) {
+            throw new RuntimeException(sprintf(
+                'GHN_ENV=%s nhưng GHN_BASE_URL đang trỏ tới %s. Hệ thống đã chặn để tránh gửi nhầm đơn sang môi trường khác. URL đúng là %s.',
+                $environment,
+                $actualHost !== '' ? $actualHost : '(không xác định)',
+                $expected
+            ));
+        }
+
+        return $baseUrl;
+    }
+
+    private function assertMutationAllowed(string $action): void
+    {
+        if ($this->environment() !== 'production') {
+            return;
+        }
+
+        if (!(bool) config('services.ghn.production_enabled', false)) {
+            throw new RuntimeException(
+                'Đã chặn ' . $action . ' trên GHN Production. Nếu thật sự triển khai giao hàng thật, đặt GHN_PRODUCTION_ENABLED=true rồi chạy php artisan optimize:clear.'
+            );
+        }
+    }
+
     private function assertConfigured(): void
     {
+        // Gọi baseUrl() trước để phát hiện cấu hình staging/production bị trộn.
+        $this->baseUrl();
+
         if (!filled(config('services.ghn.token'))) {
-            throw new RuntimeException('Chưa cấu hình GHN_TOKEN trong file .env backend.');
+            throw new RuntimeException('Chưa cấu hình GHN_TOKEN. Với DATN hãy dùng Token của tài khoản GHN Staging.');
         }
         if (!filled(config('services.ghn.shop_id'))) {
-            throw new RuntimeException('Chưa cấu hình GHN_SHOP_ID trong file .env backend.');
+            throw new RuntimeException('Chưa cấu hình GHN_SHOP_ID. Với DATN hãy dùng Shop ID của tài khoản GHN Staging.');
         }
     }
 
