@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\ShippingService;
+use App\Services\VietQrPaymentService;
 use App\Services\VoucherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ class OrderController extends Controller
     public function __construct(
         private VoucherService $vouchers,
         private ShippingService $shipping,
+        private VietQrPaymentService $vietQr,
     ) {}
 
     public function store(Request $request)
@@ -34,6 +36,8 @@ class OrderController extends Controller
             'shippingAddress.address' => ['required', 'string', 'max:500'],
             'shippingAddress.note' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
+            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.product_variant_id' => ['nullable', 'integer', 'min:1'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1', 'max:99'],
             'paymentMethod' => ['required', 'string'],
             'checkoutMode' => ['nullable', 'in:cart,buy_now'],
@@ -93,33 +97,52 @@ class OrderController extends Controller
     /** @return array<int, array<string, mixed>> */
     private function resolveCheckoutItems(array $validated, int $userId, string $checkoutMode): array
     {
-        if ($checkoutMode === 'buy_now') {
-            return array_values($validated['items']);
-        }
+        $requestItems = array_values($validated['items']);
 
-        if (!Schema::hasTable('cart_items')) {
-            return array_values($validated['items']);
+        if ($checkoutMode === 'buy_now' || !Schema::hasTable('cart_items')) {
+            return $requestItems;
         }
 
         $cartItems = DB::table('cart_items')
             ->where('user_id', $userId)
             ->lockForUpdate()
-            ->get(['product_id', 'product_variant_id', 'quantity']);
+            ->get(['id', 'product_id', 'product_variant_id', 'quantity']);
 
         if ($cartItems->isEmpty()) {
-            return array_values($validated['items']);
+            return $requestItems;
         }
 
-        $items = [];
-        foreach ($cartItems as $item) {
-            $items[] = [
+        $invalidCartItemIds = $cartItems
+            ->filter(fn ($item) => (int) ($item->product_id ?? 0) <= 0 || (int) ($item->quantity ?? 0) <= 0)
+            ->pluck('id')
+            ->filter()
+            ->values();
+
+        if ($invalidCartItemIds->isNotEmpty()) {
+            DB::table('cart_items')
+                ->where('user_id', $userId)
+                ->whereIn('id', $invalidCartItemIds->all())
+                ->delete();
+        }
+
+        $validCartItems = $cartItems->filter(
+            fn ($item) => (int) ($item->product_id ?? 0) > 0 && (int) ($item->quantity ?? 0) > 0
+        );
+
+        if ($validCartItems->isEmpty()) {
+            return $requestItems;
+        }
+
+        return $validCartItems
+            ->map(fn ($item) => [
                 'product_id' => (int) $item->product_id,
-                'product_variant_id' => $item->product_variant_id !== null ? (int) $item->product_variant_id : null,
-                'quantity' => (int) $item->quantity,
-            ];
-        }
-
-        return $items;
+                'product_variant_id' => $item->product_variant_id !== null
+                    ? (int) $item->product_variant_id
+                    : null,
+                'quantity' => max(1, (int) $item->quantity),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -448,7 +471,7 @@ class OrderController extends Controller
         }
 
         if ($paymentMethod === 'bank') {
-            $this->createPendingVietQrTransaction($orderId);
+            $this->vietQr->createPendingForOrder($orderId);
         }
 
         $this->history($orderId, $userId, null, 'pending', 'customer', 'Khách hàng tạo đơn hàng.');
@@ -477,41 +500,6 @@ class OrderController extends Controller
                 'paymentMethod' => 'Phương thức chuyển khoản hiện chưa được cấu hình đầy đủ.',
             ]);
         }
-    }
-
-    private function createPendingVietQrTransaction(int $orderId): void
-    {
-        if (!Schema::hasTable('payment_transactions')) {
-            return;
-        }
-
-        $order = DB::table('orders')->where('id', $orderId)->first();
-        if (!$order) {
-            return;
-        }
-
-        $transactionRef = 'VQR-' . (string) $order->order_code;
-        $exists = DB::table('payment_transactions')
-            ->where('transaction_ref', $transactionRef)
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
-        DB::table('payment_transactions')->insert([
-            'order_id' => $orderId,
-            'provider' => 'vietqr',
-            'transaction_ref' => $transactionRef,
-            'amount' => (float) ($order->grand_total ?? 0),
-            'status' => 'pending',
-            'request_payload' => json_encode([
-                'order_code' => $order->order_code ?? null,
-                'mode' => 'bank_transfer',
-            ], JSON_UNESCAPED_UNICODE),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
     }
 
     public function index(Request $request)
@@ -578,6 +566,9 @@ class OrderController extends Controller
             $order = DB::table('orders')->where('id', $id)->where('user_id', $request->user()->id)->lockForUpdate()->first();
             if (!$order) abort(404, 'Không tìm thấy đơn hàng.');
             if (!in_array($order->status, ['pending', 'confirmed'], true)) throw ValidationException::withMessages(['status' => 'Đơn hàng ở trạng thái hiện tại không thể hủy.']);
+            if (($order->payment_method ?? '') === 'bank' && ($order->payment_status ?? '') === 'paid') {
+                throw ValidationException::withMessages(['status' => 'Đơn VietQR đã thanh toán không thể hủy trực tiếp.']);
+            }
 
             $this->restoreStockOnce($order);
             $this->vouchers->releaseForCancelledOrder($order->id);

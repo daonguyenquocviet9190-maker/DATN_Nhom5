@@ -54,6 +54,10 @@ Route::get('/shipping/wards', [ShippingController::class, 'wards']);
 Route::get('/shipping/services', [ShippingController::class, 'services']);
 Route::post('/shipping/fee', [ShippingController::class, 'fee']);
 Route::post('/webhooks/ghn/{secret}', [ShippingController::class, 'webhook']);
+Route::post('/payments/vietqr/webhook', [PaymentController::class, 'vietQrWebhook']);
+Route::get('/payments/vietqr/scan/{id}/{token}', [PaymentController::class, 'vietQrScan'])
+    ->whereNumber('id')
+    ->where('token', '[A-Fa-f0-9]{64}');
 Route::get('/payments/vnpay/return', [PaymentController::class, 'vnpayReturn']);
 Route::get('/payments/vnpay/ipn', [PaymentController::class, 'vnpayIpn']);
 
@@ -81,6 +85,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders/{id}/reorder', [OrderController::class, 'reorder'])->whereNumber('id');
 
     Route::post('/payments/create', [PaymentController::class, 'create']);
+    Route::get('/payments/vietqr/orders/{id}', [PaymentController::class, 'vietQrStatus'])->whereNumber('id');
+    Route::post('/payments/vietqr/orders/{id}/refresh', [PaymentController::class, 'refreshVietQr'])->whereNumber('id');
 
     Route::get('/chat', [ChatController::class, 'show']);
     Route::post('/chat/messages', [ChatController::class, 'send']);

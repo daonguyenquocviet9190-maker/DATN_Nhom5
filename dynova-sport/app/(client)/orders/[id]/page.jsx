@@ -31,6 +31,7 @@ import {
   reorderOrder,
 } from "@/services/order.service";
 import OrderTrackingTimeline from "@/components/orders/OrderTrackingTimeline";
+import VietQrPaymentCard from "@/components/payment/VietQrPaymentCard";
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -510,7 +511,12 @@ export default function OrderDetailPage() {
   });
 
   const items = useMemo(() => getOrderItems(order), [order]);
-  const status = normalizeStatus(order?.status || "pending");
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+  const baseStatus = normalizeStatus(order?.status || "pending");
+  const bankUnpaid = bankPayment && !paymentPaid && baseStatus !== "cancelled";
+  const status = bankUnpaid ? "waiting_bank_transfer" : baseStatus;
   const statusInfo = statusMap[status] || statusMap.pending;
   const currentStepIndex = status === "cancelled" ? -1 : statusIndex[status] ?? 0;
   const statusHistory = Array.isArray(order?.status_history) ? order.status_history : [];
@@ -660,7 +666,7 @@ export default function OrderDetailPage() {
     }
   };
 
-  const canCancel = ["pending", "waiting_bank_transfer", "confirmed", "processing"].includes(status);
+  const canCancel = ["pending", "waiting_bank_transfer", "confirmed", "processing"].includes(status) && !(bankPayment && paymentPaid);
 
   if (loading) {
     return (
@@ -809,6 +815,14 @@ export default function OrderDetailPage() {
               </div>
             )}
 
+            {bankUnpaid && (
+              <VietQrPaymentCard
+                orderId={order?.id}
+                className="mt-6"
+                onPaid={() => loadOrder({ silent: true })}
+              />
+            )}
+
             <OrderTrackingTimeline
               order={order}
               tracking={tracking}
@@ -918,7 +932,7 @@ export default function OrderDetailPage() {
 
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">Trạng thái</span>
-                <span className="font-black text-orange-600">{order.payment_status === "paid" ? "Đã thanh toán" : "Chưa thanh toán"}</span>
+                <span className="font-black text-orange-600">{paymentPaid ? "Đã thanh toán" : bankPayment ? "Chờ thanh toán" : "Chưa thanh toán"}</span>
               </div>
 
               <div className="my-4 border-t border-slate-100" />

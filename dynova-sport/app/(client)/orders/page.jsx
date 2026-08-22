@@ -483,6 +483,19 @@ function normalizeStatus(status = "") {
   return "pending";
 }
 
+function getDisplayStatus(order) {
+  const status = normalizeStatus(order?.status);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+
+  if (bankPayment && !paymentPaid && status !== "cancelled") {
+    return "waiting_bank_transfer";
+  }
+
+  return status;
+}
+
 function getStatusMeta(status) {
   const normalized = normalizeStatus(status);
 
@@ -671,13 +684,16 @@ function getCreatedDate(order) {
 }
 
 function canCancelOrder(order) {
-  const status = normalizeStatus(order?.status);
+  const status = getDisplayStatus(order);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
 
-  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status);
+  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status) && !(bankPayment && paymentPaid);
 }
 
 function getStepDone(order, stepKey) {
-  const status = normalizeStatus(order?.status);
+  const status = getDisplayStatus(order);
 
   if (status === "cancelled") return false;
 
@@ -818,10 +834,9 @@ function EmptyState({ hasFilter }) {
 }
 
 function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
-  const statusMeta = getStatusMeta(order.status);
+  const statusMeta = getStatusMeta(getDisplayStatus(order));
   const StatusIcon = statusMeta.icon;
   const items = getOrderItems(order);
-  const detailHref = `/orders/${encodeURIComponent(String(order?.id || ""))}`;
 
   return (
     <article
@@ -831,13 +846,9 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={detailHref}
-              className="text-xs font-black uppercase tracking-wider text-orange-500 transition hover:text-orange-600"
-              aria-label={`Xem chi tiết đơn ${getOrderCode(order)}`}
-            >
+            <p className="text-xs font-black uppercase tracking-wider text-orange-500">
               #{getOrderCode(order)}
-            </Link>
+            </p>
 
             <button
               type="button"
@@ -943,16 +954,14 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
-              href={detailHref}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-50 hover:text-orange-600"
+              href={`/orders/${order.id}`}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:bg-orange-50 hover:text-orange-600"
             >
               <Eye size={15} />
-              Chi tiết đơn
-              <ArrowRight size={14} />
+              Chi tiết
             </Link>
 
             <button
-              type="button"
               onClick={() => onReorder(order)}
               disabled={loading || items.length === 0}
               className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20 disabled:opacity-60"
@@ -963,6 +972,8 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
           </div>
         </div>
       </div>
+
+
 
       <div className="mt-5 grid gap-2 sm:grid-cols-4">
         {orderSteps.map((step, index) => {
@@ -986,7 +997,6 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
 
       {canCancelOrder(order) && (
         <button
-          type="button"
           onClick={() => onCancel(order)}
           disabled={loading}
           className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-xs font-black uppercase tracking-wider text-rose-600 transition hover:bg-rose-500 hover:text-white disabled:opacity-60"
@@ -1017,7 +1027,7 @@ export default function OrdersPage() {
   const computedStats = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
-        const status = normalizeStatus(order.status);
+        const status = getDisplayStatus(order);
 
         acc.total += 1;
         acc[status] = Number(acc[status] || 0) + 1;
@@ -1038,7 +1048,7 @@ export default function OrdersPage() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      const status = normalizeStatus(order.status);
+      const status = getDisplayStatus(order);
       const code = getOrderCode(order).toLowerCase();
       const phone = String(getOrderPhone(order) || "").toLowerCase();
       const customer = String(

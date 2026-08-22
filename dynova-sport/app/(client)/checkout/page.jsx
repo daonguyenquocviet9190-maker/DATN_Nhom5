@@ -7,6 +7,7 @@ import {
   AlertCircle,
   Banknote,
   CheckCircle2,
+  Clock3,
   CreditCard,
   Landmark,
   Loader2,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
+import VietQrPaymentCard from "@/components/payment/VietQrPaymentCard";
 import { apiFetch } from "@/services/api";
 import {
   calculateShippingFee,
@@ -79,7 +81,7 @@ const paymentMethods = [
   {
     id: "BANK",
     name: "Chuyển khoản / VietQR",
-    desc: "Quét VietQR với đúng số tiền và mã đơn hàng sau khi đặt đơn.",
+    desc: "Quét mã VietQR để thanh toán trước khi đơn hàng được xử lý.",
     icon: Landmark,
   },
   {
@@ -111,25 +113,6 @@ function itemVariantId(item) {
     item?.selectedVariant?.id ??
     null
   );
-}
-
-function createVietQrUrl(settings, amount, orderCode, phone) {
-  const bankCode = String(settings?.bank_code || "").trim();
-  const account = String(settings?.bank_account_number || "").replace(/\s/g, "");
-  const accountNameRaw = String(settings?.bank_account_name || "").trim();
-
-  if (!bankCode || !account || !accountNameRaw) return "";
-
-  const accountName = encodeURIComponent(accountNameRaw);
-  const transferContent = `${orderCode || "DYNOVA"} ${phone || ""}`
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .trim()
-    .slice(0, 50);
-  const addInfo = encodeURIComponent(transferContent);
-
-  return `https://img.vietqr.io/image/${encodeURIComponent(bankCode)}-${encodeURIComponent(
-    account
-  )}-qr_only.png?amount=${Math.max(1, Math.round(Number(amount || 0)))}&addInfo=${addInfo}&accountName=${accountName}`;
 }
 
 function CheckoutContent() {
@@ -455,6 +438,17 @@ function CheckoutContent() {
       setShippingFee(confirmedShipping);
       setShippingInfo(feeResponse?.data || null);
 
+      const normalizedOrderItems = checkoutItems.map((item) => ({
+        product_id: Number(itemProductId(item) || 0),
+        product_variant_id: itemVariantId(item) ? Number(itemVariantId(item)) : null,
+        quantity: Math.max(1, Number(item?.quantity || item?.qty || 1)),
+        weight: Math.max(1, Number(item?.weight || 300)),
+      }));
+
+      if (normalizedOrderItems.some((item) => !Number.isInteger(item.product_id) || item.product_id <= 0)) {
+        throw new Error("Giỏ hàng có dữ liệu sản phẩm chưa đồng bộ. Vui lòng tải lại trang và thử lại.");
+      }
+
       const orderResponse = await createCheckoutOrder({
         customer: { fullName: form.fullName.trim(), email: form.email.trim(), phone: form.phone.trim() },
         shippingAddress: {
@@ -467,12 +461,7 @@ function CheckoutContent() {
           address: form.address.trim(),
           note: form.note.trim(),
         },
-        items: checkoutItems.map((item) => ({
-          product_id: itemProductId(item),
-          product_variant_id: itemVariantId(item),
-          quantity: Number(item?.quantity || item?.qty || 1),
-          weight: Number(item?.weight || 300),
-        })),
+        items: normalizedOrderItems,
         coupon: appliedCoupon || undefined,
         paymentMethod,
         checkoutMode,
@@ -510,89 +499,62 @@ function CheckoutContent() {
 
   if (successOrder) {
     const total = Number(successOrder?.grand_total ?? successOrder?.total ?? 0);
-    const qr = paymentMethod === "BANK" ? createVietQrUrl(settings, total, successOrder?.order_code, form.phone) : "";
+    const bankPaid = successOrder?.payment_status === "paid";
+
     return (
       <main className="min-h-screen bg-slate-50 py-12">
-        <div className="container-page mx-auto max-w-5xl">
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 text-center shadow-xl shadow-slate-200/50 sm:p-8">
-            <CheckCircle2 className="mx-auto text-emerald-600" size={54} />
-            <h1 className="mt-4 text-3xl font-black text-slate-950">Đặt hàng thành công</h1>
-            <p className="mt-2 text-slate-500">Mã đơn: <b className="text-slate-950">{successOrder?.order_code}</b></p>
-            <p className="mt-2 text-2xl font-black text-orange-600">{formatCurrency(total)}</p>
+        <div className="container-page mx-auto max-w-3xl">
+          <div className="rounded-[32px] border border-slate-200 bg-white p-7 shadow-xl shadow-slate-200/50 md:p-8">
+            <div className="text-center">
+              {paymentMethod === "BANK" && !bankPaid ? (
+                <Clock3 className="mx-auto text-amber-500" size={54} />
+              ) : (
+                <CheckCircle2 className="mx-auto text-emerald-600" size={54} />
+              )}
+              <h1 className="mt-4 text-3xl font-black text-slate-950">
+                {paymentMethod === "BANK" && !bankPaid ? "Chờ thanh toán" : "Đặt hàng thành công"}
+              </h1>
+              <p className="mt-2 text-slate-500">
+                Mã đơn: <b className="text-slate-950">{successOrder?.order_code}</b>
+              </p>
+              <p className="mt-2 text-2xl font-black text-orange-600">{formatCurrency(total)}</p>
+            </div>
 
-            {paymentMethod === "BANK" && (
-              <div className="mx-auto mt-8 max-w-4xl overflow-hidden rounded-[32px] bg-slate-950 text-left text-white shadow-2xl shadow-slate-300/40">
-                <div className="border-b border-white/10 px-6 py-5 sm:px-8">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-300">Thanh toán VietQR</p>
-                      <h2 className="mt-1 text-xl font-black text-white">Quét mã để chuyển khoản</h2>
-                    </div>
-                    <span className="inline-flex rounded-full bg-amber-400/15 px-3 py-1.5 text-xs font-black text-amber-300">
-                      Chờ xác nhận thanh toán
-                    </span>
-                  </div>
-                </div>
+            {paymentMethod === "BANK" ? (
+              <VietQrPaymentCard
+                orderId={successOrder?.id}
+                className="mt-7"
+                onPaid={(payment) => {
+                  const paidOrderId = payment?.order_id || successOrder?.id;
 
-                <div className="grid items-center gap-7 p-5 sm:p-7 lg:grid-cols-[420px_1fr] lg:p-8">
-                  <div className="flex justify-center">
-                    <div className="w-full max-w-[400px] rounded-[28px] bg-white p-4 shadow-[0_18px_55px_rgba(0,0,0,0.28)] sm:p-5">
-                      {qr ? (
-                        <img
-                          src={qr}
-                          alt={`VietQR thanh toán đơn ${successOrder?.order_code || "Dynova"}`}
-                          width={400}
-                          height={400}
-                          loading="eager"
-                          decoding="sync"
-                          className="mx-auto aspect-square h-auto w-full object-contain"
-                        />
-                      ) : (
-                        <div className="flex aspect-square items-center justify-center rounded-2xl bg-slate-50 p-6 text-center text-sm font-bold leading-6 text-slate-500">
-                          Chưa cấu hình VietQR trong Settings.
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  setSuccessOrder((current) => ({
+                    ...current,
+                    payment_status: "paid",
+                    status: payment?.order_status || "confirmed",
+                  }));
 
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Số tiền cần chuyển</p>
-                      <p className="mt-1 text-3xl font-black text-orange-300">{formatCurrency(total)}</p>
-                    </div>
-
-                    <div className="space-y-3 text-sm text-slate-300">
-                      <div className="flex flex-col gap-1 border-b border-white/10 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                        <span>Ngân hàng</span>
-                        <b className="text-white">{settings.bank_name || "Chưa cấu hình"}</b>
-                      </div>
-                      <div className="flex flex-col gap-1 border-b border-white/10 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                        <span>Số tài khoản</span>
-                        <b className="break-all text-white">{settings.bank_account_number || "Chưa cấu hình"}</b>
-                      </div>
-                      <div className="flex flex-col gap-1 border-b border-white/10 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                        <span>Chủ tài khoản</span>
-                        <b className="text-white">{settings.bank_account_name || "Chưa cấu hình"}</b>
-                      </div>
-                      <div className="rounded-2xl border border-orange-400/20 bg-orange-400/10 p-4">
-                        <p className="text-xs font-bold uppercase tracking-wider text-orange-200">Nội dung chuyển khoản</p>
-                        <p className="mt-1 break-words text-base font-black text-orange-300">
-                          {successOrder?.order_code} {form.phone}
-                        </p>
-                      </div>
-                    </div>
-
-                    <p className="text-xs font-semibold leading-5 text-slate-400">
-                      Mở ứng dụng ngân hàng, chọn quét QR và kiểm tra đúng số tiền cùng nội dung trước khi xác nhận chuyển khoản.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+                  window.setTimeout(() => {
+                    if (paidOrderId) {
+                      router.replace(`/orders/${paidOrderId}?payment=success`);
+                    }
+                  }, 900);
+                }}
+              />
+            ) : null}
 
             <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <Link href={`/orders/${successOrder?.id}`} className="rounded-2xl bg-orange-500 px-6 py-3 text-sm font-black text-white">Theo dõi đơn hàng</Link>
-              <Link href="/shop" className="rounded-2xl border border-slate-200 px-6 py-3 text-sm font-black text-slate-700">Tiếp tục mua</Link>
+              <Link
+                href={`/orders/${successOrder?.id}`}
+                className="rounded-2xl bg-orange-500 px-6 py-3 text-sm font-black text-white"
+              >
+                Xem đơn hàng
+              </Link>
+              <Link
+                href="/shop"
+                className="rounded-2xl border border-slate-200 px-6 py-3 text-sm font-black text-slate-700"
+              >
+                Tiếp tục mua
+              </Link>
             </div>
           </div>
         </div>
@@ -678,7 +640,7 @@ function CheckoutContent() {
                     const active = paymentMethod === method.id;
                     const disabled = method.id === "BANK" && !bankConfigured;
                     const description = disabled
-                      ? "Chưa cấu hình tài khoản nhận tiền trong Cài đặt."
+                      ? "Phương thức này đang tạm thời chưa khả dụng."
                       : method.desc;
 
                     return (
@@ -717,7 +679,7 @@ function CheckoutContent() {
 
               <div className="mt-5 border-t border-slate-200 pt-5">
                 <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Mã giảm giá</label>
-                <div className="flex gap-2"><input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-orange-400" placeholder="VD: DYNOVA10" /><button type="button" onClick={applyCoupon} disabled={couponLoading} className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white">{couponLoading ? "..." : "Áp dụng"}</button></div>
+                <div className="flex gap-2"><input value={couponInput ?? ""} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-orange-400" placeholder="VD: DYNOVA10" /><button type="button" onClick={applyCoupon} disabled={couponLoading} className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white">{couponLoading ? "..." : "Áp dụng"}</button></div>
                 {couponMessage && <p className="mt-2 text-xs font-bold text-slate-500">{couponMessage}</p>}
               </div>
 
@@ -730,7 +692,7 @@ function CheckoutContent() {
 
               {errors.submit && <div className="mt-4 flex gap-2 rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-600"><AlertCircle size={18} className="shrink-0" />{errors.submit}</div>}
 
-              <button type="submit" disabled={submitLoading || !!shippingSetupError} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black uppercase tracking-wider text-white hover:bg-orange-600 disabled:opacity-60">{submitLoading ? <Loader2 className="animate-spin" size={18} /> : <PackageCheck size={18} />} {paymentMethod === "VNPAY" ? "Đặt hàng & sang VNPAY" : "Xác nhận đặt hàng"}</button>
+              <button type="submit" disabled={submitLoading || !!shippingSetupError} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black uppercase tracking-wider text-white hover:bg-orange-600 disabled:opacity-60">{submitLoading ? <Loader2 className="animate-spin" size={18} /> : <PackageCheck size={18} />} {paymentMethod === "VNPAY" ? "Đặt hàng & sang VNPAY" : paymentMethod === "BANK" ? "Đặt hàng & thanh toán" : "Xác nhận đặt hàng"}</button>
               <p className="mt-3 text-center text-[11px] font-semibold leading-5 text-slate-400">Đơn hàng sẽ được xác nhận sau khi hệ thống kiểm tra tồn kho và thanh toán.</p>
             </aside>
           </form>
@@ -740,12 +702,12 @@ function CheckoutContent() {
   );
 }
 
-function Input({ label, error, ...props }) {
-  return <div><label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">{label}</label><input {...props} className={`h-12 w-full rounded-2xl border bg-slate-50 px-4 text-sm font-semibold outline-none focus:bg-white ${error ? "border-rose-300" : "border-slate-200 focus:border-orange-400"}`} />{error && <p className="mt-1 text-xs font-bold text-rose-500">{error}</p>}</div>;
+function Input({ label, error, value, ...props }) {
+  return <div><label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">{label}</label><input {...props} value={value ?? ""} className={`h-12 w-full rounded-2xl border bg-slate-50 px-4 text-sm font-semibold outline-none focus:bg-white ${error ? "border-rose-300" : "border-slate-200 focus:border-orange-400"}`} />{error && <p className="mt-1 text-xs font-bold text-rose-500">{error}</p>}</div>;
 }
 
-function Select({ label, options, error, ...props }) {
-  return <div><label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">{label}</label><select {...props} className={`h-12 w-full rounded-2xl border bg-slate-50 px-3 text-sm font-semibold outline-none ${error ? "border-rose-300" : "border-slate-200 focus:border-orange-400"}`}><option value="">-- Chọn --</option>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>{error && <p className="mt-1 text-xs font-bold text-rose-500">{error}</p>}</div>;
+function Select({ label, options, error, value, ...props }) {
+  return <div><label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">{label}</label><select {...props} value={value ?? ""} className={`h-12 w-full rounded-2xl border bg-slate-50 px-3 text-sm font-semibold outline-none ${error ? "border-rose-300" : "border-slate-200 focus:border-orange-400"}`}><option value="">-- Chọn --</option>{options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>{error && <p className="mt-1 text-xs font-bold text-rose-500">{error}</p>}</div>;
 }
 
 function Row({ label, value }) {

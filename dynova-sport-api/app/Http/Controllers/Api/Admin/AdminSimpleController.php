@@ -1089,9 +1089,30 @@ class AdminSimpleController extends Controller
         ]);
 
         $shipmentTrackingCode = null;
+        $preflightOrder = DB::table('orders')->where('id', $id)->first();
+
+        if (!$preflightOrder) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy đơn hàng.'], 404);
+        }
+
+        if (($preflightOrder->payment_method ?? '') === 'bank' && ($preflightOrder->payment_status ?? '') !== 'paid') {
+            if (in_array($validated['status'], ['confirmed', 'shipping'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Đơn VietQR chưa được thanh toán.',
+                ], 422);
+            }
+        }
+
+        if (($preflightOrder->payment_method ?? '') === 'bank' && ($preflightOrder->payment_status ?? '') === 'paid' && $validated['status'] === 'cancelled') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Đơn VietQR đã thanh toán không thể hủy trực tiếp.',
+            ], 422);
+        }
 
         if ($validated['status'] === 'shipping') {
-            $currentStatus = strtolower((string) DB::table('orders')->where('id', $id)->value('status'));
+            $currentStatus = strtolower((string) ($preflightOrder->status ?? 'pending'));
             if ($currentStatus !== 'confirmed') {
                 return response()->json([
                     'success' => false,
@@ -1131,6 +1152,21 @@ class AdminSimpleController extends Controller
                 if ($current === $next) {
                     return response()->json(['success' => true, 'message' => 'Trạng thái đơn hàng không thay đổi.', 'data' => $order]);
                 }
+
+                if (($order->payment_method ?? '') === 'bank' && ($order->payment_status ?? '') !== 'paid' && in_array($next, ['confirmed', 'shipping'], true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Đơn VietQR chưa được thanh toán.',
+                    ], 422);
+                }
+
+                if (($order->payment_method ?? '') === 'bank' && ($order->payment_status ?? '') === 'paid' && $next === 'cancelled') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Đơn VietQR đã thanh toán không thể hủy trực tiếp.',
+                    ], 422);
+                }
+
                 if (!isset($transitions[$current]) || !in_array($next, $transitions[$current], true)) {
                     return response()->json([
                         'success' => false,

@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
-  CreditCard,
   Loader2,
   MapPin,
   PackageCheck,
@@ -110,10 +109,12 @@ function normalizeStatus(status = "") {
 }
 
 function getStatusMeta(status = "") {
-  const normalized = normalizeStatus(status);
+  const raw = String(status || "").trim().toLowerCase();
+  const normalized = raw === "waiting_bank_transfer" ? "waiting_bank_transfer" : normalizeStatus(status);
 
   const map = {
     pending: { label: "Chờ xử lý", icon: Clock3, className: "bg-amber-500/10 text-amber-300 ring-amber-400/20" },
+    waiting_bank_transfer: { label: "Chờ thanh toán", icon: Clock3, className: "bg-yellow-500/10 text-yellow-300 ring-yellow-400/20" },
     confirmed: { label: "Đã xác nhận", icon: PackageCheck, className: "bg-sky-500/10 text-sky-300 ring-sky-400/20" },
     shipping: { label: "Đang giao", icon: Truck, className: "bg-indigo-500/10 text-indigo-300 ring-indigo-400/20" },
     completed: { label: "Hoàn thành", icon: CheckCircle2, className: "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" },
@@ -262,12 +263,18 @@ export default function AdminOrderDetailPage() {
 
   const items = useMemo(() => getOrderItems(order), [order]);
   const status = normalizeStatus(order?.status || selectedStatus);
-  const statusMeta = getStatusMeta(status);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+  const bankUnpaid = bankPayment && !paymentPaid && status !== "cancelled";
+  const displayStatus = bankUnpaid ? "waiting_bank_transfer" : status;
+  const statusMeta = getStatusMeta(displayStatus);
   const StatusIcon = statusMeta.icon;
 
   const allowedStatusOptions = useMemo(() => getAllowedStatusOptions(status), [status]);
   const finalStatus = isFinalStatus(status);
   const shippingLocked = status === "shipping";
+  const paymentLocked = bankUnpaid;
 
   const loadOrder = async ({ silent = false } = {}) => {
     if (!orderId) return;
@@ -304,6 +311,12 @@ export default function AdminOrderDetailPage() {
     const timer = window.setInterval(() => loadOrder({ silent: true }), 2500);
     return () => window.clearInterval(timer);
   }, [order?.id, order?.tracking?.delivery_map?.simulation?.running]);
+
+  useEffect(() => {
+    if (!bankUnpaid || !order?.id) return undefined;
+    const timer = window.setInterval(() => loadOrder({ silent: true }), 2500);
+    return () => window.clearInterval(timer);
+  }, [bankUnpaid, order?.id]);
 
   const showNotice = (message) => {
     setNotice(message);
@@ -497,10 +510,10 @@ export default function AdminOrderDetailPage() {
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Cập nhật trạng thái</h3>
             <div className="mt-5 space-y-3">
-              {finalStatus || shippingLocked ? (
+              {finalStatus || shippingLocked || paymentLocked ? (
                 <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
                   <p className="text-sm font-black text-white">
-                    {status === "shipping" ? "Đơn hàng đang được vận chuyển." : status === "completed" ? "Đơn hàng đã hoàn thành." : "Đơn hàng đã hủy."}
+                    {paymentLocked ? "Đang chờ thanh toán VietQR." : status === "shipping" ? "Đơn hàng đang được vận chuyển." : status === "completed" ? "Đơn hàng đã hoàn thành." : "Đơn hàng đã hủy."}
                   </p>
                 </div>
               ) : (
@@ -602,7 +615,7 @@ export default function AdminOrderDetailPage() {
 
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">Trạng thái</span>
-                <span className="font-black text-orange-300">{order?.payment_status === "paid" ? "Đã thanh toán" : "Chưa thanh toán"}</span>
+                <span className="font-black text-orange-300">{paymentPaid ? "Đã thanh toán" : bankPayment ? "Chờ thanh toán" : "Chưa thanh toán"}</span>
               </div>
 
               <div className="my-4 border-t border-white/10" />
@@ -627,11 +640,6 @@ export default function AdminOrderDetailPage() {
                   <span className="font-bold text-slate-300">Tổng tiền</span>
                   <span className="text-xl font-black text-orange-300">{formatCurrency(getTotal(order))}</span>
                 </div>
-              </div>
-
-              <div className="flex gap-3 rounded-3xl border border-orange-400/20 bg-orange-500/10 p-4">
-                <CreditCard className="mt-0.5 text-orange-300" size={20} />
-                <p className="text-xs font-semibold leading-5 text-orange-100/80">Sau khi cập nhật trạng thái, khách hàng sẽ thấy trạng thái mới ở trang lịch sử đơn hàng.</p>
               </div>
             </div>
           </section>

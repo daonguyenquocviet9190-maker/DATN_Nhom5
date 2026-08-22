@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\VietQrPaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +12,8 @@ use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
+    public function __construct(private VietQrPaymentService $vietQr) {}
+
     public function create(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -80,6 +83,134 @@ class PaymentController extends Controller
             'message' => 'Đã tạo phiên thanh toán VNPAY.',
             'data' => ['paymentUrl' => $paymentUrl, 'transactionRef' => $txnRef, 'amount' => $amount],
         ]);
+    }
+
+    public function vietQrStatus(Request $request, $id): JsonResponse
+    {
+        try {
+            $state = $this->vietQr->stateForOrder((int) $id, (int) $request->user()->id);
+
+            return response()->json([
+                'success' => true,
+                'data' => $state,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function refreshVietQr(Request $request, $id): JsonResponse
+    {
+        try {
+            $state = $this->vietQr->refreshForOrder((int) $id, (int) $request->user()->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã tạo lại mã thanh toán.',
+                'data' => $state,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function vietQrWebhook(Request $request): JsonResponse
+    {
+        try {
+            $result = $this->vietQr->handleWebhook(
+                $request->all(),
+                $request->header('X-VietQR-Secret') ?: $request->input('secret')
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function vietQrScan($id, $token)
+    {
+        try {
+            $state = $this->vietQr->confirmByScan((int) $id, (string) $token);
+
+            return response(
+                $this->renderDemoScanPage(
+                    true,
+                    'Thanh toán mô phỏng thành công',
+                    'Máy tính sẽ tự nhận trạng thái thanh toán trong vài giây.',
+                    $state
+                ),
+                200
+            )->header('Content-Type', 'text/html; charset=UTF-8');
+        } catch (\Throwable $e) {
+            return response(
+                $this->renderDemoScanPage(
+                    false,
+                    'Không thể xác nhận thanh toán',
+                    $e->getMessage(),
+                    null
+                ),
+                422
+            )->header('Content-Type', 'text/html; charset=UTF-8');
+        }
+    }
+
+    private function renderDemoScanPage(
+        bool $success,
+        string $title,
+        string $message,
+        ?array $state = null
+    ): string {
+        $safeTitle = e($title);
+        $safeMessage = e($message);
+        $orderCode = e((string) ($state['order_code'] ?? ''));
+        $amount = number_format((float) ($state['amount'] ?? 0), 0, ',', '.');
+        $statusText = $success ? 'ĐÃ XÁC NHẬN' : 'KHÔNG THÀNH CÔNG';
+        $statusClass = $success ? 'success' : 'error';
+        $icon = $success ? '&#10003;' : '!';
+        $detail = $success
+            ? '<p class="note">Đây là giao dịch <strong>mô phỏng cho DATN</strong>. Không có tiền thật được chuyển và không có tài khoản ngân hàng nào bị trừ tiền.</p>'
+            : '<p class="note">Bạn có thể đóng trang này và quét lại mã QR đang hiển thị trên máy tính.</p>';
+
+        $orderBlock = $orderCode !== ''
+            ? '<div class="details"><div><span>Mã đơn</span><b>' . $orderCode . '</b></div><div><span>Giá trị mô phỏng</span><b>' . $amount . 'đ</b></div></div>'
+            : '';
+
+        return '<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>' . $safeTitle . '</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;display:flex;align-items:center;justify-content:center;padding:24px}.card{width:min(100%,460px);background:#fff;border:1px solid #e2e8f0;border-radius:32px;padding:28px;box-shadow:0 24px 70px rgba(15,23,42,.12)}.brand{font-size:12px;font-weight:900;letter-spacing:.18em;color:#f97316;text-transform:uppercase}.icon{width:76px;height:76px;margin:26px auto 0;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:900}.icon.success{background:#ecfdf5;color:#059669}.icon.error{background:#fff1f2;color:#e11d48}h1{font-size:27px;line-height:1.15;text-align:center;margin:18px 0 0;font-weight:900}p.message{text-align:center;color:#64748b;font-size:14px;line-height:1.65;margin:10px 0 0}.pill{display:block;width:max-content;margin:18px auto 0;border-radius:999px;padding:8px 12px;font-size:11px;font-weight:900;letter-spacing:.08em}.pill.success{background:#ecfdf5;color:#047857}.pill.error{background:#fff1f2;color:#be123c}.details{margin-top:24px;border-radius:20px;background:#f8fafc;padding:6px 16px}.details>div{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #e2e8f0}.details>div:last-child{border-bottom:0}.details span{font-size:12px;font-weight:700;color:#64748b}.details b{font-size:14px;text-align:right}.note{margin:20px 0 0;border-radius:18px;background:#fff7ed;padding:14px 16px;color:#9a3412;font-size:12px;line-height:1.6}.footer{text-align:center;margin-top:20px;color:#94a3b8;font-size:11px;font-weight:700}
+</style>
+</head>
+<body>
+<main class="card">
+<div class="brand">Dynova Sport · QR Demo</div>
+<div class="icon ' . $statusClass . '">' . $icon . '</div>
+<h1>' . $safeTitle . '</h1>
+<p class="message">' . $safeMessage . '</p>
+<span class="pill ' . $statusClass . '">' . $statusText . '</span>
+' . $orderBlock . '
+' . $detail . '
+<div class="footer">Bạn có thể đóng trang này sau khi máy tính chuyển sang đơn hàng.</div>
+</main>
+</body>
+</html>';
     }
 
     public function vnpayReturn(Request $request)

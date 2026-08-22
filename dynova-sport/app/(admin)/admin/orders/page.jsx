@@ -22,6 +22,7 @@ import { extractItems, getAdminOrders } from "@/services/admin.service";
 const FILTER_OPTIONS = [
   { value: "all", label: "Tất cả trạng thái" },
   { value: "pending", label: "Chờ xử lý" },
+  { value: "waiting_bank_transfer", label: "Chờ thanh toán" },
   { value: "confirmed", label: "Đã xác nhận" },
   { value: "shipping", label: "Đang giao" },
   { value: "completed", label: "Hoàn thành" },
@@ -40,11 +41,35 @@ function normalizeStatus(status = "") {
   return "pending";
 }
 
+function getDisplayStatus(order) {
+  const base = normalizeStatus(order?.status);
+  const method = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(method);
+  const paid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+
+  if (bankPayment && !paid && base !== "cancelled") {
+    return "waiting_bank_transfer";
+  }
+
+  return base;
+}
+
+function getPaymentStatusLabel(order) {
+  const value = String(order?.payment_status || order?.paymentStatus || "unpaid").toLowerCase();
+  if (value === "paid") return "Đã thanh toán";
+  if (value === "refunded") return "Đã hoàn tiền";
+  if (value === "failed") return "Thanh toán thất bại";
+
+  const method = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  return ["bank", "bank_transfer", "vietqr"].includes(method) ? "Chờ thanh toán" : "Chưa thanh toán";
+}
+
 function getStatusMeta(status = "") {
-  const normalized = normalizeStatus(status);
+  const normalized = String(status || "pending").toLowerCase();
 
   const map = {
     pending: { label: "Chờ xử lý", icon: Clock3, className: "bg-amber-500/10 text-amber-300 ring-amber-400/20" },
+    waiting_bank_transfer: { label: "Chờ thanh toán", icon: Clock3, className: "bg-yellow-500/10 text-yellow-300 ring-yellow-400/20" },
     confirmed: { label: "Đã xác nhận", icon: PackageCheck, className: "bg-sky-500/10 text-sky-300 ring-sky-400/20" },
     shipping: { label: "Đang giao", icon: Truck, className: "bg-indigo-500/10 text-indigo-300 ring-indigo-400/20" },
     completed: { label: "Hoàn thành", icon: CheckCircle2, className: "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" },
@@ -171,13 +196,13 @@ export default function AdminOrdersPage() {
   const stats = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
-        const orderStatus = normalizeStatus(order?.status);
+        const orderStatus = getDisplayStatus(order);
         acc.total += 1;
         acc.revenue += getTotal(order);
         acc[orderStatus] = Number(acc[orderStatus] || 0) + 1;
         return acc;
       },
-      { total: 0, revenue: 0, pending: 0, confirmed: 0, shipping: 0, completed: 0, cancelled: 0 }
+      { total: 0, revenue: 0, pending: 0, waiting_bank_transfer: 0, confirmed: 0, shipping: 0, completed: 0, cancelled: 0 }
     );
   }, [orders]);
 
@@ -185,7 +210,7 @@ export default function AdminOrdersPage() {
     const keyword = query.trim().toLowerCase();
 
     return orders.filter((order) => {
-      const orderStatus = normalizeStatus(order?.status);
+      const orderStatus = getDisplayStatus(order);
       const text = [order?.id, getOrderCode(order), getCustomer(order), getCustomerSub(order), getPhone(order), order?.email, order?.payment_method, orderStatus]
         .filter(Boolean)
         .join(" ")
@@ -304,7 +329,7 @@ export default function AdminOrdersPage() {
 
               <tbody className="divide-y divide-white/10">
                 {filtered.map((order) => {
-                  const orderStatus = normalizeStatus(order?.status);
+                  const orderStatus = getDisplayStatus(order);
                   const meta = getStatusMeta(orderStatus);
                   const StatusIcon = meta.icon;
 
@@ -322,7 +347,7 @@ export default function AdminOrdersPage() {
 
                       <td className="px-5 py-4">
                         <p className="text-sm font-bold text-slate-300">{getPaymentMethod(order)}</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">{order?.payment_status || "unpaid"}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">{getPaymentStatusLabel(order)}</p>
                       </td>
 
                       <td className="px-5 py-4 text-sm font-bold text-slate-300">{getOrderItemsCount(order)} sản phẩm</td>
