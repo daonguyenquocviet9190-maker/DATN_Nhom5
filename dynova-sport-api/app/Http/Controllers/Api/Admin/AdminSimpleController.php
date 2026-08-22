@@ -861,6 +861,7 @@ class AdminSimpleController extends Controller
                         'updated_date' => $order->ghn_last_synced_at ?? null,
                         'sync_error' => $e->getMessage(),
                     ];
+                    $order->tracking['delivery_map'] = $this->shipping->deliveryMapForOrder((int) $id, $order->tracking);
                 }
             }
 
@@ -1122,7 +1123,7 @@ class AdminSimpleController extends Controller
                 $transitions = [
                     'pending' => ['confirmed', 'cancelled'],
                     'confirmed' => ['shipping', 'cancelled'],
-                    'shipping' => ['completed'],
+                    'shipping' => [],
                     'completed' => [],
                     'cancelled' => [],
                 ];
@@ -1187,6 +1188,13 @@ class AdminSimpleController extends Controller
                 }
                 DB::table('orders')->where('id', $id)->update($payload);
 
+                if ($next === 'shipping') {
+                    try {
+                        $this->shipping->startDeliverySimulationIfIdle((int) $id);
+                    } catch (\Throwable) {
+                    }
+                }
+
                 if ($this->hasTable('order_status_histories')) {
                     DB::table('order_status_histories')->insert([
                         'order_id' => $id,
@@ -1219,6 +1227,27 @@ class AdminSimpleController extends Controller
             return response()->json(['success' => false, 'message' => 'Lỗi cập nhật trạng thái đơn hàng.', 'error' => $e->getMessage()], 500);
         }
     }
+
+
+    public function syncOrderShipping(Request $request, $id)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+
+        try {
+            $tracking = $this->shipping->syncOrderTracking((int) $id);
+            return response()->json([
+                'success' => true,
+                'message' => $tracking ? 'Đã đồng bộ trạng thái vận chuyển GHN.' : 'Đơn hàng chưa có vận đơn GHN để đồng bộ.',
+                'data' => [
+                    'tracking' => $tracking,
+                    'simulation' => $this->shipping->deliverySimulationState((int) $id),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 503);
+        }
+    }
+
 
 
     public function customers(Request $request)

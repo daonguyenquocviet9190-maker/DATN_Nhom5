@@ -35,13 +35,11 @@ return [
         ],
     ],
     'ghn' => [
-        // DATN/local mặc định chạy GHN Staging để không tạo vận đơn giao thật.
         'environment' => strtolower((string) env('GHN_ENV', 'staging')),
         'base_url' => env('GHN_BASE_URL'),
         'staging_base_url' => 'https://dev-online-gateway.ghn.vn',
         'production_base_url' => 'https://online-gateway.ghn.vn',
 
-        // Khoá an toàn: mutation Production (tạo/hủy vận đơn) chỉ chạy khi bật rõ ràng.
         'production_enabled' => filter_var(env('GHN_PRODUCTION_ENABLED', false), FILTER_VALIDATE_BOOL),
 
         'token' => env('GHN_TOKEN'),
@@ -61,6 +59,9 @@ return [
         'connect_timeout' => env('GHN_CONNECT_TIMEOUT', 10),
         'verify_ssl' => filter_var(env('GHN_VERIFY_SSL', true), FILTER_VALIDATE_BOOL),
         'webhook_secret' => env('GHN_WEBHOOK_SECRET'),
+        'simulation_auto_start' => filter_var(env('GHN_SIMULATION_AUTO_START', true), FILTER_VALIDATE_BOOL),
+        'simulation_duration_seconds' => env('GHN_SIMULATION_DURATION_SECONDS', 240),
+        'simulation_speed' => env('GHN_SIMULATION_SPEED', 1),
     ],
 
     'vnpay' => [

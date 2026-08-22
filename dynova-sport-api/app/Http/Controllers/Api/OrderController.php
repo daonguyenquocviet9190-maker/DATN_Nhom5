@@ -547,6 +547,31 @@ class OrderController extends Controller
         return response()->json(['success' => true, 'data' => $this->normalizeOrder($id, true)]);
     }
 
+    public function tracking(Request $request, $id)
+    {
+        $exists = DB::table('orders')->where('id', $id)->where('user_id', $request->user()->id)->exists();
+        if (!$exists) return response()->json(['success' => false, 'message' => 'Không tìm thấy đơn hàng.'], 404);
+
+        $order = $this->normalizeOrder((int) $id, true);
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã cập nhật hành trình giao hàng.',
+            'data' => [
+                'order_id' => $order['id'] ?? (int) $id,
+                'order_status' => $order['status'] ?? null,
+                'payment_status' => $order['payment_status'] ?? null,
+                'shipping_provider' => $order['shipping_provider'] ?? null,
+                'tracking_code' => $order['tracking_code'] ?? null,
+                'ghn_status' => $order['ghn_status'] ?? null,
+                'ghn_expected_delivery_at' => $order['ghn_expected_delivery_at'] ?? null,
+                'ghn_last_synced_at' => $order['ghn_last_synced_at'] ?? null,
+                'tracking' => $order['tracking'] ?? null,
+                'shipping_status_history' => $order['shipping_status_history'] ?? [],
+                'status_history' => $order['status_history'] ?? [],
+            ],
+        ]);
+    }
+
     public function cancel(Request $request, $id)
     {
         $orderId = DB::transaction(function () use ($request, $id) {
@@ -636,10 +661,15 @@ class OrderController extends Controller
                     'logs' => $events->map(fn ($event) => [
                         'status' => $event->status,
                         'status_label' => $event->description ?: $this->shipping->statusLabel($event->status),
+                        'description' => $event->description ?: $this->shipping->statusLabel($event->status),
                         'updated_date' => $event->occurred_at,
+                        'source' => $event->source ?? ($event->provider ?? 'ghn'),
+                        'location' => $event->location ?? null,
+                        'is_simulated' => (bool) ($event->is_simulated ?? false),
                     ])->values()->all(),
                     'sync_error' => $e->getMessage(),
                 ];
+                $tracking['delivery_map'] = $this->shipping->deliveryMapForOrder((int) $id, $tracking);
             }
         }
 

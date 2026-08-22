@@ -359,10 +359,6 @@ export async function getAdminDashboard() {
   }
 }
 
-/* =========================
-   Products
-========================= */
-
 export function getAdminProducts(query: QueryParams = {}) {
   return safeAdminList("/admin/products", "/products", query);
 }
@@ -395,10 +391,6 @@ export function deleteAdminProduct(id: string | number) {
     method: "DELETE",
   });
 }
-
-/* =========================
-   Categories
-========================= */
 
 export function getAdminCategories(query: QueryParams = {}) {
   return safeAdminList("/admin/categories", "/categories", query);
@@ -433,10 +425,6 @@ export function deleteAdminCategory(id: string | number) {
   });
 }
 
-/* =========================
-   Brands
-========================= */
-
 export function getAdminBrands(query: QueryParams = {}) {
   return safeAdminList("/admin/brands", "/brands", query);
 }
@@ -470,10 +458,6 @@ export function deleteAdminBrand(id: string | number) {
   });
 }
 
-/* =========================
-   Orders
-========================= */
-
 export function getAdminOrders(query: QueryParams = {}) {
   return safeAdminList("/admin/orders", "", query);
 }
@@ -492,10 +476,6 @@ export function updateAdminOrderStatus(
   });
 }
 
-/* =========================
-   Customers
-========================= */
-
 export function getAdminCustomers(query: QueryParams = {}) {
   return safeAdminList("/admin/customers", "", query);
 }
@@ -511,10 +491,6 @@ export function updateAdminCustomerStatus(
     },
   });
 }
-
-/* =========================
-   Banners
-========================= */
 
 export function getAdminBanners(query: QueryParams = {}) {
   return safeAdminList("/admin/banners", "/banners", query);
@@ -549,10 +525,6 @@ export function deleteAdminBanner(id: string | number) {
   });
 }
 
-/* =========================
-   Settings
-========================= */
-
 export function getAdminSettings() {
   return adminFetch("/admin/settings");
 }
@@ -563,10 +535,6 @@ export function updateAdminSettings(payload: any) {
     body: payload,
   });
 }
-
-/* =========================
-   Promotions
-========================= */
 
 export function getAdminPromotions(query: QueryParams = {}) {
   return safeAdminList("/admin/promotions", "", query);
@@ -592,10 +560,6 @@ export function deleteAdminPromotion(id: string | number) {
   });
 }
 
-/* =========================
-   Ratings / Reviews
-========================= */
-
 export function getAdminRatings(query: QueryParams = {}) {
   return safeAdminList("/admin/ratings", "", query);
 }
@@ -618,17 +582,9 @@ export function deleteAdminRating(id: string | number) {
   });
 }
 
-/* =========================
-   Inventory
-========================= */
-
 export function getAdminInventory(query: QueryParams = {}) {
   return safeAdminList("/admin/inventory", "", query);
 }
-
-/* =========================
-   Normalize helpers
-========================= */
 
 export function getNormalizedStock(item: any): number {
   const value =
@@ -710,4 +666,8 @@ export function getNormalizedBrandName(
 
 export function getAdminOrderById(id: string | number) {
   return adminFetch(`/admin/orders/${id}`);
+}
+
+export function syncAdminOrderShipping(id: string | number) {
+  return adminFetch(`/admin/orders/${id}/shipping/sync`, { method: "POST" });
 }

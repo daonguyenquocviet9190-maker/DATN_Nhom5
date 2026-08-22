@@ -14,6 +14,8 @@ use RuntimeException;
 
 class ShippingService
 {
+    public function __construct(private GhnDeliverySimulationService $simulation) {}
+
     public function settings(): array
     {
         $defaults = [
@@ -75,6 +77,10 @@ class ShippingService
             'timeout' => (int) config('services.ghn.timeout', 30),
             'insurance_value_limit' => $this->insuranceValue(PHP_INT_MAX),
             'webhook_configured' => filled(config('services.ghn.webhook_secret')),
+            'dev_simulation_enabled' => $this->environment() === 'staging',
+            'simulation_auto_start' => (bool) config('services.ghn.simulation_auto_start', true),
+            'simulation_duration_seconds' => (int) config('services.ghn.simulation_duration_seconds', 240),
+            'simulation_speed' => (float) config('services.ghn.simulation_speed', 1),
         ];
     }
 
@@ -197,6 +203,7 @@ class ShippingService
         if (!empty($order->tracking_code)) {
             $tracking = $this->tracking((string) $order->tracking_code);
             if ($tracking) {
+                        $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
                 return $tracking;
             }
         }
@@ -204,6 +211,7 @@ class ShippingService
         $existing = $this->findByClientOrderCode((string) $order->order_code);
         if ($existing && !empty($existing['order_code'])) {
             $this->persistTracking($orderId, $existing, null);
+                $existing['delivery_map'] = $this->deliveryMapForOrder($orderId, $existing);
             return $existing;
         }
 
@@ -225,9 +233,6 @@ class ShippingService
             throw new RuntimeException('Đơn hàng thiếu mã Quận/Huyện hoặc Phường/Xã của GHN. Vui lòng kiểm tra lại địa chỉ nhận hàng của đơn.');
         }
 
-        // Xác minh điểm lấy hàng trước khi gọi API tạo vận đơn.
-        // Nếu .env có GHN_FROM_DISTRICT_ID/GHN_FROM_WARD_CODE thì dùng cấu hình đó;
-        // nếu không, dịch vụ tự đọc địa chỉ từ Shop ID GHN.
         $pickup = $this->pickupLocation();
 
         $service = [
@@ -314,7 +319,8 @@ class ShippingService
         ];
 
         $this->persistTracking($orderId, $tracking, $json);
-        $this->recordShippingEvent($orderId, $trackingCode, 'ready_to_pick', 'GHN đã tiếp nhận yêu cầu giao hàng.', now(), $data);
+        $this->recordShippingEvent($orderId, $trackingCode, 'ready_to_pick', 'GHN đã tiếp nhận yêu cầu giao hàng.', now(), $data, 'ghn_create');
+        $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
 
         return $tracking;
     }
@@ -337,30 +343,172 @@ class ShippingService
     public function syncOrderTracking(int $orderId): ?array
     {
         $order = DB::table('orders')->where('id', $orderId)->first();
-        if (!$order || empty($order->tracking_code)) {
-            return null;
+        if (!$order || empty($order->tracking_code)) return null;
+
+        if ($this->environment() === 'staging') {
+            $this->simulation->state($orderId, true);
+            $order = DB::table('orders')->where('id', $orderId)->first() ?? $order;
         }
 
-        $tracking = $this->tracking((string) $order->tracking_code);
-        if (!$tracking) {
-            return null;
-        }
+        $remoteTracking = $this->tracking((string) $order->tracking_code);
+        if (!$remoteTracking) return null;
 
-        $this->persistTracking($orderId, $tracking, $tracking['raw'] ?? null);
-        $this->syncInternalOrderFromGhn($order, $tracking);
-
-        foreach ((array) ($tracking['logs'] ?? []) as $entry) {
+        foreach ((array) ($remoteTracking['logs'] ?? []) as $entry) {
             $this->recordShippingEvent(
                 $orderId,
                 (string) $order->tracking_code,
                 (string) ($entry['status'] ?? ''),
                 (string) ($entry['status_label'] ?? ''),
                 $entry['updated_date'] ?? null,
-                $entry
+                $entry,
+                'ghn_api',
+                false,
+                $entry['location'] ?? null,
             );
         }
 
+        $tracking = $this->mergeTrackingWithStoredEvents($orderId, $remoteTracking);
+        $this->persistTracking($orderId, $tracking, $remoteTracking['raw'] ?? null);
+
+        $freshOrder = DB::table('orders')->where('id', $orderId)->first() ?? $order;
+        if (!(bool) ($tracking['simulated'] ?? false)) {
+            $this->syncInternalOrderFromGhn($freshOrder, $tracking);
+        }
+
         return $tracking;
+    }
+
+    public function deliverySimulationState(int $orderId): array
+    {
+        return $this->simulation->state($orderId, true);
+    }
+
+    public function startDeliverySimulationIfIdle(int $orderId): array
+    {
+        if ($this->environment() !== 'staging') {
+            return [];
+        }
+
+        return $this->simulation->startIfIdle($orderId);
+    }
+
+
+    public function deliveryMapForOrder(int $orderId, ?array $tracking = null): array
+    {
+        $order = DB::table('orders')->where('id', $orderId)->first();
+        if (!$order) {
+            throw new RuntimeException('Không tìm thấy đơn hàng để dựng bản đồ giao hàng.');
+        }
+
+        $simulation = $this->environment() === 'staging'
+            ? $this->simulation->state($orderId, true)
+            : null;
+
+        $simulationActive = is_array($simulation)
+            && in_array((string) ($simulation['status'] ?? ''), ['running', 'paused', 'completed'], true);
+
+        $status = strtolower(trim((string) (
+            $simulationActive
+                ? ($simulation['current_status'] ?? 'ready_to_pick')
+                : ($tracking['status'] ?? $order->ghn_status ?? (!empty($order->tracking_code) ? 'ready_to_pick' : ''))
+        )));
+
+        $events = collect((array) ($tracking['logs'] ?? []));
+        if ($events->isEmpty() && Schema::hasTable('shipping_status_histories')) {
+            $events = DB::table('shipping_status_histories')
+                ->where('order_id', $orderId)
+                ->orderBy('occurred_at')
+                ->orderBy('id')
+                ->get()
+                ->map(fn ($row) => [
+                    'status' => $row->status ?? null,
+                    'location' => $row->location ?? null,
+                    'updated_date' => $row->occurred_at ?? $row->created_at ?? null,
+                    'is_simulated' => (bool) ($row->is_simulated ?? false),
+                ]);
+        }
+
+        $latestLocation = $events
+            ->filter(fn ($event) => filled(data_get($event, 'location')))
+            ->last();
+
+        $pickupShop = [];
+        try {
+            $pickupShop = $this->pickupLocation();
+        } catch (\Throwable) {
+            $pickupShop = [];
+        }
+
+        $destinationParts = array_values(array_filter([
+            trim((string) ($order->ward ?? '')),
+            trim((string) ($order->district ?? '')),
+            trim((string) ($order->province ?? '')),
+        ]));
+        $destinationArea = $destinationParts ? implode(', ', $destinationParts) : 'Khu vực người nhận';
+        $destinationAddress = trim((string) ($order->shipping_address ?? '')) ?: $destinationArea;
+
+        $isReturn = in_array($status, [
+            'waiting_to_return', 'return', 'return_transporting', 'return_sorting',
+            'returning', 'return_fail', 'returned',
+        ], true);
+
+        $progress = $simulationActive
+            ? (float) ($simulation['progress'] ?? 0)
+            : $this->deliveryMapProgress($status);
+        $environment = $this->environment();
+        $simulated = $environment === 'staging' && (
+            $simulationActive
+            || (bool) ($tracking['simulated'] ?? false)
+            || $events->contains(fn ($event) => (bool) data_get($event, 'is_simulated', false))
+        );
+
+        return [
+            'mode' => $environment === 'staging' ? 'staging_status_simulation' : 'status_route',
+            'environment' => $environment,
+            'is_live_gps' => false,
+            'simulated' => $simulated,
+            'status' => $status ?: null,
+            'status_label' => $status ? $this->statusLabel($status) : 'Chưa có hành trình',
+            'progress' => $progress,
+            'direction' => $isReturn ? 'return' : 'forward',
+            'current_location' => data_get($latestLocation, 'location') ?: $this->devStatusLocation($status),
+            'updated_at' => $simulationActive
+                ? ($simulation['server_time'] ?? now()->toIso8601String())
+                : ($tracking['updated_date'] ?? $order->ghn_last_synced_at ?? data_get($latestLocation, 'updated_date')),
+            'simulation' => $simulation,
+            'origin' => [
+                'label' => trim((string) ($pickupShop['name'] ?? '')) ?: 'Dynova Sport',
+                'address' => trim((string) ($pickupShop['address'] ?? '')),
+                'progress' => 0,
+            ],
+            'pickup_hub' => [
+                'label' => 'Kho GHN người gửi',
+                'address' => 'Điểm khai thác khu vực gửi hàng',
+                'progress' => 24,
+            ],
+            'sorting_hub' => [
+                'label' => 'Trung tâm phân loại GHN',
+                'address' => $status === 'sorting' ? ($this->devStatusLocation($status) ?: 'Trung tâm phân loại GHN') : 'Trung tâm trung chuyển / phân loại',
+                'progress' => 58,
+            ],
+            'delivery_hub' => [
+                'label' => 'Bưu cục giao hàng',
+                'address' => $destinationArea,
+                'progress' => 78,
+            ],
+            'destination' => [
+                'label' => 'Địa chỉ nhận hàng',
+                'address' => $destinationAddress,
+                'progress' => 100,
+            ],
+            'checkpoints' => [
+                ['key' => 'shop', 'label' => 'Dynova Sport', 'progress' => 0],
+                ['key' => 'pickup', 'label' => 'Kho lấy hàng', 'progress' => 24],
+                ['key' => 'sorting', 'label' => 'Trung tâm GHN', 'progress' => 58],
+                ['key' => 'delivery', 'label' => 'Bưu cục giao', 'progress' => 78],
+                ['key' => 'receiver', 'label' => 'Người nhận', 'progress' => 100],
+            ],
+        ];
     }
 
     public function cancelShipment(string $trackingCode): bool
@@ -414,7 +562,7 @@ class ShippingService
 
         $occurredAt = $payload['Time'] ?? $payload['time'] ?? $payload['UpdatedDate'] ?? $payload['updated_date'] ?? now();
         $description = (string) ($payload['Description'] ?? $payload['description'] ?? $this->statusLabel($status));
-        $this->recordShippingEvent((int) $order->id, $trackingCode, $status, $description, $occurredAt, $payload);
+        $this->recordShippingEvent((int) $order->id, $trackingCode, $status, $description, $occurredAt, $payload, 'ghn_webhook');
 
         if ($status === 'delivered') {
             $fresh = DB::table('orders')->where('id', $order->id)->first();
@@ -671,7 +819,7 @@ class ShippingService
         $lower = mb_strtolower($message);
 
         if (str_contains($lower, 'curl error 60') || str_contains($lower, 'certificate') || str_contains($lower, 'ssl certificate')) {
-            return 'PHP/XAMPP không xác minh được chứng chỉ SSL của GHN. Nếu đang chạy local để demo, đặt GHN_VERIFY_SSL=false trong .env rồi chạy php artisan optimize:clear. Khi deploy thật hãy bật lại GHN_VERIFY_SSL=true.';
+            return 'Không thể xác minh chứng chỉ SSL khi kết nối GHN.';
         }
 
         if (str_contains($lower, 'curl error 6') || str_contains($lower, 'could not resolve host')) {
@@ -701,7 +849,11 @@ class ShippingService
                 return [
                     'status' => $status,
                     'status_label' => $this->statusLabel($status),
+                    'description' => $this->statusLabel($status),
                     'updated_date' => data_get($entry, 'updated_date'),
+                    'source' => 'ghn_api',
+                    'location' => data_get($entry, 'location'),
+                    'is_simulated' => false,
                 ];
             })
             ->filter(fn ($entry) => $entry['status'] !== '')
@@ -713,7 +865,11 @@ class ShippingService
             $logs[] = [
                 'status' => $status,
                 'status_label' => $this->statusLabel($status),
+                'description' => $this->statusLabel($status),
                 'updated_date' => $data['updated_date'] ?? null,
+                'source' => 'ghn_api',
+                'location' => null,
+                'is_simulated' => false,
             ];
         }
 
@@ -736,6 +892,135 @@ class ShippingService
             'logs' => $logs,
             'raw' => $data,
         ];
+    }
+
+    private function mergeTrackingWithStoredEvents(int $orderId, array $tracking): array
+    {
+        if (!Schema::hasTable('shipping_status_histories')) return $tracking;
+
+        $rows = DB::table('shipping_status_histories')
+            ->where('order_id', $orderId)
+            ->orderBy('occurred_at')
+            ->orderBy('id')
+            ->get();
+
+        $localLogs = $rows->map(function ($row) {
+            return [
+                'status' => strtolower((string) ($row->status ?? '')),
+                'status_label' => $row->description ?: $this->statusLabel($row->status ?? null),
+                'description' => $row->description ?: $this->statusLabel($row->status ?? null),
+                'updated_date' => $row->occurred_at ?? $row->created_at ?? null,
+                'source' => $row->source ?? ($row->provider ?? 'ghn'),
+                'location' => $row->location ?? null,
+                'is_simulated' => (bool) ($row->is_simulated ?? false),
+            ];
+        })->filter(fn ($row) => $row['status'] !== '')->values()->all();
+
+        $merged = collect(array_merge((array) ($tracking['logs'] ?? []), $localLogs))
+            ->unique(fn ($entry) => implode('|', [
+                strtolower((string) ($entry['status'] ?? '')),
+                (string) ($entry['updated_date'] ?? ''),
+                (string) ($entry['source'] ?? ''),
+            ]))
+            ->sortBy(function ($entry) {
+                try { return Carbon::parse($entry['updated_date'] ?? now())->timestamp; }
+                catch (\Throwable) { return 0; }
+            })
+            ->values()->all();
+
+        $tracking['logs'] = $merged;
+        $tracking['environment'] = $this->environment();
+        $tracking['simulated'] = false;
+
+        $latestSimulated = collect($merged)->filter(fn ($entry) => (bool) ($entry['is_simulated'] ?? false))->last();
+        if ($this->environment() === 'staging' && $latestSimulated) {
+            $remoteStatus = strtolower((string) ($tracking['status'] ?? ''));
+            $localStatus = strtolower((string) ($latestSimulated['status'] ?? ''));
+            if ($this->shippingStatusRank($localStatus) >= $this->shippingStatusRank($remoteStatus)) {
+                $tracking['status'] = $localStatus;
+                $tracking['status_label'] = $this->statusLabel($localStatus);
+                $tracking['updated_date'] = $latestSimulated['updated_date'] ?? ($tracking['updated_date'] ?? null);
+                $tracking['simulated'] = true;
+            }
+        }
+
+        $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
+
+        return $tracking;
+    }
+
+    private function buildStoredTracking(int $orderId): array
+    {
+        $order = DB::table('orders')->where('id', $orderId)->first();
+        if (!$order) throw new RuntimeException('Không tìm thấy đơn hàng.');
+
+        return $this->mergeTrackingWithStoredEvents($orderId, [
+            'order_code' => $order->tracking_code ?? null,
+            'status' => $order->ghn_status ?? null,
+            'status_label' => $this->statusLabel($order->ghn_status ?? null),
+            'leadtime' => $order->ghn_expected_delivery_at ?? null,
+            'expected_delivery_time' => $order->ghn_expected_delivery_at ?? null,
+            'updated_date' => $order->ghn_last_synced_at ?? null,
+            'logs' => [],
+            'environment' => $this->environment(),
+            'simulated' => true,
+            'raw' => [],
+        ]);
+    }
+
+    private function deliveryMapProgress(?string $status): int
+    {
+        return [
+            'ready_to_pick' => 5,
+            'picking' => 12,
+            'money_collect_picking' => 15,
+            'picked' => 24,
+            'storing' => 34,
+            'transporting' => 50,
+            'sorting' => 64,
+            'delivering' => 86,
+            'money_collect_delivering' => 88,
+            'delivery_fail' => 86,
+            'waiting_to_return' => 78,
+            'return' => 70,
+            'return_transporting' => 52,
+            'return_sorting' => 38,
+            'returning' => 18,
+            'return_fail' => 18,
+            'returned' => 0,
+            'delivered' => 100,
+            'cancel' => 0,
+            'exception' => 64,
+            'damage' => 64,
+            'lost' => 64,
+        ][strtolower((string) $status)] ?? 0;
+    }
+
+    private function shippingStatusRank(?string $status): int
+    {
+        return [
+            'ready_to_pick' => 10, 'picking' => 20, 'money_collect_picking' => 25,
+            'picked' => 30, 'storing' => 40, 'transporting' => 50, 'sorting' => 60,
+            'delivering' => 70, 'money_collect_delivering' => 72, 'delivery_fail' => 75,
+            'waiting_to_return' => 78, 'return' => 80, 'return_transporting' => 82,
+            'return_sorting' => 84, 'returning' => 86, 'return_fail' => 88,
+            'returned' => 90, 'exception' => 90, 'delivered' => 100, 'cancel' => 100,
+            'damage' => 100, 'lost' => 100,
+        ][strtolower((string) $status)] ?? 0;
+    }
+
+
+    private function devStatusLocation(string $status): ?string
+    {
+        return match ($status) {
+            'ready_to_pick', 'picking' => 'Điểm lấy hàng Dynova Sport',
+            'picked', 'storing' => 'Kho GHN khu vực người gửi',
+            'transporting', 'sorting' => 'Trung tâm phân loại GHN',
+            'delivering', 'delivery_fail' => 'Khu vực giao hàng của người nhận',
+            'delivered' => 'Địa chỉ nhận hàng',
+            'waiting_to_return', 'return', 'return_transporting', 'return_sorting', 'returning', 'return_fail', 'returned' => 'Luồng hoàn hàng GHN',
+            default => null,
+        };
     }
 
     private function persistTracking(int $orderId, array $tracking, mixed $raw): void
@@ -826,29 +1111,27 @@ class ShippingService
         }, 3);
     }
 
-    private function recordShippingEvent(int $orderId, string $trackingCode, string $status, string $description, mixed $occurredAt, array $payload): void
-    {
-        if (!Schema::hasTable('shipping_status_histories') || $status === '') {
-            return;
-        }
+    private function recordShippingEvent(
+        int $orderId,
+        string $trackingCode,
+        string $status,
+        string $description,
+        mixed $occurredAt,
+        array $payload,
+        string $source = 'ghn_api',
+        bool $isSimulated = false,
+        ?string $location = null,
+    ): void {
+        if (!Schema::hasTable('shipping_status_histories') || $status === '') return;
 
-        try {
-            $time = $occurredAt ? Carbon::parse($occurredAt) : now();
-        } catch (\Throwable) {
-            $time = now();
-        }
+        try { $time = $occurredAt ? Carbon::parse($occurredAt) : now(); }
+        catch (\Throwable) { $time = now(); }
 
         $exists = DB::table('shipping_status_histories')
-            ->where('order_id', $orderId)
-            ->where('status', $status)
-            ->where('occurred_at', $time)
-            ->exists();
+            ->where('order_id', $orderId)->where('status', $status)->where('occurred_at', $time)->exists();
+        if ($exists) return;
 
-        if ($exists) {
-            return;
-        }
-
-        DB::table('shipping_status_histories')->insert([
+        $insert = [
             'order_id' => $orderId,
             'provider' => 'ghn',
             'tracking_code' => $trackingCode ?: null,
@@ -858,7 +1141,12 @@ class ShippingService
             'occurred_at' => $time,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('shipping_status_histories', 'source')) $insert['source'] = $source;
+        if (Schema::hasColumn('shipping_status_histories', 'location')) $insert['location'] = $location;
+        if (Schema::hasColumn('shipping_status_histories', 'is_simulated')) $insert['is_simulated'] = $isSimulated;
+
+        DB::table('shipping_status_histories')->insert($insert);
     }
 
     private function environment(): string
@@ -869,7 +1157,7 @@ class ShippingService
             'production', 'prod' => 'production',
             'staging', 'stage', 'test', 'testing', 'dev', 'development' => 'staging',
             default => throw new RuntimeException(
-                'GHN_ENV không hợp lệ. Với DATN hãy dùng GHN_ENV=staging; chỉ dùng production khi triển khai giao hàng thật.'
+                'GHN_ENV không hợp lệ.'
             ),
         };
     }
@@ -918,21 +1206,18 @@ class ShippingService
 
     private function assertConfigured(): void
     {
-        // Gọi baseUrl() trước để phát hiện cấu hình staging/production bị trộn.
         $this->baseUrl();
 
         if (!filled(config('services.ghn.token'))) {
-            throw new RuntimeException('Chưa cấu hình GHN_TOKEN. Với DATN hãy dùng Token của tài khoản GHN Staging.');
+            throw new RuntimeException('Chưa cấu hình GHN_TOKEN.');
         }
         if (!filled(config('services.ghn.shop_id'))) {
-            throw new RuntimeException('Chưa cấu hình GHN_SHOP_ID. Với DATN hãy dùng Shop ID của tài khoản GHN Staging.');
+            throw new RuntimeException('Chưa cấu hình GHN_SHOP_ID.');
         }
     }
 
     private function insuranceValue(float $value): int
     {
-        // GHN đang trả giới hạn PRICE_DECL tối đa 500.000đ cho Shop/Token hiện tại.
-        // Tổng tiền đơn, COD và giá item vẫn giữ nguyên; chỉ trường khai giá gửi GHN bị giới hạn.
         $accountSafeLimit = 500000;
         $configuredLimit = (int) config('services.ghn.max_insurance_value', $accountSafeLimit);
 

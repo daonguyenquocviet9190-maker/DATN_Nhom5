@@ -38,7 +38,57 @@ export type OrderStatusHistory = {
 export type OrderTrackingLog = {
   status?: string | null;
   status_label?: string | null;
+  description?: string | null;
   updated_date?: string | null;
+  source?: string | null;
+  location?: string | null;
+  is_simulated?: boolean;
+};
+
+export type DeliveryMapPoint = {
+  label?: string | null;
+  address?: string | null;
+  progress?: number;
+};
+
+export type DeliverySimulation = {
+  enabled?: boolean;
+  auto_start?: boolean;
+  status?: string | null;
+  running?: boolean;
+  paused?: boolean;
+  completed?: boolean;
+  progress?: number;
+  elapsed_seconds?: number;
+  duration_seconds?: number;
+  speed?: number;
+  current_status?: string | null;
+  current_status_label?: string | null;
+  started_at?: string | null;
+  paused_at?: string | null;
+  server_time?: string | null;
+  message?: string | null;
+};
+
+export type DeliveryMap = {
+  mode?: string | null;
+  environment?: string | null;
+  is_live_gps?: boolean;
+  simulated?: boolean;
+  status?: string | null;
+  status_label?: string | null;
+  progress?: number;
+  direction?: "forward" | "return" | string;
+  current_location?: string | null;
+  updated_at?: string | null;
+  origin?: DeliveryMapPoint | null;
+  pickup_hub?: DeliveryMapPoint | null;
+  sorting_hub?: DeliveryMapPoint | null;
+  delivery_hub?: DeliveryMapPoint | null;
+  destination?: DeliveryMapPoint | null;
+  checkpoints?: DeliveryMapPoint[];
+  disclaimer?: string | null;
+  simulation?: DeliverySimulation | null;
 };
 
 export type OrderTracking = {
@@ -53,6 +103,9 @@ export type OrderTracking = {
   next_warehouse_id?: number | string | null;
   logs?: OrderTrackingLog[];
   sync_error?: string | null;
+  environment?: string | null;
+  simulated?: boolean;
+  delivery_map?: DeliveryMap | null;
 };
 
 export type Order = {
@@ -363,4 +416,9 @@ export async function getOrders(
 
 export async function getOrderById(id: number | string) {
   return getOrderDetail(id);
+}
+
+export async function getOrderTracking(id: number | string) {
+  const response: any = await apiFetch(`/orders/${id}/tracking`);
+  return response?.data || {};
 }

@@ -10,12 +10,10 @@ import {
   ClipboardList,
   CreditCard,
   Home,
-  Landmark,
   Loader2,
   MapPin,
   PackageCheck,
   Phone,
-  QrCode,
   RefreshCcw,
   ShieldCheck,
   ShoppingBag,
@@ -25,17 +23,14 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
-import { createPaymentSession } from "@/services/checkout.service";
-import {
-  getDefaultPublicSettings,
-  getPublicSettings,
-} from "@/services/settings.service";
 import { addToCart } from "@/utils/shopStorage";
 import {
   cancelOrder,
   getOrderById,
+  getOrderTracking,
   reorderOrder,
 } from "@/services/order.service";
+import OrderTrackingTimeline from "@/components/orders/OrderTrackingTimeline";
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -490,53 +485,12 @@ function getPaymentLabel(method = "") {
 
   const map = {
     COD: "Thanh toán khi nhận hàng",
-    BANK_TRANSFER: "Chuyển khoản / VietQR",
-    BANK: "Chuyển khoản / VietQR",
-    VIETQR: "Chuyển khoản / VietQR",
+    BANK_TRANSFER: "Chuyển khoản ngân hàng",
+    BANK: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
   };
 
   return map[clean] || method || "COD";
-}
-
-function normalizePaymentMethod(method = "") {
-  const clean = String(method || "COD").trim().toUpperCase();
-
-  if (["BANK", "BANK_TRANSFER", "VIETQR"].includes(clean)) return "BANK";
-  if (clean === "VNPAY") return "VNPAY";
-  return "COD";
-}
-
-function isPaymentPaid(status = "") {
-  return ["paid", "success", "completed", "settled"].includes(
-    String(status || "").trim().toLowerCase()
-  );
-}
-
-function createVietQrUrl(settings, amount, orderCode, phone) {
-  const bankCode = String(settings?.bank_code || "").trim();
-  const account = String(settings?.bank_account_number || "")
-    .replace(/\s/g, "")
-    .trim();
-  const accountNameRaw = String(settings?.bank_account_name || "").trim();
-
-  if (!bankCode || !account || !accountNameRaw) return "";
-
-  const transferContent = `${orderCode || "DYNOVA"} ${phone || ""}`
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 50);
-
-  const params = new URLSearchParams({
-    amount: String(Math.max(1, Math.round(Number(amount || 0)))),
-    addInfo: transferContent,
-    accountName: accountNameRaw,
-  });
-
-  return `https://img.vietqr.io/image/${encodeURIComponent(
-    bankCode
-  )}-${encodeURIComponent(account)}-qr_only.png?${params.toString()}`;
 }
 
 export default function OrderDetailPage() {
@@ -547,10 +501,9 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
+  const [trackingRefreshing, setTrackingRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [settings, setSettings] = useState(getDefaultPublicSettings());
-  const [settingsLoading, setSettingsLoading] = useState(true);
   const [catalogMaps, setCatalogMaps] = useState({
     productMap: {},
     variantMap: {},
@@ -562,7 +515,6 @@ export default function OrderDetailPage() {
   const currentStepIndex = status === "cancelled" ? -1 : statusIndex[status] ?? 0;
   const statusHistory = Array.isArray(order?.status_history) ? order.status_history : [];
   const tracking = order?.tracking || null;
-  const trackingLogs = Array.isArray(tracking?.logs) ? tracking.logs : [];
 
   const total = Number(
     order?.grand_total ||
@@ -576,28 +528,6 @@ export default function OrderDetailPage() {
   const subtotal = Number(order?.subtotal || order?.total_price || 0);
   const shippingFee = Number(order?.shipping_fee || 0);
   const discount = Number(order?.discount || order?.discount_amount || 0);
-
-  const paymentMethod = normalizePaymentMethod(
-    order?.payment_method || order?.paymentMethod
-  );
-  const paymentPaid = isPaymentPaid(
-    order?.payment_status || order?.paymentStatus
-  );
-  const orderCancelled = status === "cancelled";
-  const bankConfigured = Boolean(
-    String(settings?.bank_code || "").trim() &&
-      String(settings?.bank_account_number || "").trim() &&
-      String(settings?.bank_account_name || "").trim()
-  );
-  const vietQrUrl =
-    paymentMethod === "BANK" && !paymentPaid && !orderCancelled
-      ? createVietQrUrl(
-          settings,
-          total,
-          getOrderCode(order),
-          order?.customer_phone || order?.phone
-        )
-      : "";
 
   const showNotice = (message) => {
     setNotice(message);
@@ -632,36 +562,43 @@ export default function OrderDetailPage() {
     }
   };
 
-  useEffect(() => {
-    loadOrder();
-  }, [orderId]);
+  const loadTracking = async ({ silent = false } = {}) => {
+    if (!orderId || !order?.tracking_code) return;
+    try {
+      if (!silent) setTrackingRefreshing(true);
+      const data = await getOrderTracking(orderId);
+      setOrder((current) => ({
+        ...current,
+        status: data?.order_status ?? current?.status,
+        payment_status: data?.payment_status ?? current?.payment_status,
+        shipping_provider: data?.shipping_provider ?? current?.shipping_provider,
+        tracking_code: data?.tracking_code ?? current?.tracking_code,
+        ghn_status: data?.ghn_status ?? current?.ghn_status,
+        ghn_expected_delivery_at: data?.ghn_expected_delivery_at ?? current?.ghn_expected_delivery_at,
+        ghn_last_synced_at: data?.ghn_last_synced_at ?? current?.ghn_last_synced_at,
+        tracking: data?.tracking ?? current?.tracking,
+        shipping_status_history: data?.shipping_status_history ?? current?.shipping_status_history,
+        status_history: data?.status_history ?? current?.status_history,
+      }));
+    } catch (err) {
+      if (!silent) setError(err?.message || "Không thể cập nhật hành trình giao hàng.");
+    } finally { if (!silent) setTrackingRefreshing(false); }
+  };
+
+  useEffect(() => { loadOrder(); }, [orderId]);
 
   useEffect(() => {
-    let mounted = true;
-
-    getPublicSettings()
-      .then((response) => {
-        if (!mounted) return;
-        setSettings(response?.settings || getDefaultPublicSettings());
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setSettings(getDefaultPublicSettings());
-      })
-      .finally(() => {
-        if (mounted) setSettingsLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (status !== "shipping" || !order?.tracking_code) return undefined;
-    const timer = window.setInterval(() => loadOrder({ silent: true }), 60000);
+    if (!order?.tracking_code || status !== "shipping") return undefined;
+    const running = Boolean(order?.tracking?.delivery_map?.simulation?.running);
+    const interval = running ? 4000 : 30000;
+    const timer = window.setInterval(() => loadTracking({ silent: true }), interval);
     return () => window.clearInterval(timer);
-  }, [status, order?.tracking_code, orderId]);
+  }, [
+    status,
+    order?.tracking_code,
+    order?.tracking?.delivery_map?.simulation?.running,
+    orderId,
+  ]);
 
   const handleCancel = async () => {
     if (!order?.id) return;
@@ -719,46 +656,6 @@ export default function OrderDetailPage() {
     } catch (err) {
       showNotice(err?.message || "Không thể mua lại đơn hàng.");
     } finally {
-      setActionLoading("");
-    }
-  };
-
-  const handleRefreshPayment = async () => {
-    if (!order?.id) return;
-
-    try {
-      setActionLoading("payment-check");
-      await loadOrder({ silent: true });
-      showNotice("Đã cập nhật trạng thái thanh toán mới nhất.");
-    } finally {
-      setActionLoading("");
-    }
-  };
-
-  const handleVnpayPayment = async () => {
-    if (!order?.id || paymentPaid || orderCancelled) return;
-
-    try {
-      setActionLoading("vnpay");
-
-      const response = await createPaymentSession({
-        orderId: order.id,
-        provider: "VNPAY",
-      });
-
-      const paymentUrl =
-        response?.data?.paymentUrl ||
-        response?.data?.payment_url ||
-        response?.payment_url ||
-        response?.payUrl;
-
-      if (!paymentUrl) {
-        throw new Error("Không tạo được liên kết thanh toán VNPAY.");
-      }
-
-      window.location.assign(paymentUrl);
-    } catch (err) {
-      showNotice(err?.message || "Không thể mở cổng thanh toán VNPAY.");
       setActionLoading("");
     }
   };
@@ -912,47 +809,13 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {(order?.tracking_code || tracking) && (
-              <div className="mt-6 rounded-3xl border border-indigo-100 bg-indigo-50 p-5">
-                <div className="flex items-start gap-3">
-                  <Truck className="mt-0.5 text-indigo-600" size={20} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-black text-indigo-800">Theo dõi Giao Hàng Nhanh</p>
-                    {order?.tracking_code && <p className="mt-1 text-sm font-bold text-indigo-700">Mã vận đơn: {order.tracking_code}</p>}
-                    {(tracking?.status_label || tracking?.status) && (
-                      <p className="mt-1 text-sm text-indigo-700">Trạng thái: <b>{tracking?.status_label || tracking?.status}</b></p>
-                    )}
-                    {(tracking?.leadtime || tracking?.expected_delivery_time) && (
-                      <p className="mt-1 text-xs font-semibold text-indigo-600">Dự kiến giao: {new Date(tracking?.leadtime || tracking?.expected_delivery_time).toLocaleString("vi-VN")}</p>
-                    )}
-                    {tracking?.updated_date && (
-                      <p className="mt-1 text-[11px] font-semibold text-indigo-500">Cập nhật: {new Date(tracking.updated_date).toLocaleString("vi-VN")}</p>
-                    )}
-                  </div>
-                </div>
+            <OrderTrackingTimeline
+              order={order}
+              tracking={tracking}
+              refreshing={trackingRefreshing}
+              onRefresh={() => loadTracking()}
+            />
 
-                {trackingLogs.length > 0 && (
-                  <div className="mt-5 border-t border-indigo-100 pt-4">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-indigo-500">Hành trình giao hàng</p>
-                    <div className="mt-3 space-y-3">
-                      {trackingLogs.map((entry, index) => (
-                        <div key={`${entry?.status || "ghn"}-${entry?.updated_date || index}-${index}`} className="flex gap-3">
-                          <div className="mt-1.5 flex w-4 shrink-0 justify-center">
-                            <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
-                          </div>
-                          <div className="min-w-0 flex-1 border-b border-indigo-100 pb-3 last:border-0 last:pb-0">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <p className="text-sm font-black text-indigo-800">{entry?.status_label || entry?.status || "Cập nhật vận chuyển"}</p>
-                              {entry?.updated_date && <span className="text-[11px] font-bold text-indigo-500">{new Date(entry.updated_date).toLocaleString("vi-VN")}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </section>
 
           <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -1045,33 +908,17 @@ export default function OrderDetailPage() {
           </section>
 
           <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-black text-slate-950">Thanh toán</h2>
-                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                  Theo dõi và hoàn tất thanh toán cho đúng đơn hàng này.
-                </p>
-              </div>
-
-              <div
-                className={
-                  "inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-black " +
-                  (paymentPaid
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-amber-50 text-amber-700")
-                }
-              >
-                {paymentPaid ? <CheckCircle2 size={15} /> : <CreditCard size={15} />}
-                {paymentPaid ? "Đã thanh toán" : "Chưa thanh toán"}
-              </div>
-            </div>
+            <h2 className="text-lg font-black text-slate-950">Thanh toán</h2>
 
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">Phương thức</span>
-                <span className="text-right font-black text-slate-950">
-                  {getPaymentLabel(order.payment_method || order.paymentMethod)}
-                </span>
+                <span className="font-black uppercase text-slate-950">{getPaymentLabel(order.payment_method)}</span>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500">Trạng thái</span>
+                <span className="font-black text-orange-600">{order.payment_status === "paid" ? "Đã thanh toán" : "Chưa thanh toán"}</span>
               </div>
 
               <div className="my-4 border-t border-slate-100" />
@@ -1098,156 +945,14 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
-              {paymentMethod === "BANK" && !paymentPaid && !orderCancelled && (
-                <div className="mt-5 overflow-hidden rounded-[28px] border border-orange-100 bg-gradient-to-b from-orange-50 to-white">
-                  <div className="border-b border-orange-100 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white">
-                        <QrCode size={21} />
-                      </div>
-                      <div>
-                        <p className="font-black text-slate-950">Thanh toán bằng VietQR</p>
-                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                          Bạn có thể quét lại mã này nếu chưa thanh toán ở bước đặt hàng.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {settingsLoading ? (
-                    <div className="grid min-h-[300px] place-items-center p-6">
-                      <div className="text-center">
-                        <Loader2 className="mx-auto animate-spin text-orange-500" size={30} />
-                        <p className="mt-3 text-xs font-bold text-slate-500">Đang tải VietQR...</p>
-                      </div>
-                    </div>
-                  ) : bankConfigured && vietQrUrl ? (
-                    <div className="p-4">
-                      <div className="mx-auto w-full max-w-[390px] rounded-[26px] border border-slate-100 bg-white p-4 shadow-lg shadow-slate-200/60">
-                        <img
-                          src={vietQrUrl}
-                          alt={`VietQR thanh toán đơn ${getOrderCode(order)}`}
-                          className="mx-auto aspect-square w-full object-contain"
-                        />
-                      </div>
-
-                      <div className="mt-5 space-y-3 rounded-3xl bg-white p-4 text-sm shadow-sm">
-                        <div className="flex items-start justify-between gap-4">
-                          <span className="text-slate-500">Ngân hàng</span>
-                          <b className="text-right text-slate-950">{settings.bank_name || settings.bank_code}</b>
-                        </div>
-                        <div className="flex items-start justify-between gap-4">
-                          <span className="text-slate-500">Số tài khoản</span>
-                          <b className="break-all text-right text-slate-950">{settings.bank_account_number}</b>
-                        </div>
-                        <div className="flex items-start justify-between gap-4">
-                          <span className="text-slate-500">Chủ tài khoản</span>
-                          <b className="text-right uppercase text-slate-950">{settings.bank_account_name}</b>
-                        </div>
-                        <div className="flex items-start justify-between gap-4 border-t border-slate-100 pt-3">
-                          <span className="text-slate-500">Số tiền</span>
-                          <b className="text-right text-lg text-orange-600">{formatCurrency(total)}</b>
-                        </div>
-                        <div className="flex items-start justify-between gap-4">
-                          <span className="text-slate-500">Nội dung</span>
-                          <b className="text-right text-orange-600">
-                            {getOrderCode(order)} {order.customer_phone || order.phone || ""}
-                          </b>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-700">
-                        Chuyển đúng số tiền và nội dung để đối soát đơn hàng. Nút kiểm tra bên dưới chỉ tải lại trạng thái từ hệ thống, không tự đánh dấu đã thanh toán.
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleRefreshPayment}
-                        disabled={actionLoading === "payment-check"}
-                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-60"
-                      >
-                        {actionLoading === "payment-check" ? (
-                          <Loader2 size={17} className="animate-spin" />
-                        ) : (
-                          <RefreshCcw size={17} />
-                        )}
-                        Kiểm tra trạng thái thanh toán
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-5">
-                      <div className="rounded-3xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-600">
-                        VietQR chưa được cấu hình đầy đủ. Quản trị viên cần nhập mã ngân hàng, số tài khoản và chủ tài khoản trong Cài đặt.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {paymentMethod === "VNPAY" && !paymentPaid && !orderCancelled && (
-                <div className="mt-5 rounded-[28px] border border-sky-100 bg-sky-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-white">
-                      <Landmark size={21} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-black text-sky-900">Đơn hàng chưa thanh toán VNPAY</p>
-                      <p className="mt-1 text-xs font-semibold leading-5 text-sky-700">
-                        Bạn có thể mở lại cổng VNPAY để thanh toán chính đơn hàng này, không tạo đơn mới.
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleVnpayPayment}
-                    disabled={actionLoading === "vnpay"}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-black text-white transition hover:bg-sky-700 disabled:opacity-60"
-                  >
-                    {actionLoading === "vnpay" ? (
-                      <Loader2 size={17} className="animate-spin" />
-                    ) : (
-                      <CreditCard size={17} />
-                    )}
-                    Thanh toán VNPAY ngay
-                  </button>
-                </div>
-              )}
-
-              {paymentPaid && paymentMethod !== "COD" && (
-                <div className="mt-5 rounded-[28px] border border-emerald-100 bg-emerald-50 p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 text-white">
-                      <CheckCircle2 size={21} />
-                    </div>
-                    <div>
-                      <p className="font-black text-emerald-800">Thanh toán đã hoàn tất</p>
-                      <p className="mt-1 text-xs font-semibold leading-5 text-emerald-700">
-                        Mã QR hoặc nút thanh toán lại đã được ẩn để tránh thanh toán trùng đơn.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {orderCancelled && paymentMethod !== "COD" && !paymentPaid && (
-                <div className="mt-5 rounded-[28px] border border-rose-100 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-600">
-                  Đơn hàng đã hủy nên hệ thống không cho phép tiếp tục thanh toán online.
-                </div>
-              )}
-
-              <div className="grid gap-2 pt-3">
+              <div className="grid gap-2 pt-2">
                 {canCancel && (
                   <button
                     onClick={handleCancel}
                     disabled={actionLoading === "cancel"}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-black text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {actionLoading === "cancel" ? (
-                      <Loader2 size={17} className="animate-spin" />
-                    ) : (
-                      <Ban size={17} />
-                    )}
+                    {actionLoading === "cancel" ? <Loader2 size={17} className="animate-spin" /> : <Ban size={17} />}
                     Hủy đơn hàng
                   </button>
                 )}
@@ -1257,18 +962,11 @@ export default function OrderDetailPage() {
                   disabled={actionLoading === "reorder" || items.length === 0}
                   className="btn-primary flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {actionLoading === "reorder" ? (
-                    <Loader2 size={17} className="animate-spin" />
-                  ) : (
-                    <RefreshCcw size={17} />
-                  )}
+                  {actionLoading === "reorder" ? <Loader2 size={17} className="animate-spin" /> : <RefreshCcw size={17} />}
                   Mua lại đơn hàng
                 </button>
 
-                <Link
-                  href="/"
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-                >
+                <Link href="/" className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600">
                   <Home size={17} />
                   Về trang chủ
                 </Link>

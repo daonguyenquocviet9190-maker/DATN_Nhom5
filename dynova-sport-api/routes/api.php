@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
     Route::get('/orders/{id}', [OrderController::class, 'show'])->whereNumber('id');
+    Route::get('/orders/{id}/tracking', [OrderController::class, 'tracking'])->whereNumber('id');
     Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel'])->whereNumber('id');
     Route::post('/orders/{id}/reorder', [OrderController::class, 'reorder'])->whereNumber('id');
 
@@ -122,6 +123,7 @@ Route::middleware(['auth:sanctum', 'admin'])
         Route::get('/orders', [AdminSimpleController::class, 'orders']);
         Route::get('/orders/{id}', [AdminSimpleController::class, 'showOrder'])->whereNumber('id');
         Route::patch('/orders/{id}/status', [AdminSimpleController::class, 'updateOrderStatus'])->whereNumber('id');
+        Route::post('/orders/{id}/shipping/sync', [AdminSimpleController::class, 'syncOrderShipping'])->whereNumber('id');
 
         Route::get('/customers', [AdminSimpleController::class, 'customers']);
         Route::patch('/customers/{id}/status', [AdminSimpleController::class, 'updateCustomerStatus'])->whereNumber('id');
