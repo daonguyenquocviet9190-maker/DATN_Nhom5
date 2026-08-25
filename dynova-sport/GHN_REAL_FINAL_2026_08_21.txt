@@ -1,0 +1,10 @@
+GHN REAL - FRONTEND DYNOVA SPORT
+
+- Checkout chỉ sử dụng danh sách địa chỉ GHN từ backend.
+- GHN chưa cấu hình hoặc Token lỗi: Checkout báo rõ và không cho đặt đơn sai địa chỉ.
+- Tính phí gọi backend, backend gọi GHN.
+- Admin không nhập tracking code bằng tay; chuyển sang Đang giao sẽ yêu cầu backend tạo vận đơn GHN.
+- Khách xem mã vận đơn, trạng thái, ngày giao dự kiến và hành trình GHN trong chi tiết đơn.
+- Khi đơn đang giao và trang chi tiết đang mở, trạng thái được đồng bộ khoảng 60 giây/lần.
+
+Cấu hình Token/Shop ID nằm ở backend. Xem file HUONG_DAN_GHN_THAT.md trong ZIP backend.

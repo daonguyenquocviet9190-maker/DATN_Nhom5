@@ -3,61 +3,76 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\VoucherService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class VoucherController extends Controller
 {
-    public function applyVoucher(Request $request)
+    public function __construct(private readonly VoucherService $vouchers)
     {
-        // Lấy tất cả các biến có thể có từ Frontend
-        $code = $request->input('code') 
-             ?? $request->input('coupon') 
-             ?? $request->input('voucher') 
-             ?? $request->input('voucher_code') 
-             ?? 'FREESHIP50';
+    }
 
-        $code = strtoupper(trim($code));
+    public function applyVoucher(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['nullable', 'string', 'max:80'],
+            'coupon' => ['nullable', 'string', 'max:80'],
+            'voucher' => ['nullable', 'string', 'max:80'],
+            'voucher_code' => ['nullable', 'string', 'max:80'],
+            'cart_total' => ['nullable', 'numeric', 'min:0'],
+            'subtotal' => ['nullable', 'numeric', 'min:0'],
+        ]);
 
-        // 1. Thử tìm trong DB trước
-        $voucher = DB::table('vouchers')->where('code', $code)->first();
+        $code = $validated['code']
+            ?? $validated['coupon']
+            ?? $validated['voucher']
+            ?? $validated['voucher_code']
+            ?? '';
 
-        // 2. Nếu tìm thấy, lấy giá trị DB; Nếu KHÔNG tìm thấy, ÉP MẶC ĐỊNH giảm 50.000đ luôn!
-        $discountValue = $voucher ? (float)($voucher->discount_value ?? $voucher->value ?? 50000) : 50000;
-        if ($discountValue <= 0) $discountValue = 50000;
+        $subtotal = (float) ($validated['cart_total'] ?? $validated['subtotal'] ?? 0);
+        $result = $this->vouchers->validateAndCalculate($code, $subtotal, $request->user()?->id);
+        $voucher = $result['voucher'];
 
-        $discountType = $voucher->discount_type ?? 'fixed';
+        if (!$voucher) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Vui lòng nhập mã giảm giá.',
+            ], 422);
+        }
 
-        // Trả về cấu trúc response cực rộng để Frontend đọc kiểu gì cũng trúng
         return response()->json([
-            'success'         => true,
-            'status'          => true,
-            'valid'           => true,
-            'message'         => 'Áp dụng mã giảm giá thành công!',
-            'data'            => [
-                'id'              => $voucher->id ?? 1,
-                'code'            => $code,
-                'coupon'          => $code,
-                'title'           => 'Mã giảm giá ' . $code,
-                'type'            => $discountType,
-                'discount_type'   => $discountType,
-                'value'           => $discountValue,
-                'discount_value'  => $discountValue,
-                'discount_amount' => $discountValue,
-                'discount'        => $discountValue,
-                'min_order_value' => 0,
+            'success' => true,
+            'message' => 'Áp dụng mã giảm giá thành công.',
+            'data' => [
+                'id' => $voucher->id,
+                'code' => $voucher->code,
+                'title' => $voucher->title ?? $voucher->code,
+                'discount_type' => $voucher->discount_type ?? 'fixed',
+                'discount_value' => (float) ($voucher->discount_value ?? 0),
+                'discount_amount' => $result['discount'],
+                'min_order_value' => (float) ($voucher->min_order_value ?? 0),
+                'max_discount' => $voucher->max_discount !== null ? (float) $voucher->max_discount : null,
+                'per_user_limit' => property_exists($voucher, 'per_user_limit') ? $voucher->per_user_limit : null,
             ],
-            'discount'        => $discountValue,
-            'discount_amount' => $discountValue,
-            'discount_type'   => $discountType,
+            'discount' => $result['discount'],
+            'discount_amount' => $result['discount'],
         ]);
     }
 
-    public function index()
+    public function index(): JsonResponse
     {
-        return response()->json([
-            'success' => true,
-            'data'    => DB::table('vouchers')->get()
-        ]);
+        if (!Schema::hasTable('vouchers')) {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $items = DB::table('vouchers')
+            ->where('is_active', 1)
+            ->orderByDesc('id')
+            ->get();
+
+        return response()->json(['success' => true, 'data' => $items]);
     }
 }

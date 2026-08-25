@@ -6,6 +6,15 @@ import {
   seedOrders,
 } from "@/data/shop";
 
+import {
+  addCartItemApi,
+  clearCartApi,
+  getCartApi,
+  hydrateAuthenticatedCart,
+  removeCartItemApi,
+  updateCartItemApi,
+} from "@/services/cart.service";
+
 const KEYS = {
   cart: "dynova_cart",
   serverCart: "dynova_server_cart",
@@ -20,6 +29,32 @@ const KEYS = {
 };
 
 const pendingCartRequests = new Map();
+
+const AUTH_TOKEN_KEYS = [
+  "dynova_auth_token",
+  "auth_token",
+  "access_token",
+  "token",
+];
+
+const AUTH_USER_KEYS = [
+  "dynova_current_user",
+  "dynova_auth_user",
+  "dynova_user",
+  "auth_user",
+  "currentUser",
+  "current_user",
+  "user",
+];
+
+const AUTH_MISC_KEYS = [
+  "userDisplayName",
+  "dynova_remember_login",
+  "isLoggedIn",
+  "is_logged_in",
+];
+
+const LOGOUT_MARKER_KEY = "dynova_explicit_logout";
 
 let hydratedToken = "";
 let hydrationPromise = null;
@@ -365,19 +400,20 @@ function findMatchingCartItem(
 export function getAuthToken() {
   if (!isBrowser()) return "";
 
-  return (
-    localStorage.getItem(
-      "dynova_auth_token"
-    ) ||
-    localStorage.getItem(
-      "auth_token"
-    ) ||
-    localStorage.getItem(
-      "access_token"
-    ) ||
-    localStorage.getItem("token") ||
-    ""
-  );
+  const explicitlyLoggedOut =
+    window.localStorage.getItem(LOGOUT_MARKER_KEY) === "1" ||
+    window.sessionStorage.getItem(LOGOUT_MARKER_KEY) === "1";
+
+  if (explicitlyLoggedOut) return "";
+
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of AUTH_TOKEN_KEYS) {
+      const value = storage.getItem(key);
+      if (value) return value;
+    }
+  }
+
+  return "";
 }
 
 export function hasAuthSession() {
@@ -1024,12 +1060,6 @@ async function resolveServerCartItem(
     }
   }
 
-  const {
-    getCartApi,
-  } = await import(
-    "@/services/cart.service"
-  );
-
   const freshResult =
     await getCartApi();
 
@@ -1146,23 +1176,18 @@ export function addToCart(
   const previousCart =
     getServerCartCache();
 
-  const request = import(
-    "@/services/cart.service"
-  )
-    .then(
-      ({
-        addCartItemApi,
-      }) =>
-        addCartItemApi({
-          product_id:
-            cartItem.product_id,
+  const request = Promise.resolve()
+    .then(() =>
+      addCartItemApi({
+        product_id:
+          cartItem.product_id,
 
-          product_variant_id:
-            cartItem.product_variant_id,
+        product_variant_id:
+          cartItem.product_variant_id,
 
-          quantity:
-            requestedQuantity,
-        })
+        quantity:
+          requestedQuantity,
+      })
     )
     .then((result) => {
       applyServerCartResult(result);
@@ -1190,6 +1215,75 @@ export function addToCart(
   );
 
   return next;
+}
+
+/**
+ * Thêm giỏ hàng và chờ backend xác nhận đối với tài khoản đã đăng nhập.
+ * Guest vẫn dùng localStorage như trước.
+ */
+export async function addToCartVerified(
+  product,
+  options = {}
+) {
+  const cartItem = normalizeCartItem(
+    product,
+    options
+  );
+
+  if (!cartItem.product_id) {
+    const error = new Error(
+      "Không xác định được sản phẩm để thêm vào giỏ hàng."
+    );
+    error.status = 422;
+    throw error;
+  }
+
+  if (!hasAuthSession()) {
+    const items = addToCart(
+      product,
+      options
+    );
+
+    return {
+      success: true,
+      source: "guest",
+      items,
+    };
+  }
+
+  const requestedQuantity = Math.max(
+    1,
+    Number(
+      options?.quantity ??
+        cartItem.quantity ??
+        1
+    )
+  );
+
+  try {
+
+    const result = await addCartItemApi({
+      product_id:
+        cartItem.product_id,
+      product_variant_id:
+        cartItem.product_variant_id,
+      quantity: requestedQuantity,
+    });
+
+    applyServerCartResult(result);
+
+    dispatchStorageEvent();
+    dispatchCartEvent();
+
+    return {
+      success: true,
+      source: "server",
+      ...result,
+    };
+  } catch (error) {
+    dispatchCartSyncError(error);
+    throw error;
+  }
 }
 
 export function updateCartItem(
@@ -1275,12 +1369,6 @@ export function updateCartItem(
         };
       }
 
-      const {
-        updateCartItemApi,
-      } = await import(
-        "@/services/cart.service"
-      );
-
       return updateCartItemApi(
         serverItem.cart_item_id,
         nextQuantity
@@ -1358,12 +1446,6 @@ export function removeCartItem(key) {
         };
       }
 
-      const {
-        removeCartItemApi,
-      } = await import(
-        "@/services/cart.service"
-      );
-
       return removeCartItemApi(
         serverItem.cart_item_id
       );
@@ -1418,12 +1500,6 @@ export function clearCart() {
         );
       }
 
-      const {
-        clearCartApi,
-      } = await import(
-        "@/services/cart.service"
-      );
-
       return clearCartApi();
     })
     .then((result) => {
@@ -1462,12 +1538,6 @@ export async function refreshCartFromServer() {
     };
   }
 
-  const {
-    getCartApi,
-  } = await import(
-    "@/services/cart.service"
-  );
-
   const result =
     await getCartApi();
 
@@ -1486,12 +1556,6 @@ export async function syncCartAfterLogin() {
 
   const guestItems =
     getGuestCart();
-
-  const {
-    hydrateAuthenticatedCart,
-  } = await import(
-    "@/services/cart.service"
-  );
 
   const result =
     await hydrateAuthenticatedCart(
@@ -1553,37 +1617,8 @@ export function getWishlistProducts() {
 }
 
 export function getUsers() {
-  const saved = readJson(
-    KEYS.users,
-    null
-  );
-
-  if (Array.isArray(saved)) {
-    return saved;
-  }
-
-  return [
-    {
-      id: "USR001",
-      fullName: "Admin Dynova",
-      email: "admin@dynova.vn",
-      phone: "0866347730",
-      password: "123456",
-      role: "admin",
-      status: "Hoạt động",
-      address: "TP. Hồ Chí Minh",
-    },
-    {
-      id: "USR002",
-      fullName: "Khách hàng mẫu",
-      email: "demo@dynova.vn",
-      phone: "0909000000",
-      password: "123456",
-      role: "customer",
-      status: "Hoạt động",
-      address: "Hà Nội",
-    },
-  ];
+  const saved = readJson(KEYS.users, []);
+  return Array.isArray(saved) ? saved : [];
 }
 
 export function saveUsers(users) {
@@ -1716,71 +1751,46 @@ export function loginUser(
 export function logoutUser() {
   if (!isBrowser()) return;
 
-  window.localStorage.removeItem(
-    KEYS.currentUser
-  );
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    [...AUTH_TOKEN_KEYS, ...AUTH_USER_KEYS, ...AUTH_MISC_KEYS].forEach((key) => {
+      storage.removeItem(key);
+    });
 
-  window.localStorage.removeItem(
-    KEYS.serverCart
-  );
+    storage.setItem(LOGOUT_MARKER_KEY, "1");
+  }
 
-  window.localStorage.removeItem(
-    "isLoggedIn"
-  );
-
-  [
-    "dynova_auth_token",
-    "auth_token",
-    "access_token",
-    "token",
-  ].forEach((key) => {
-    window.localStorage.removeItem(key);
-  });
+  window.localStorage.removeItem(KEYS.serverCart);
+  window.sessionStorage.removeItem(KEYS.serverCart);
 
   hydratedToken = "";
   hydrationPromise = null;
 
   dispatchStorageEvent();
   dispatchCartEvent();
+  window.dispatchEvent(new Event("dynova:auth"));
+  window.dispatchEvent(new Event("dynova:wishlist"));
 }
 
 export function getCurrentUser() {
   if (!isBrowser()) return null;
 
-  const keys = [
-    KEYS.currentUser,
-    "dynova_auth_user",
-    "auth_user",
-    "currentUser",
-    "current_user",
-    "user",
-  ];
+  if (!getAuthToken()) return null;
 
-  for (const key of keys) {
-    try {
-      const raw =
-        window.localStorage.getItem(
-          key
-        );
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of AUTH_USER_KEYS) {
+      try {
+        const raw = storage.getItem(key);
+        if (!raw) continue;
 
-      if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const user = parsed?.data?.user || parsed?.user || parsed;
 
-      const parsed =
-        JSON.parse(raw);
-
-      const user =
-        parsed?.data?.user ||
-        parsed?.user ||
-        parsed;
-
-      if (
-        user &&
-        typeof user === "object"
-      ) {
-        return user;
+        if (user && typeof user === "object") {
+          return user;
+        }
+      } catch {
+        continue;
       }
-    } catch {
-      continue;
     }
   }
 

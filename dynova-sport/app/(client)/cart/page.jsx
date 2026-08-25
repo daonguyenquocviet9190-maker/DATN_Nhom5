@@ -24,7 +24,6 @@ import {
 } from "@/utils/shopStorage";
 
 const FREE_SHIPPING_TARGET = 799000;
-// URL API Backend Laravel của bạn
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export default function CartPage() {
@@ -32,7 +31,6 @@ export default function CartPage() {
   const [coupon, setCoupon] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
   
-  // Quản lý thông tin giảm giá từ API
   const [discountAmount, setDiscountAmount] = useState(0);
   const [couponMessage, setCouponMessage] = useState("");
   const [isErrorCoupon, setIsErrorCoupon] = useState(false);
@@ -49,15 +47,12 @@ export default function CartPage() {
     syncCart();
   }, []);
 
-  // 1. Tính tổng giá trị giỏ hàng (Subtotal)
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [items]);
 
-  // 2. Tính phí vận chuyển tạm tính
   const shipping = subtotal >= FREE_SHIPPING_TARGET || subtotal === 0 ? 0 : 30000;
 
-  // 3. Tính tổng tiền cuối cùng
   const finalTotal = useMemo(() => {
     const totalAfterDiscount = subtotal - discountAmount;
     return Math.max(0, totalAfterDiscount) + shipping;
@@ -78,7 +73,6 @@ export default function CartPage() {
   const updateQty = (key, qty) => {
     updateCartItem(key, Math.max(1, qty));
     syncCart();
-    // Nếu đã áp dụng coupon, tự động tính toán lại với subtotal mới
     if (appliedCoupon) {
       reValidateCoupon(appliedCoupon, subtotal);
     }
@@ -90,7 +84,6 @@ export default function CartPage() {
     showNotice("Đã xóa sản phẩm khỏi giỏ hàng.");
   };
 
-  // Hàm gọi API Backend kiểm tra mã giảm giá
   const handleApplyCoupon = async (codeToApply) => {
     const cleanCoupon = codeToApply.trim().toUpperCase();
 
@@ -131,7 +124,7 @@ export default function CartPage() {
         setIsErrorCoupon(true);
       }
     } catch (error) {
-      console.error("Voucher API Error:", error);
+      console.error("Không thể áp dụng mã giảm giá:", error);
       setDiscountAmount(0);
       setCouponMessage("Không thể kết nối đến máy chủ.");
       setIsErrorCoupon(true);
@@ -140,7 +133,6 @@ export default function CartPage() {
     }
   };
 
-  // Hàm tính lại giảm giá nếu người dùng thay đổi số lượng
   const reValidateCoupon = (code, currentSubtotal) => {
     fetch(`${API_BASE_URL}/vouchers/apply`, {
       method: "POST",

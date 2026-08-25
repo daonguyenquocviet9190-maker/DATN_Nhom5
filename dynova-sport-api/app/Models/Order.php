@@ -35,13 +35,11 @@ class Order extends Model
         'total_amount' => 'float',
     ];
 
-    // Mối quan hệ: Một đơn hàng có nhiều chi tiết sản phẩm (OrderItems)
     public function orderItems()
     {
         return $this->hasMany(OrderItem::class, 'order_id');
     }
 
-    // Mối quan hệ: Đơn hàng thuộc về 1 người dùng (nếu có đăng nhập)
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');

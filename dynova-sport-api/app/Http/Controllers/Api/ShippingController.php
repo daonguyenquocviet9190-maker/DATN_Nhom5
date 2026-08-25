@@ -3,107 +3,120 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\ShippingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class ShippingController extends Controller
 {
-    private const FREESHIP_THRESHOLD = 500000; // Freeship từ 500.000 đ
+    public function __construct(private ShippingService $shipping) {}
+
+    public function status()
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $this->shipping->configurationStatus(),
+        ]);
+    }
 
     public function fee(Request $request)
     {
         $validated = $request->validate([
-            'province' => ['required', 'string'],
-            'district' => ['required', 'string'],
-            'ward'     => ['nullable', 'string'],
-            'address'  => ['required', 'string'],
-            'weight'   => ['nullable', 'numeric'],
-            'value'    => ['nullable', 'numeric'],
+            'province' => ['required', 'string', 'max:120'],
+            'provinceCode' => ['required'],
+            'district' => ['required', 'string', 'max:120'],
+            'districtCode' => ['required', 'integer'],
+            'ward' => ['required', 'string', 'max:120'],
+            'wardCode' => ['required', 'string', 'max:40'],
+            'address' => ['required', 'string', 'max:500'],
+            'weight' => ['nullable', 'integer', 'min:1', 'max:30000'],
+            'value' => ['required', 'numeric', 'min:0'],
         ]);
 
-        $value = (float) ($validated['value'] ?? 0);
-        $weight = (float) ($validated['weight'] ?? 500);
-
-        // 1. Kiểm tra Freeship nội bộ
-        if ($value >= self::FREESHIP_THRESHOLD) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Đơn hàng từ 500.000 đ trở lên được MIỄN PHÍ vận chuyển!',
-                'fee'     => 0,
-                'data'    => ['fee' => 0, 'provider' => 'PROMOTION_FREESHIP'],
-            ]);
-        }
-
-        $token = config('services.ghtk.token');
-        $partnerCode = config('services.ghtk.partner_code');
-        $baseUrl = rtrim(config('services.ghtk.base_url', 'https://services.giaohangtietkiem.vn'), '/');
-
-        // 2. Không có token -> Dùng phí mặc định
-        if (!$token) {
-            $fallbackFee = $this->fallbackFee($value, $weight);
-            return response()->json([
-                'success' => true,
-                'message' => 'Áp dụng phí giao hàng tiêu chuẩn.',
-                'fee'     => $fallbackFee,
-                'data'    => ['fee' => $fallbackFee, 'provider' => 'FALLBACK'],
-            ]);
-        }
-
-        // 3. Gọi API GHTK
         try {
-            $queryParams = [
-                'pick_province' => config('services.ghtk.pick_province', 'Hồ Chí Minh'),
-                'pick_district' => config('services.ghtk.pick_district', 'Thủ Đức'),
-                'province'      => $validated['province'],
-                'district'      => $validated['district'],
-                'address'       => $validated['address'],
-                'weight'        => $weight,
-                'value'         => $value,
-                'deliver_option' => 'none',
-            ];
+            $result = $this->shipping->calculate(
+                $validated,
+                (float) $validated['value'],
+                (int) ($validated['weight'] ?? config('services.ghn.default_item_weight', 300))
+            );
 
-            if (!empty($validated['ward'])) {
-                $queryParams['ward'] = $validated['ward'];
-            }
-
-            $response = Http::withHeaders([
-                'Token'           => $token,
-                'X-Client-Source' => $partnerCode,
-            ])->timeout(8)->get("{$baseUrl}/services/shipment/fee", $queryParams);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                if (data_get($data, 'success') === true) {
-                    $fee = (int) data_get($data, 'fee.fee', data_get($data, 'fee', 30000));
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Tính phí vận chuyển thành công qua GHTK.',
-                        'fee'     => $fee,
-                        'data'    => ['fee' => $fee, 'provider' => 'GHTK', 'raw' => $data],
-                    ]);
-                }
-            }
-        } catch (\Exception $e) {
-            Log::error('GHTK Exception: ' . $e->getMessage());
+            return response()->json([
+                'success' => true,
+                'message' => $result['free_shipping']
+                    ? 'Đơn hàng được miễn phí vận chuyển.'
+                    : 'Đã tính phí vận chuyển GHN.',
+                'fee' => $result['fee'],
+                'data' => $result,
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 503);
         }
-
-        // 4. Nếu API lỗi -> Dùng phí mặc định
-        $fallbackFee = $this->fallbackFee($value, $weight);
-        return response()->json([
-            'success' => true,
-            'message' => 'Áp dụng phí giao hàng tiêu chuẩn.',
-            'fee'     => $fallbackFee,
-            'data'    => ['fee' => $fallbackFee, 'provider' => 'FALLBACK'],
-        ]);
     }
 
-    private function fallbackFee(float $value, float $weight): int
+    public function provinces()
     {
-        if ($value >= self::FREESHIP_THRESHOLD) return 0;
-        if ($weight <= 500) return 25000;
-        if ($weight <= 1500) return 35000;
-        if ($weight <= 3000) return 45000;
-        return 45000 + (int)(ceil(($weight - 3000) / 500) * 5000);
+        try {
+            return response()->json(['success' => true, 'data' => $this->shipping->provinces()]);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+        }
+    }
+
+    public function districts(Request $request)
+    {
+        $validated = $request->validate(['province_id' => ['required', 'integer']]);
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => $this->shipping->districts((int) $validated['province_id']),
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+        }
+    }
+
+    public function wards(Request $request)
+    {
+        $validated = $request->validate(['district_id' => ['required', 'integer']]);
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => $this->shipping->wards((int) $validated['district_id']),
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+        }
+    }
+
+    public function services(Request $request)
+    {
+        $validated = $request->validate(['district_id' => ['required', 'integer']]);
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => $this->shipping->availableServices((int) $validated['district_id']),
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+        }
+    }
+
+    public function webhook(Request $request, string $secret)
+    {
+        $configuredSecret = (string) config('services.ghn.webhook_secret');
+        if ($configuredSecret === '' || !hash_equals($configuredSecret, $secret)) {
+            return response()->json(['success' => false, 'message' => 'Webhook không hợp lệ.'], 403);
+        }
+
+        $result = $this->shipping->handleWebhook($request->all());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'OK',
+            'data' => $result,
+        ]);
     }
 }

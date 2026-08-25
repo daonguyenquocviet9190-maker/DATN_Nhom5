@@ -26,13 +26,11 @@ class OrderItem extends Model
         'quantity' => 'integer',
     ];
 
-    // Mối quan hệ quay lại Đơn hàng
     public function order()
     {
         return $this->belongsTo(Order::class, 'order_id');
     }
 
-    // Mối quan hệ lấy thông tin Sản phẩm
     public function product()
     {
         return $this->belongsTo(Product::class, 'product_id');

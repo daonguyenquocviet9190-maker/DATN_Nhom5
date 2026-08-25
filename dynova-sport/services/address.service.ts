@@ -1,75 +1,52 @@
-const ADDRESS_API_V2 = "https://provinces.open-api.vn/api/v2";
-const ADDRESS_API_V1 = "https://provinces.open-api.vn/api";
+import { apiFetch } from "./api";
 
-export type Ward = {
-  code: number | string;
-  name: string;
-  districtCode?: number | string;
-  districtName?: string;
-  [key: string]: unknown;
-};
+export type Province = { id: string; name: string; raw?: any; source: "ghn" };
+export type District = { id: string; name: string; provinceId?: string; raw?: any; source: "ghn" };
+export type Ward = { id: string; name: string; districtId?: string; raw?: any; source: "ghn" };
 
-export type District = {
-  code: number | string;
-  name: string;
-  wards?: Ward[];
-  [key: string]: unknown;
-};
-
-export type Province = {
-  code: number | string;
-  name: string;
-  wards?: Ward[];
-  districts?: District[];
-  [key: string]: unknown;
-};
-
-export async function getMergedProvinces(): Promise<Province[]> {
-  try {
-    const response = await fetch(ADDRESS_API_V2 + "/?depth=2", {
-      cache: "force-cache",
-    });
-
-    if (!response.ok) {
-      throw new Error("V2 address API failed.");
-    }
-
-    const data = await response.json();
-
-    return Array.isArray(data) ? (data as Province[]) : [];
-  } catch {
-    const response = await fetch(ADDRESS_API_V1 + "/?depth=3", {
-      cache: "force-cache",
-    });
-
-    if (!response.ok) {
-      throw new Error("Không thể tải danh sách địa chỉ.");
-    }
-
-    const data = await response.json();
-
-    return Array.isArray(data) ? (data as Province[]) : [];
-  }
+export async function getShippingStatus() {
+  const response: any = await apiFetch("/shipping/status", { auth: false });
+  return response?.data || {};
 }
 
-export function getProvinceWards(province?: Province | null): Ward[] {
-  if (!province) return [];
+export async function getShippingProvinces(): Promise<Province[]> {
+  const response: any = await apiFetch("/shipping/provinces", { auth: false });
+  const rows = Array.isArray(response?.data) ? response.data : [];
 
-  if (Array.isArray(province.wards)) {
-    return province.wards;
-  }
+  return rows.map((row: any) => ({
+    id: String(row.ProvinceID),
+    name: String(row.ProvinceName || ""),
+    raw: row,
+    source: "ghn" as const,
+  }));
+}
 
-  if (Array.isArray(province.districts)) {
-    return province.districts.flatMap((district) => {
-      if (!Array.isArray(district.wards)) return [];
+export async function getShippingDistricts(province: Province): Promise<District[]> {
+  const response: any = await apiFetch(
+    `/shipping/districts?province_id=${encodeURIComponent(province.id)}`,
+    { auth: false }
+  );
 
-      return district.wards.map((ward) => ({
-        ...ward,
-        districtCode: district.code,
-        districtName: district.name,
-      }));
-    });
-  }
+  return (Array.isArray(response?.data) ? response.data : []).map((row: any) => ({
+    id: String(row.DistrictID),
+    name: String(row.DistrictName || ""),
+    provinceId: province.id,
+    raw: row,
+    source: "ghn" as const,
+  }));
+}
 
-  return [];
+export async function getShippingWards(district: District): Promise<Ward[]> {
+  const response: any = await apiFetch(
+    `/shipping/wards?district_id=${encodeURIComponent(district.id)}`,
+    { auth: false }
+  );
+
+  return (Array.isArray(response?.data) ? response.data : []).map((row: any) => ({
+    id: String(row.WardCode),
+    name: String(row.WardName || ""),
+    districtId: district.id,
+    raw: row,
+    source: "ghn" as const,
+  }));
 }

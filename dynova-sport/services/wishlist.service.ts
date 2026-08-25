@@ -145,10 +145,6 @@ async function wishlistFetch<T>(
   return data as ApiEnvelope<T>;
 }
 
-/**
- * Đây là request thụ động.
- * Khi khách chưa đăng nhập, không gọi API để tránh 401 trong Console.
- */
 export async function getWishlist(): Promise<WishlistListData> {
   if (!getAuthToken()) {
     return {

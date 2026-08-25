@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -286,28 +287,71 @@ class AuthController extends Controller
             ->where('email', $validated['email'])
             ->first();
 
-        $responseData = [];
+        // Không tiết lộ email có tồn tại hay không.
+        if (!$user) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Nếu email tồn tại, mã OTP sẽ được gửi đến hộp thư của bạn.',
+                'data' => [],
+            ]);
+        }
 
-        if ($user) {
-            $otp = (string) random_int(100000, 999999);
+        $existing = DB::table('password_reset_tokens')
+            ->where('email', $validated['email'])
+            ->first();
 
-            DB::table('password_reset_tokens')->updateOrInsert(
-                ['email' => $validated['email']],
-                [
-                    'token' => Hash::make($otp),
-                    'created_at' => now(),
-                ]
-            );
+        if ($existing && $existing->created_at) {
+            $seconds = Carbon::parse($existing->created_at)->diffInSeconds(now());
 
-            if (app()->isLocal() || config('app.debug')) {
-                $responseData['dev_otp'] = $otp;
+            if ($seconds < 60) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vui lòng chờ khoảng ' . (60 - $seconds) . ' giây trước khi yêu cầu mã OTP mới.',
+                ], 429);
             }
+        }
+
+        $otp = (string) random_int(100000, 999999);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $validated['email']],
+            [
+                'token' => Hash::make($otp),
+                'created_at' => now(),
+            ]
+        );
+
+        try {
+            Mail::send(
+                'emails.password-reset-otp',
+                [
+                    'otp' => $otp,
+                    'userName' => $user->full_name ?: $user->name ?: 'Khách hàng',
+                    'expiresInMinutes' => 10,
+                ],
+                function ($message) use ($validated) {
+                    $message
+                        ->to($validated['email'])
+                        ->subject('Mã OTP đặt lại mật khẩu - Dynova Sport');
+                }
+            );
+        } catch (\Throwable $e) {
+            DB::table('password_reset_tokens')
+                ->where('email', $validated['email'])
+                ->delete();
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể gửi email OTP. Vui lòng kiểm tra cấu hình SMTP của hệ thống và thử lại.',
+            ], 503);
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Nếu email tồn tại, mã xác nhận sẽ được gửi đến bạn.',
-            'data' => $responseData,
+            'message' => 'Mã OTP đã được gửi đến email của bạn. Mã có hiệu lực trong 10 phút.',
+            'data' => [],
         ]);
     }
 

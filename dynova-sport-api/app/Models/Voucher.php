@@ -20,6 +20,7 @@ class Voucher extends Model
         'min_order_value',
         'max_discount',
         'usage_limit',
+        'per_user_limit',
         'used_count',
         'start_date',
         'end_date',

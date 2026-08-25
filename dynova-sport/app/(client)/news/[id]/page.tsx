@@ -17,7 +17,6 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-// ---- Kiểu dữ liệu bài viết ----
 type Article = {
   id: number;
   title: string;
@@ -29,7 +28,6 @@ type Article = {
   content: string;
 };
 
-// ---- Kho dữ liệu tất cả bài viết ----
 const ALL_ARTICLES: Record<string, Article> = {
   '1': {
     id: 1,
@@ -99,7 +97,6 @@ const ALL_ARTICLES: Record<string, Article> = {
   },
 };
 
-// Danh sách bài viết tóm tắt dùng cho phần "Bài viết liên quan"
 const RELATED_ARTICLES = Object.values(ALL_ARTICLES).map(({ id, title, date, img, category }) => ({
   id, title, date, img, category,
 }));
@@ -133,7 +130,6 @@ export default function NewsDetailPage() {
         setTimeout(() => setCopied(false), 2000);
       }
     } catch {
-      // người dùng huỷ chia sẻ, không cần xử lý gì thêm
     }
   };
 
@@ -152,18 +148,14 @@ export default function NewsDetailPage() {
 
   return (
     <div className={`${archivo.variable} ${inter.variable} bg-white min-h-screen pb-16 sm:pb-20 text-[#0F0F0F]`} style={{ fontFamily: 'var(--font-inter)' }}>
-
-      {/* ẢNH BÌA */}
-      <div className="relative w-full h-[38vh] sm:h-[45vh] md:h-[50vh] min-h-[280px] bg-[#0F0F0F]">
+<div className="relative w-full h-[38vh] sm:h-[45vh] md:h-[50vh] min-h-[280px] bg-[#0F0F0F]">
         <img
           src={article.img}
           alt={article.title}
           className="w-full h-full object-cover opacity-75"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-
-        {/* Nút quay lại */}
-        <div className="absolute top-4 left-4 sm:top-6 sm:left-8 lg:left-12 z-10">
+<div className="absolute top-4 left-4 sm:top-6 sm:left-8 lg:left-12 z-10">
           <button
             onClick={() => router.back()}
             className="flex items-center gap-1.5 sm:gap-2 bg-white/10 hover:bg-[#FF5A1F] active:bg-[#FF5A1F] text-white px-3 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider backdrop-blur-sm transition-all border border-white/30 hover:border-[#FF5A1F]"
@@ -172,9 +164,7 @@ export default function NewsDetailPage() {
             <ArrowLeft size={13} /> Quay lại
           </button>
         </div>
-
-        {/* Tiêu đề trên ảnh */}
-        <div className="absolute bottom-5 left-4 right-4 sm:bottom-8 sm:left-8 lg:left-12 sm:right-8 max-w-5xl space-y-3 sm:space-y-4 text-white">
+<div className="absolute bottom-5 left-4 right-4 sm:bottom-8 sm:left-8 lg:left-12 sm:right-8 max-w-5xl space-y-3 sm:space-y-4 text-white">
           <span
             className="inline-flex items-center gap-1.5 bg-[#FF5A1F] text-white text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5"
             style={{ fontFamily: 'var(--font-archivo)' }}
@@ -189,12 +179,8 @@ export default function NewsDetailPage() {
           </h1>
         </div>
       </div>
-
-      {/* NỘI DUNG */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-6 sm:pt-10 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-10">
-
-        {/* Metadata: hàng ngang trên mobile, cột dọc từ md trở lên */}
-        <div className="md:col-span-3 flex flex-wrap items-center gap-x-5 gap-y-3 md:flex-col md:items-start md:gap-4 border-b md:border-b-0 md:border-r-2 border-neutral-200 pb-5 md:pb-0 md:pr-4 text-xs text-neutral-500">
+<div className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-6 sm:pt-10 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-10">
+<div className="md:col-span-3 flex flex-wrap items-center gap-x-5 gap-y-3 md:flex-col md:items-start md:gap-4 border-b md:border-b-0 md:border-r-2 border-neutral-200 pb-5 md:pb-0 md:pr-4 text-xs text-neutral-500">
           <div className="flex items-center gap-2 font-semibold whitespace-nowrap">
             <Calendar size={14} className="text-[#FF5A1F] shrink-0" /> {article.date}
           </div>
@@ -212,9 +198,7 @@ export default function NewsDetailPage() {
             <Share2 size={14} className="shrink-0" /> {copied ? 'Đã sao chép!' : 'Chia sẻ bài viết'}
           </button>
         </div>
-
-        {/* Nội dung chính */}
-        <div className="md:col-span-9 space-y-5 sm:space-y-6">
+<div className="md:col-span-9 space-y-5 sm:space-y-6">
           <p
             className="text-base sm:text-lg text-neutral-700 leading-relaxed sm:leading-loose font-normal first-letter:text-4xl sm:first-letter:text-5xl first-letter:font-black first-letter:text-[#FF5A1F] first-letter:mr-2 first-letter:float-left"
             style={{ fontFamily: 'var(--font-inter)' }}
@@ -231,9 +215,7 @@ export default function NewsDetailPage() {
           <p className="text-base sm:text-lg text-neutral-700 leading-relaxed sm:leading-loose font-normal">
             Sản phẩm và trang thiết bị thể thao phục vụ bài viết hiện đang có sẵn tại toàn bộ hệ thống showroom của Dynova trên toàn quốc hoặc đặt mua trực tuyến thông qua danh mục sản phẩm chính thức của chúng tôi.
           </p>
-
-          {/* Bài viết liên quan */}
-          {relatedArticles.length > 0 && (
+{relatedArticles.length > 0 && (
             <div className="pt-6 sm:pt-8 border-t-2 border-neutral-200">
               <h3
                 className="uppercase tracking-wide mb-5 sm:mb-6 font-extrabold text-sm sm:text-base"

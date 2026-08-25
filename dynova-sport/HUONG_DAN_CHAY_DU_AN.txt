@@ -1,0 +1,19 @@
+DYNOVA SPORT - FRONTEND FINAL
+=============================
+
+1. Giải nén file ZIP vào thư mục frontend hiện tại.
+2. Giữ/copy file .env.local của bạn, hoặc tạo mới:
+   NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api
+3. Mở terminal tại thư mục frontend:
+   npm install
+   npm run dev
+4. Truy cập:
+   http://localhost:3000
+
+Lưu ý:
+- Không cần copy node_modules từ máy khác.
+- Frontend lấy sản phẩm, danh mục, brand, banner, đơn hàng, wishlist,
+  review, chat, settings... từ Laravel API/database.
+- Cart guest được lưu local; sau đăng nhập sẽ merge với cart tài khoản.
+- VNPAY/GHN cần cấu hình key ở backend .env.
+- VietQR lấy thông tin ngân hàng từ Admin > Settings.

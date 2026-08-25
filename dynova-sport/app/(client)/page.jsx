@@ -56,8 +56,7 @@ function HomeFallback() {
             </h1>
 
             <p className="mt-4 max-w-xl text-sm leading-7 text-slate-300">
-              Chưa tải được dữ liệu sản phẩm, banner hoặc danh mục. Vui lòng
-              kiểm tra Laravel API và thử tải lại trang.
+              Hiện chưa thể tải nội dung trang chủ. Vui lòng thử lại sau.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
@@ -79,9 +78,7 @@ function HomeFallback() {
 
           <div className="grid gap-4 p-6 md:grid-cols-3 md:p-8">
             {[
-              "Kiểm tra Laravel API đang chạy ở cổng 8000",
-              "Kiểm tra .env.local đúng NEXT_PUBLIC_API_URL",
-              "Kiểm tra API /api/home có trả dữ liệu không",
+              "Dữ liệu đang tạm thời gián đoạn. Vui lòng thử tải lại trang.",
             ].map((item) => (
               <div
                 key={item}
@@ -107,7 +104,7 @@ export default async function HomePage() {
     homeData = normalizeHomeData(response);
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
-      console.log("Home API error:", error?.message || error);
+      console.error("Không thể tải trang chủ:", error?.message || error);
     }
   }
 

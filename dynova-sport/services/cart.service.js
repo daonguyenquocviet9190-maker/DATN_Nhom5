@@ -15,12 +15,15 @@ function isBrowser() {
 export function getCartToken() {
   if (!isBrowser()) return "";
 
-  return (
-    localStorage.getItem("dynova_auth_token") ||
-    localStorage.getItem("auth_token") ||
-    localStorage.getItem("token") ||
-    ""
-  );
+  const keys = ["dynova_auth_token", "auth_token", "access_token", "token"];
+  for (const storage of [localStorage, sessionStorage]) {
+    for (const key of keys) {
+      const value = storage.getItem(key);
+      if (value) return value;
+    }
+  }
+
+  return "";
 }
 
 export function hasCartAuth() {
@@ -47,7 +50,7 @@ function normalizeImage(value) {
   const raw = String(value || "").trim();
 
   if (!raw) {
-    return "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
+    return "/images/product-placeholder.svg";
   }
 
   if (
