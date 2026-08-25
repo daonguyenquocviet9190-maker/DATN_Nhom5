@@ -1,0 +1,33 @@
+DYNOVA SPORT FRONTEND FINAL
+===========================
+[OK] Login / Register
+[OK] Forgot + Reset Password (OTP qua backend/mail)
+[OK] Profile + Change Password
+[OK] Homepage API
+[OK] Shop / Filter / Sort / Search
+[OK] Product Detail + Variant
+[OK] Cart guest + account + merge
+[OK] Checkout thông tin người nhận
+[OK] Voucher
+[OK] Shipping GHN
+[OK] COD
+[OK] Bank + VietQR
+[OK] VNPAY
+[OK] Order History / Detail / Tracking / Cancel / Reorder
+[OK] Verified Review
+[OK] Wishlist
+[OK] Compare
+[OK] Customer Chat database API
+[OK] Admin Dashboard
+[OK] Category / Brand
+[OK] Product + Variant
+[OK] Order detail + state machine
+[OK] Promotion CRUD
+[OK] Customer
+[OK] Inventory
+[OK] Review moderation
+[OK] Settings
+[OK] Admin Chat
+
+Dữ liệu sản phẩm và đơn hàng lấy từ API/database.
+API base: NEXT_PUBLIC_API_URL

@@ -1,0 +1,67 @@
+DYNOVA SPORT - LARAVEL API FINAL
+================================
+
+Yêu cầu:
+- PHP >= 8.2
+- Composer
+- MySQL (XAMPP/Laragon)
+
+CÀI ĐẶT
+1. Giải nén ZIP backend.
+2. Chạy:
+   composer install
+3. Copy .env.example thành .env:
+   copy .env.example .env       (Windows CMD)
+   hoặc Copy-Item .env.example .env   (PowerShell)
+4. Chỉnh DB trong .env nếu MySQL của bạn khác mặc định.
+5. Chạy:
+   php artisan key:generate
+
+DATABASE
+Cách khuyến nghị với dữ liệu mẫu đầy đủ:
+1. Tạo database: dynova_sport
+2. Import file:
+   database/dynova_sport_final_real_logic_no_redundant.sql
+   bằng phpMyAdmin.
+3. Sau khi import, chạy:
+   php artisan migrate
+
+Migration cuối sẽ bổ sung các bảng/cột nghiệp vụ:
+- stock_deducted_at / stock_restored_at
+- voucher_usages
+- payment_transactions
+- order_status_histories
+- settings
+- contact_messages
+- chat_conversations / chat_messages
+- banners (nếu chưa có)
+
+CHẠY API
+   php artisan serve
+API mặc định:
+   http://127.0.0.1:8000/api
+
+MAIL OTP QUÊN MẬT KHẨU
+- Điền MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM_ADDRESS trong .env.
+- Nếu dùng Gmail, MAIL_PASSWORD nên là App Password.
+- OTP được lưu dạng hash trong password_reset_tokens và hết hạn sau 10 phút.
+
+GHN
+- Điền GHN_TOKEN và GHN_SHOP_ID để dùng phí và tracking GHN thật.
+- Nếu chưa cấu hình GHN, danh sách địa chỉ có cơ chế dự phòng và phí giao hàng dùng cấu hình hệ thống để checkout vẫn hoạt động.
+- Tracking GHN cần mã vận đơn thật do admin cập nhật cho đơn hàng.
+
+VNPAY
+- Điền VNPAY_TMN_CODE và VNPAY_HASH_SECRET từ tài khoản Sandbox.
+- Callback mặc định:
+  http://127.0.0.1:8000/api/payments/vnpay/return
+
+LOGIC ĐƠN HÀNG
+- Giá được backend đọc từ database, không tin giá frontend.
+- Tồn kho variant được lockForUpdate + trừ trong transaction khi đặt hàng.
+- Hủy đơn chỉ hoàn stock một lần.
+- Voucher theo usage/user.
+- Review chỉ hợp lệ khi có đơn completed.
+- Admin order dùng state machine:
+  pending -> confirmed -> shipping -> completed
+  pending/confirmed -> cancelled

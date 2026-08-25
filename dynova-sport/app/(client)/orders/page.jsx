@@ -153,6 +153,9 @@ function getAuthHeaders() {
     localStorage.getItem("dynova_auth_token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("token") ||
+    sessionStorage.getItem("dynova_auth_token") ||
+    sessionStorage.getItem("auth_token") ||
+    sessionStorage.getItem("token") ||
     "";
 
   return {
@@ -480,6 +483,19 @@ function normalizeStatus(status = "") {
   return "pending";
 }
 
+function getDisplayStatus(order) {
+  const status = normalizeStatus(order?.status);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+
+  if (bankPayment && !paymentPaid && status !== "cancelled") {
+    return "waiting_bank_transfer";
+  }
+
+  return status;
+}
+
 function getStatusMeta(status) {
   const normalized = normalizeStatus(status);
 
@@ -528,7 +544,6 @@ function getPaymentLabel(method = "") {
     COD: "Thanh toán khi nhận hàng",
     BANK: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
-    MOMO: "MoMo",
   };
 
   return map[normalized] || method || "Chưa xác định";
@@ -669,13 +684,16 @@ function getCreatedDate(order) {
 }
 
 function canCancelOrder(order) {
-  const status = normalizeStatus(order?.status);
+  const status = getDisplayStatus(order);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
 
-  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status);
+  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status) && !(bankPayment && paymentPaid);
 }
 
 function getStepDone(order, stepKey) {
-  const status = normalizeStatus(order?.status);
+  const status = getDisplayStatus(order);
 
   if (status === "cancelled") return false;
 
@@ -816,30 +834,9 @@ function EmptyState({ hasFilter }) {
 }
 
 function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
-  const statusMeta = getStatusMeta(order.status);
+  const statusMeta = getStatusMeta(getDisplayStatus(order));
   const StatusIcon = statusMeta.icon;
   const items = getOrderItems(order);
-  const [detailOpen, setDetailOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const params = new URLSearchParams(window.location.search);
-    const requestedOrderId = params.get("order");
-
-    if (String(requestedOrderId || "") === String(order?.id || "")) {
-      setDetailOpen(true);
-
-      window.setTimeout(() => {
-        document
-          .getElementById(`order-${order.id}`)
-          ?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-      }, 120);
-    }
-  }, [order?.id]);
 
   return (
     <article
@@ -956,16 +953,13 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setDetailOpen((current) => !current)}
+            <Link
+              href={`/orders/${order.id}`}
               className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:bg-orange-50 hover:text-orange-600"
-              aria-expanded={detailOpen}
-              aria-controls={`order-detail-${order.id}`}
             >
               <Eye size={15} />
-              {detailOpen ? "Thu gọn" : "Chi tiết"}
-            </button>
+              Chi tiết
+            </Link>
 
             <button
               onClick={() => onReorder(order)}
@@ -979,109 +973,7 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
         </div>
       </div>
 
-      {detailOpen && (
-        <div
-          id={`order-detail-${order.id}`}
-          className="mt-5 rounded-[28px] border border-slate-200 bg-slate-50 p-4 md:p-5"
-        >
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Mã đơn hàng
-              </p>
-              <p className="mt-2 text-sm font-black text-slate-950">
-                {getOrderCode(order)}
-              </p>
-            </div>
 
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Thanh toán
-              </p>
-              <p className="mt-2 text-sm font-black text-slate-950">
-                {getPaymentLabel(order.payment_method || order.paymentMethod)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Số điện thoại
-              </p>
-              <p className="mt-2 text-sm font-black text-slate-950">
-                {getOrderPhone(order) || "Chưa cập nhật"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Tổng thanh toán
-              </p>
-              <p className="mt-2 text-sm font-black text-orange-600">
-                {formatCurrency(getOrderTotal(order))}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl bg-white p-4">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-              Địa chỉ nhận hàng
-            </p>
-            <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
-              {getOrderAddress(order)}
-            </p>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {items.map((item, index) => {
-              const size = getItemSize(item, catalogMaps);
-              const color = getItemColor(item, catalogMaps);
-              const sku = getItemSku(item, catalogMaps);
-
-              return (
-                <div
-                  key={
-                    item.id ||
-                    `${getProductIdFromItem(item)}-detail-${index}`
-                  }
-                  className="flex flex-col gap-3 rounded-2xl bg-white p-4 sm:flex-row sm:items-center"
-                >
-                  <img
-                    src={getItemImage(item, catalogMaps)}
-                    alt={getItemName(item)}
-                    onError={handleImageError}
-                    className="h-20 w-20 rounded-2xl object-cover"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <p className="font-black text-slate-950">
-                      {getItemName(item)}
-                    </p>
-
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                      {[
-                        `SL: ${getItemQuantity(item)}`,
-                        `Size: ${size}`,
-                        `Màu: ${color}`,
-                        sku ? `SKU: ${sku}` : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" • ")}
-                    </p>
-
-                    <p className="mt-2 text-xs font-bold text-slate-400">
-                      Đơn giá: {formatCurrency(getItemPrice(item))}
-                    </p>
-                  </div>
-
-                  <p className="text-base font-black text-slate-950">
-                    {formatCurrency(getItemTotal(item))}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="mt-5 grid gap-2 sm:grid-cols-4">
         {orderSteps.map((step, index) => {
@@ -1135,7 +1027,7 @@ export default function OrdersPage() {
   const computedStats = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
-        const status = normalizeStatus(order.status);
+        const status = getDisplayStatus(order);
 
         acc.total += 1;
         acc[status] = Number(acc[status] || 0) + 1;
@@ -1156,7 +1048,7 @@ export default function OrdersPage() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      const status = normalizeStatus(order.status);
+      const status = getDisplayStatus(order);
       const code = getOrderCode(order).toLowerCase();
       const phone = String(getOrderPhone(order) || "").toLowerCase();
       const customer = String(

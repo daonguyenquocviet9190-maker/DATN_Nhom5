@@ -1,0 +1,21 @@
+DYNOVA SPORT BACKEND FINAL
+==========================
+[OK] Laravel Sanctum auth + admin middleware
+[OK] Backend tự tính giá từ database
+[OK] DB transaction khi tạo/hủy/cập nhật đơn
+[OK] lockForUpdate tồn kho
+[OK] Trừ stock variant khi đặt hàng
+[OK] Hủy -> hoàn stock đúng một lần
+[OK] Voucher usage / per-user limit
+[OK] Verified purchase review
+[OK] Payment transaction
+[OK] VNPAY HMAC SHA512 + amount verification
+[OK] GHN address / fee / tracking
+[OK] Order status history
+[OK] Chat database customer/admin
+[OK] System settings + bank/VietQR config
+[OK] Contact database
+[OK] Promotion CRUD đúng schema vouchers
+[OK] Review moderation
+[OK] SQL dữ liệu đầy đủ kèm theo package
+[OK] Public storage ảnh sản phẩm/brand/category kèm theo package

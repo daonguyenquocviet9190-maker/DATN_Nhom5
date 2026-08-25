@@ -7,6 +7,7 @@ use App\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -37,6 +38,13 @@ class ProductController extends Controller
                 'reviews as reviews_count' => function ($reviewQuery) {
                     $reviewQuery->where('status', 'approved');
                 },
+            ])
+            ->addSelect([
+                'sold_count' => DB::table('order_items')
+                    ->selectRaw('COALESCE(SUM(order_items.quantity), 0)')
+                    ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                    ->whereColumn('order_items.product_id', 'products.id')
+                    ->where('orders.status', 'completed'),
             ]);
 
         if ($request->filled('category')) {
@@ -100,8 +108,6 @@ class ProductController extends Controller
         $products = $query->paginate($perPage);
 
         $products->getCollection()->transform(function (Product $product) {
-            // Giữ alias brand_data để frontend cũ vẫn chạy,
-            // đồng thời API vẫn có relationship chuẩn là brand.
             $product->setAttribute('brand_data', $product->brand);
 
             return $product;
@@ -141,6 +147,13 @@ class ProductController extends Controller
                 'reviews as reviews_count' => function ($reviewQuery) {
                     $reviewQuery->where('status', 'approved');
                 },
+            ])
+            ->addSelect([
+                'sold_count' => DB::table('order_items')
+                    ->selectRaw('COALESCE(SUM(order_items.quantity), 0)')
+                    ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                    ->whereColumn('order_items.product_id', 'products.id')
+                    ->where('orders.status', 'completed'),
             ])
             ->findOrFail($id);
 

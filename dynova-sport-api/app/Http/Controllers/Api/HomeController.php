@@ -8,6 +8,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -16,14 +17,6 @@ class HomeController extends Controller
     public function index(): JsonResponse
     {
         try {
-            /*
-            |--------------------------------------------------------------------------
-            | BANNERS
-            |--------------------------------------------------------------------------
-            | Nếu database hiện tại chưa có bảng banners thì trả mảng rỗng,
-            | tránh làm toàn bộ API trang chủ bị lỗi 500.
-            |--------------------------------------------------------------------------
-            */
 
             $banners = collect();
 
@@ -36,43 +29,17 @@ class HomeController extends Controller
                     ->get();
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | CATEGORIES
-            |--------------------------------------------------------------------------
-            */
-
             $categories = Category::query()
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->orderBy('id')
                 ->get();
 
-            /*
-            |--------------------------------------------------------------------------
-            | BRANDS
-            |--------------------------------------------------------------------------
-            */
-
             $brands = Brand::query()
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->orderBy('id')
                 ->get();
-
-            /*
-            |--------------------------------------------------------------------------
-            | PRODUCTS
-            |--------------------------------------------------------------------------
-            | Quan hệ đúng là:
-            | - brand
-            | - category
-            | - variants.size
-            | - variants.color
-            |
-            | Không dùng brandInfo vì Product model không có relationship này.
-            |--------------------------------------------------------------------------
-            */
 
             $products = Product::query()
                 ->where('status', 'active')
@@ -90,26 +57,29 @@ class HomeController extends Controller
                             ->orderBy('size_id');
                     },
                 ])
+                ->withAvg([
+                    'reviews as average_rating' => function ($reviewQuery) {
+                        $reviewQuery->where('status', 'approved');
+                    },
+                ], 'rating')
+                ->withCount([
+                    'reviews as reviews_count' => function ($reviewQuery) {
+                        $reviewQuery->where('status', 'approved');
+                    },
+                ])
+                ->addSelect([
+                    'sold_count' => DB::table('order_items')
+                        ->selectRaw('COALESCE(SUM(order_items.quantity), 0)')
+                        ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                        ->whereColumn('order_items.product_id', 'products.id')
+                        ->where('orders.status', 'completed'),
+                ])
                 ->latest('id')
                 ->limit(12)
                 ->get()
                 ->map(function (Product $product) {
-                    /*
-                    |--------------------------------------------------------------------------
-                    | GIỮ TƯƠNG THÍCH FRONTEND CŨ
-                    |--------------------------------------------------------------------------
-                    | Frontend mới đọc product.brand.
-                    | Frontend cũ có thể vẫn đọc product.brand_data.
-                    |--------------------------------------------------------------------------
-                    */
 
                     $product->setAttribute('brand_data', $product->brand);
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | DỮ LIỆU TỒN KHO VÀ GIÁ HIỂN THỊ
-                    |--------------------------------------------------------------------------
-                    */
 
                     $activeVariants = $product->variants;
 

@@ -302,7 +302,7 @@ const previewProducts = useMemo(() => {
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              {/* Dữ liệu thương hiệu và sản phẩm được lấy từ Laravel API. */}
+              
             </p>
           </div>
 
@@ -326,7 +326,7 @@ const previewProducts = useMemo(() => {
 
         {apiError && (
           <div className="mb-6 rounded-3xl border border-orange-200 bg-orange-50 p-5 text-sm font-bold text-orange-700">
-            Không thể kết nối API. Kiểm tra lại Laravel server hoặc endpoint
+            Không thể tải bộ sưu tập. Vui lòng thử lại sau.
             /api/brands.
           </div>
         )}
@@ -499,7 +499,7 @@ const previewProducts = useMemo(() => {
             </h3>
 
             <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">
-              Hãy kiểm tra bảng brands trong database hoặc endpoint /api/brands.
+              Hiện chưa có thương hiệu để hiển thị.
             </p>
           </div>
         )}

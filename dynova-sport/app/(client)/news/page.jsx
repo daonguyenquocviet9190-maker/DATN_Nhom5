@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import Link from 'next/link'; // Import Link từ next/link để chuyển trang hiệu quả
 import { Calendar, ArrowRight, Search, Clock } from 'lucide-react';
 
-// Mock Data danh sách tin tức Dynova Sport
 const ALL_NEWS = [
   {
     id: 1,
@@ -74,10 +73,8 @@ export default function NewsPage() {
   const [activeTab, setActiveTab] = useState('Tất cả');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Tách bài viết tiêu điểm to ở đầu trang
   const featuredPost = ALL_NEWS.find(post => post.featured);
 
-  // Lọc bài viết theo danh mục & ô tìm kiếm
   const filteredNews = ALL_NEWS.filter(post => {
     const matchesTab = activeTab === 'Tất cả' || post.category === activeTab;
     const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -87,16 +84,12 @@ export default function NewsPage() {
 
   return (
     <div className="bg-gray-50 min-h-screen py-10 px-4 md:px-12">
-
-      {/* HEADER TRANG TIN TỨC */}
-      <div className="max-w-7xl mx-auto mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+<div className="max-w-7xl mx-auto mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
         <div>
           <p className="text-sm text-gray-500">Trang chủ / <span className="text-orange-500 font-medium">Tin tức</span></p>
           <h1 className="text-3xl font-black text-blue-950 mt-2 uppercase tracking-wide">TIN TỨC THỜI TRANG & THỂ THAO</h1>
         </div>
-
-        {/* Ô tìm kiếm bài viết */}
-        <div className="relative w-full md:w-80">
+<div className="relative w-full md:w-80">
           <input
             type="text"
             placeholder="Tìm kiếm bài viết..."
@@ -107,9 +100,7 @@ export default function NewsPage() {
           <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         </div>
       </div>
-
-      {/* TABS PHÂN LOẠI DANH MỤC TIN TỨC */}
-      <div className="max-w-7xl mx-auto mb-12 flex items-center gap-3 overflow-x-auto pb-3 scrollbar-none">
+<div className="max-w-7xl mx-auto mb-12 flex items-center gap-3 overflow-x-auto pb-3 scrollbar-none">
         {TABS.map((tab) => (
           <button
             key={tab}
@@ -125,9 +116,7 @@ export default function NewsPage() {
       </div>
 
       <div className="max-w-7xl mx-auto space-y-16">
-
-        {/* 2. BÀI VIẾT TIÊU ĐIỂM TO (FEATURED POST) */}
-        {featuredPost && (activeTab === 'Tất cả' || featuredPost.category === activeTab) && searchQuery === '' && (
+{featuredPost && (activeTab === 'Tất cả' || featuredPost.category === activeTab) && searchQuery === '' && (
           <Link
             href={`/news/${featuredPost.id}`}
             className="block bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 grid grid-cols-1 lg:grid-cols-12 group cursor-pointer"
@@ -153,9 +142,7 @@ export default function NewsPage() {
                   {featuredPost.excerpt}
                 </p>
               </div>
-
-              {/* Meta data */}
-              <div className="flex items-center justify-between pt-6 border-t border-gray-100 text-xs text-gray-400 font-medium">
+<div className="flex items-center justify-between pt-6 border-t border-gray-100 text-xs text-gray-400 font-medium">
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1"><Calendar size={14} /> {featuredPost.date}</span>
                   <span className="flex items-center gap-1"><Clock size={14} /> {featuredPost.readTime}</span>
@@ -167,9 +154,7 @@ export default function NewsPage() {
             </div>
           </Link>
         )}
-
-        {/* 3. LƯỚI DANH SÁCH BÀI VIẾT PHÍA DƯỚI (GRID LIST) */}
-        <div>
+<div>
           {searchQuery !== '' && <h3 className="text-gray-600 font-semibold mb-6">Kết quả tìm kiếm cho: "{searchQuery}"</h3>}
 
           {filteredNews.length === 0 ? (
@@ -184,8 +169,7 @@ export default function NewsPage() {
                   href={`/news/${post.id}`}
                   className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col justify-between"
                 >
-                  {/* Ảnh bài viết */}
-                  <div className="relative aspect-[16/10] overflow-hidden bg-gray-100">
+<div className="relative aspect-[16/10] overflow-hidden bg-gray-100">
                     <img
                       src={post.image}
                       alt={post.title}
@@ -195,9 +179,7 @@ export default function NewsPage() {
                       {post.category}
                     </span>
                   </div>
-
-                  {/* Nội dung tóm tắt bài viết */}
-                  <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+<div className="p-6 flex-1 flex flex-col justify-between space-y-4">
                     <div className="space-y-2">
                       <h3 className="font-bold text-gray-800 text-base line-clamp-2 group-hover:text-orange-500 transition-colors leading-snug min-h-[2.75rem]">
                         {post.title}
@@ -206,9 +188,7 @@ export default function NewsPage() {
                         {post.excerpt}
                       </p>
                     </div>
-
-                    {/* Meta chân bài viết */}
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-50 text-[11px] text-gray-400 font-medium">
+<div className="flex items-center justify-between pt-4 border-t border-gray-50 text-[11px] text-gray-400 font-medium">
                       <span className="flex items-center gap-1"><Calendar size={12} /> {post.date}</span>
                       <span className="text-gray-900 font-bold flex items-center gap-1 group-hover:text-orange-500 transition-colors">
                         Xem chi tiết <ArrowRight size={12} />

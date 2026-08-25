@@ -15,6 +15,7 @@ import {
   PackageCheck,
   Plus,
   RotateCcw,
+  Scale,
   Ruler,
   Share2,
   ShieldCheck,
@@ -34,6 +35,7 @@ import {
 } from "@/services/wishlist.service";
 import ProductReviews from "@/components/reviews/ProductReviews";
 import { getAuthToken } from "@/services/auth.service";
+import { addCompareId } from "@/utils/compareStorage";
 
 const API_HOST = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -44,6 +46,7 @@ const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
 
 const SHOP_NAVIGATION_KEY = "dynova_shop_navigation_v2";
+const BUY_NOW_KEY = "dynova_buy_now_v1";
 const SHOP_RETURN_WINDOW = 30 * 60 * 1000;
 
 function getSafeShopReturnUrl(value) {
@@ -656,7 +659,7 @@ export default function ProductDetailClient({
   );
 
   const [selectedSizeId, setSelectedSizeId] = useState(
-    firstVariant?.size_id
+    variants.length === 1 && firstVariant?.size_id
       ? String(firstVariant.size_id)
       : ""
   );
@@ -675,6 +678,7 @@ export default function ProductDetailClient({
     if (!firstVariant) {
       setSelectedColorId("");
       setSelectedSizeId("");
+      setQuantity(1);
       return;
     }
 
@@ -685,11 +689,13 @@ export default function ProductDetailClient({
     );
 
     setSelectedSizeId(
-      firstVariant.size_id
+      variants.length === 1 && firstVariant.size_id
         ? String(firstVariant.size_id)
         : ""
     );
-  }, [firstVariant?.id]);
+
+    setQuantity(1);
+  }, [firstVariant?.id, variants.length]);
 
   useEffect(() => {
     setMainImage(gallery[0] || FALLBACK_IMAGE);
@@ -726,18 +732,27 @@ export default function ProductDetailClient({
     variantsForSelectedColor,
   ]);
 
+  const productHasColors = colorOptions.length > 0;
+  const productHasSizes = allSizeOptions.length > 0;
+
+  const hasRequiredSelection =
+    (!productHasColors || Boolean(selectedColorId)) &&
+    (!productHasSizes || Boolean(selectedSizeId));
+
   const selectedVariant = useMemo(() => {
-    if (variants.length === 0) return null;
+    if (variants.length === 0 || !hasRequiredSelection) {
+      return null;
+    }
 
     return (
       variants.find((variant) => {
         const colorMatched =
-          !selectedColorId ||
+          !productHasColors ||
           String(variant.color_id) ===
             String(selectedColorId);
 
         const sizeMatched =
-          !selectedSizeId ||
+          !productHasSizes ||
           String(variant.size_id) ===
             String(selectedSizeId);
 
@@ -746,38 +761,11 @@ export default function ProductDetailClient({
     );
   }, [
     variants,
+    hasRequiredSelection,
+    productHasColors,
+    productHasSizes,
     selectedColorId,
     selectedSizeId,
-  ]);
-
-  useEffect(() => {
-    if (!selectedColorId) return;
-
-    const currentSizeStillExists =
-      variantsForSelectedColor.some(
-        (variant) =>
-          String(variant.size_id) ===
-          String(selectedSizeId)
-      );
-
-    if (!currentSizeStillExists) {
-      const nextVariant =
-        variantsForSelectedColor.find(
-          (variant) => variant.stock > 0
-        ) ||
-        variantsForSelectedColor[0] ||
-        null;
-
-      setSelectedSizeId(
-        nextVariant?.size_id
-          ? String(nextVariant.size_id)
-          : ""
-      );
-    }
-  }, [
-    selectedColorId,
-    selectedSizeId,
-    variantsForSelectedColor,
   ]);
 
   useEffect(() => {
@@ -820,18 +808,20 @@ export default function ProductDetailClient({
 
   const stock = selectedVariant
     ? Number(selectedVariant.stock || 0)
-    : variants.length > 0
-      ? variants.reduce(
-          (total, variant) =>
-            total + Number(variant.stock || 0),
-          0
-        )
-      : Number(
+    : variants.length === 0
+      ? Number(
           product?.stock ??
             product?.total_stock ??
             product?.quantity ??
             0
-        );
+        )
+      : 0;
+
+  const hasCompletedVariant =
+    variants.length === 0 || Boolean(selectedVariant);
+
+  const canPurchase =
+    hasCompletedVariant && stock > 0;
 
   const productRating = getProductRating(product);
   const reviewCount = getProductReviewCount(product);
@@ -877,22 +867,21 @@ export default function ProductDetailClient({
         String(variant.color_id) === String(colorId)
     );
 
-    const nextVariant =
+    const previewVariant =
       colorVariants.find(
-        (variant) => variant.stock > 0
+        (variant) => Number(variant.stock || 0) > 0
       ) ||
       colorVariants[0] ||
       null;
 
     setSelectedColorId(String(colorId));
+
     setSelectedSizeId(
-      nextVariant?.size_id
-        ? String(nextVariant.size_id)
-        : ""
+      productHasSizes ? "" : selectedSizeId
     );
 
-    if (nextVariant?.image) {
-      setMainImage(normalizeImage(nextVariant.image));
+    if (previewVariant?.image) {
+      setMainImage(normalizeImage(previewVariant.image));
     }
 
     setQuantity(1);
@@ -931,10 +920,18 @@ export default function ProductDetailClient({
       return;
     }
 
+    if (productHasColors && !selectedColorId) {
+      showNotice("Vui lòng chọn màu sắc.");
+      return;
+    }
+
+    if (productHasSizes && !selectedSizeId) {
+      showNotice("Vui lòng chọn kích thước.");
+      return;
+    }
+
     if (variants.length > 0 && !selectedVariant) {
-      showNotice(
-        "Vui lòng chọn đầy đủ màu sắc và kích thước."
-      );
+      showNotice("Phân loại đã chọn không tồn tại.");
       return;
     }
 
@@ -949,6 +946,25 @@ export default function ProductDetailClient({
       selectedImage: mainImage,
       displayPrice,
     });
+
+    if (buyNow) {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          BUY_NOW_KEY,
+          JSON.stringify({
+            item: {
+              ...cartProduct,
+              quantity,
+              qty: quantity,
+            },
+            createdAt: Date.now(),
+          })
+        );
+      }
+
+      router.push("/checkout?mode=buy-now");
+      return;
+    }
 
     addToCart(cartProduct, {
       quantity,
@@ -967,11 +983,6 @@ export default function ProductDetailClient({
       window.dispatchEvent(
         new Event("dynova:cart")
       );
-    }
-
-    if (buyNow) {
-      router.push("/checkout");
-      return;
     }
 
     showNotice("Đã thêm đúng biến thể vào giỏ hàng.");
@@ -1199,6 +1210,15 @@ export default function ProductDetailClient({
 
                   <button
                     type="button"
+                    onClick={() => { addCompareId(product.id); router.push("/compare"); }}
+                    className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 shadow-sm transition hover:bg-orange-50 hover:text-orange-500"
+                    aria-label="So sánh"
+                  >
+                    <Scale size={19} />
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleWishlist}
                     disabled={wishlistLoading}
                     className={
@@ -1350,7 +1370,7 @@ export default function ProductDetailClient({
 
                       <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-400">
                         <Ruler size={14} />
-                        Bảng size
+                        Chọn size phù hợp
                       </span>
                     </div>
 
@@ -1385,6 +1405,27 @@ export default function ProductDetailClient({
                         );
                       })}
                     </div>
+
+                    {productHasSizes && !selectedSizeId && (
+                      <p className="mt-3 text-xs font-bold text-orange-600">
+                        Vui lòng chọn kích thước trước khi mua.
+                      </p>
+                    )}
+
+                    {selectedVariant && (
+                      <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                        <p className="text-xs font-black uppercase tracking-wider text-emerald-700">
+                          Phân loại đã chọn
+                        </p>
+                        <p className="mt-1 text-sm font-bold text-slate-700">
+                          {selectedColor?.name || "Mặc định"}
+                          {productHasSizes
+                            ? ` / ${selectedSize?.name || ""}`
+                            : ""}
+                          {` · Còn ${stock} sản phẩm`}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1395,9 +1436,11 @@ export default function ProductDetailClient({
                     </p>
 
                     <p className="mt-1 text-xs font-semibold text-slate-400">
-                      {stock > 0
-                        ? `Còn ${stock} sản phẩm`
-                        : "Biến thể đã hết hàng"}
+                      {!hasCompletedVariant
+                        ? "Chọn phân loại để xem tồn kho"
+                        : stock > 0
+                          ? `Còn ${stock} sản phẩm`
+                          : "Biến thể đã hết hàng"}
                     </p>
                   </div>
 
@@ -1405,7 +1448,7 @@ export default function ProductDetailClient({
                     <button
                       type="button"
                       onClick={decreaseQuantity}
-                      disabled={stock <= 0}
+                      disabled={!canPurchase}
                       className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Giảm số lượng"
                     >
@@ -1419,7 +1462,7 @@ export default function ProductDetailClient({
                     <button
                       type="button"
                       onClick={increaseQuantity}
-                      disabled={stock <= 0}
+                      disabled={!canPurchase}
                       className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Tăng số lượng"
                     >
@@ -1432,11 +1475,7 @@ export default function ProductDetailClient({
                   <button
                     type="button"
                     onClick={() => handleAdd(true)}
-                    disabled={
-                      stock <= 0 ||
-                      (variants.length > 0 &&
-                        !selectedVariant)
-                    }
+                    disabled={!canPurchase}
                     className="btn-primary flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Zap size={16} />
@@ -1446,11 +1485,7 @@ export default function ProductDetailClient({
                   <button
                     type="button"
                     onClick={() => handleAdd(false)}
-                    disabled={
-                      stock <= 0 ||
-                      (variants.length > 0 &&
-                        !selectedVariant)
-                    }
+                    disabled={!canPurchase}
                     className="btn-ghost flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ShoppingBag size={16} />
@@ -1623,7 +1658,7 @@ export default function ProductDetailClient({
                 </h3>
 
                 <p className="mt-3 text-sm leading-7 text-slate-300">
-                  Chọn đúng màu và kích thước để hệ thống lấy chính xác giá, ảnh và tồn kho của biến thể.
+                  Chọn màu và kích thước phù hợp trước khi thêm sản phẩm vào giỏ hàng.
                 </p>
 
                 <div className="mt-5 grid gap-3 text-sm font-bold text-slate-300">
@@ -1648,7 +1683,7 @@ export default function ProductDetailClient({
                       size={16}
                       className="text-orange-400"
                     />
-                    Lưu đúng SKU vào giỏ hàng
+                    Kiểm tra đúng phân loại trước khi mua
                   </p>
                 </div>
               </div>

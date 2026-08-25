@@ -20,11 +20,8 @@ import {
   X,
 } from "lucide-react";
 
-import { categories as localCategories, formatCurrency } from "@/data/shop";
-import {
-  addToCart,
-  getProducts as getLocalProducts,
-} from "@/utils/shopStorage";
+import { formatCurrency } from "@/data/shop";
+import { addToCart } from "@/utils/shopStorage";
 import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 import { getProducts } from "@/services/product.service";
 import { getCategories } from "@/services/category.service";
@@ -228,7 +225,7 @@ export default function ShopPage() {
             Array.isArray(cached?.categories) &&
             cached.categories.length
           ? cached.categories
-          : localCategories;
+          : [];
 
     const warmPrices = warmProducts
       .map(getProductDisplayPrice)
@@ -286,36 +283,18 @@ export default function ShopPage() {
 
         if (!mounted) return;
 
-        const fallbackProducts = getLocalProducts()
-          .map(normalizeProduct)
-          .filter(Boolean);
-
-        const finalProducts =
-          normalizedProducts.length > 0
-            ? normalizedProducts
-            : fallbackProducts;
-
-        const finalCategories =
-          Array.isArray(categoryList) && categoryList.length > 0
-            ? categoryList
-            : localCategories;
+        const finalProducts = normalizedProducts;
+        const finalCategories = Array.isArray(categoryList) ? categoryList : [];
 
         const prices = finalProducts
           .map(getProductDisplayPrice)
           .filter((price) => Number.isFinite(price) && price > 0);
 
-        const highest =
-          prices.length > 0
-            ? Math.max(...prices, 5000000)
-            : 5000000;
+        const highest = prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
 
         setItems(finalProducts);
         setApiCategories(finalCategories);
-        setMaxPrice(
-          maxPriceParam
-            ? Math.min(maxPriceParam, highest)
-            : highest
-        );
+        setMaxPrice(maxPriceParam ? Math.min(maxPriceParam, highest) : highest);
 
         sessionStorage.setItem(
           SHOP_CACHE_KEY,
@@ -327,27 +306,9 @@ export default function ShopPage() {
         );
       } catch {
         if (!mounted || warmProducts.length > 0) return;
-
-        const fallbackProducts = getLocalProducts()
-          .map(normalizeProduct)
-          .filter(Boolean);
-
-        const prices = fallbackProducts
-          .map(getProductDisplayPrice)
-          .filter((price) => Number.isFinite(price) && price > 0);
-
-        const highest =
-          prices.length > 0
-            ? Math.max(...prices, 5000000)
-            : 5000000;
-
-        setItems(fallbackProducts);
-        setApiCategories(localCategories);
-        setMaxPrice(
-          maxPriceParam
-            ? Math.min(maxPriceParam, highest)
-            : highest
-        );
+        setItems([]);
+        setApiCategories([]);
+        setMaxPrice(maxPriceParam || 5000000);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -357,12 +318,15 @@ export default function ShopPage() {
     }
 
     async function loadWishlistData() {
-      const authToken =
-        localStorage.getItem("dynova_auth_token") ||
-        localStorage.getItem("auth_token") ||
-        localStorage.getItem("access_token") ||
-        localStorage.getItem("token") ||
-        "";
+      const authToken = [localStorage, sessionStorage]
+        .map((storage) =>
+          storage.getItem("dynova_auth_token") ||
+          storage.getItem("auth_token") ||
+          storage.getItem("access_token") ||
+          storage.getItem("token") ||
+          ""
+        )
+        .find(Boolean) || "";
 
       if (!authToken) {
         if (mounted) setWishlist([]);
@@ -401,10 +365,7 @@ export default function ShopPage() {
     };
   }, []);
 
-  const safeCategories =
-    Array.isArray(apiCategories) && apiCategories.length > 0
-      ? apiCategories
-      : localCategories;
+  const safeCategories = Array.isArray(apiCategories) ? apiCategories : [];
 
   const brands = useMemo(() => {
     return Array.from(
@@ -869,7 +830,7 @@ export default function ShopPage() {
       <section className="relative overflow-hidden bg-slate-950 text-white">
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1600&auto=format&fit=crop&q=85"
+            src="/images/category-placeholder.svg"
             alt="Shop Dynova"
             className="h-full w-full object-cover opacity-35"
           />
@@ -1293,7 +1254,7 @@ export default function ShopPage() {
                           >
                             <ShoppingBag size={15} />
                             {requiresSelection
-                              ? "Chọn phân loại"
+                              ? "Xem tùy chọn"
                               : "Thêm vào giỏ"}
                           </button>
                         </div>

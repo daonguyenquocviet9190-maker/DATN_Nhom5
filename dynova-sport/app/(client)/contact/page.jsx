@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { sendContact } from "@/services/contact.service";
 import {
   AlertCircle,
   CheckCircle,
@@ -15,8 +16,6 @@ import {
   Truck,
   X,
 } from "lucide-react";
-
-const CONTACT_MESSAGES_KEY = "dynova_contact_messages";
 
 const contactCards = [
   {
@@ -72,24 +71,6 @@ function isEmail(value) {
 function isPhone(value) {
   const clean = value.replace(/\s/g, "");
   return /^(0|\+84)[0-9]{8,10}$/.test(clean);
-}
-
-function saveMessage(data) {
-  const oldMessages = JSON.parse(
-    localStorage.getItem(CONTACT_MESSAGES_KEY) || "[]"
-  );
-
-  const nextMessages = [
-    {
-      id: Date.now(),
-      status: "new",
-      createdAt: new Date().toISOString(),
-      ...data,
-    },
-    ...oldMessages,
-  ];
-
-  localStorage.setItem(CONTACT_MESSAGES_KEY, JSON.stringify(nextMessages));
 }
 
 function ContactCard({ item }) {
@@ -241,27 +222,25 @@ export default function ContactPage() {
 
     setLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    try {
+      const response = await sendContact({
+        name: form.fullName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        subject: `${activeType?.label || "Liên hệ"}: ${form.subject.trim()}`,
+        message: form.message.trim(),
+      });
 
-    saveMessage({
-      ...form,
-      typeLabel: activeType?.label || "Liên hệ",
-    });
-
-    setLoading(false);
-    setNotice({
-      type: "success",
-      text: "Gửi liên hệ thành công. Dynova sẽ phản hồi trong vòng 24h.",
-    });
-
-    setForm({
-      fullName: "",
-      email: "",
-      phone: "",
-      type: "order",
-      subject: "",
-      message: "",
-    });
+      setNotice({
+        type: "success",
+        text: response?.message || "Gửi liên hệ thành công. Dynova sẽ phản hồi sớm nhất có thể.",
+      });
+      setForm({ fullName: "", email: "", phone: "", type: "order", subject: "", message: "" });
+    } catch (error) {
+      setNotice({ type: "error", text: error?.message || "Không thể gửi liên hệ. Vui lòng thử lại." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -295,15 +274,6 @@ export default function ContactPage() {
 
       <section className="relative overflow-hidden bg-slate-950 text-white">
         <div className="absolute inset-0">
-          <img
-            src="/images/banners/contact-banner.jpg"
-            alt="Liên hệ Dynova"
-            onError={(event) => {
-              event.currentTarget.src =
-                "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1600&auto=format&fit=crop&q=85";
-            }}
-            className="h-full w-full object-cover opacity-20"
-          />
 
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/70" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(249,115,22,0.22),transparent_32%)]" />
@@ -423,11 +393,6 @@ export default function ContactPage() {
             <h2 className="mt-2 text-3xl font-black tracking-[-0.03em] text-slate-950">
               Gửi yêu cầu hỗ trợ
             </h2>
-
-            <p className="mt-2 text-sm leading-7 text-slate-500">
-              Thông tin được lưu demo vào localStorage để mô phỏng hệ thống tiếp
-              nhận liên hệ.
-            </p>
 
             <span className="mt-4 inline-flex rounded-full bg-orange-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-orange-600">
               {activeType?.label}

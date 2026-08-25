@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Models\Voucher;
+use App\Services\ShippingService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +12,8 @@ use Illuminate\Support\Str;
 
 class AdminSimpleController extends Controller
 {
+    public function __construct(private ShippingService $shipping) {}
+
     private function checkAdmin(Request $request)
     {
         $user = $request->user();
@@ -689,22 +693,22 @@ class AdminSimpleController extends Controller
     if ($this->hasTable('users') && $this->hasColumn('orders', 'user_id')) {
         $query->leftJoin('users as u', 'u.id', '=', 'o.user_id');
 
-        if ($this->hasColumn('users', 'name')) {
-            $query->addSelect(DB::raw('u.name as customer_name'));
-        } else {
-            $query->addSelect(DB::raw('NULL as customer_name'));
+        if (!$this->hasColumn('orders', 'customer_name')) {
+            $query->addSelect($this->hasColumn('users', 'name')
+                ? DB::raw('u.name as customer_name')
+                : DB::raw('NULL as customer_name'));
         }
 
-        if ($this->hasColumn('users', 'email')) {
-            $query->addSelect(DB::raw('u.email as customer_email'));
-        } else {
-            $query->addSelect(DB::raw('NULL as customer_email'));
+        if (!$this->hasColumn('orders', 'customer_email')) {
+            $query->addSelect($this->hasColumn('users', 'email')
+                ? DB::raw('u.email as customer_email')
+                : DB::raw('NULL as customer_email'));
         }
 
-        if ($this->hasColumn('users', 'phone')) {
-            $query->addSelect(DB::raw('u.phone as customer_phone'));
-        } else {
-            $query->addSelect(DB::raw('NULL as customer_phone'));
+        if (!$this->hasColumn('orders', 'customer_phone')) {
+            $query->addSelect($this->hasColumn('users', 'phone')
+                ? DB::raw('u.phone as customer_phone')
+                : DB::raw('NULL as customer_phone'));
         }
     } else {
         $query->addSelect(DB::raw('NULL as customer_name'));
@@ -832,6 +836,34 @@ class AdminSimpleController extends Controller
 
             $order->items = $items;
             $order->order_items = $items;
+            $order->status_history = $this->hasTable('order_status_histories')
+                ? DB::table('order_status_histories')->where('order_id', $id)->orderBy('id')->get()
+                : collect([]);
+            $order->payment_transactions = $this->hasTable('payment_transactions')
+                ? DB::table('payment_transactions')
+                    ->where('order_id', $id)
+                    ->orderByDesc('id')
+                    ->get(['provider', 'transaction_ref', 'provider_transaction_no', 'amount', 'status', 'paid_at', 'created_at'])
+                : collect([]);
+            $order->shipping_status_history = $this->hasTable('shipping_status_histories')
+                ? DB::table('shipping_status_histories')->where('order_id', $id)->orderBy('occurred_at')->get()
+                : collect([]);
+            $order->tracking = null;
+            if (!empty($order->tracking_code)) {
+                try {
+                    $order->tracking = $this->shipping->syncOrderTracking((int) $id);
+                } catch (\Throwable $e) {
+                    $order->tracking = [
+                        'order_code' => $order->tracking_code,
+                        'status' => $order->ghn_status ?? null,
+                        'status_label' => $this->shipping->statusLabel($order->ghn_status ?? null),
+                        'leadtime' => $order->ghn_expected_delivery_at ?? null,
+                        'updated_date' => $order->ghn_last_synced_at ?? null,
+                        'sync_error' => $e->getMessage(),
+                    ];
+                    $order->tracking['delivery_map'] = $this->shipping->deliveryMapForOrder((int) $id, $order->tracking);
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -1051,183 +1083,207 @@ class AdminSimpleController extends Controller
     {
         if ($deny = $this->checkAdmin($request)) return $deny;
 
-        try {
-            if (!$this->hasTable('orders')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Bảng orders chưa tồn tại.',
-                ], 404);
-            }
+        $validated = $request->validate([
+            'status' => ['required', 'in:pending,confirmed,shipping,completed,cancelled'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
 
-            if (!$this->hasColumn('orders', 'status')) {
+        $shipmentTrackingCode = null;
+        $preflightOrder = DB::table('orders')->where('id', $id)->first();
+
+        if (!$preflightOrder) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy đơn hàng.'], 404);
+        }
+
+        if (($preflightOrder->payment_method ?? '') === 'bank' && ($preflightOrder->payment_status ?? '') !== 'paid') {
+            if (in_array($validated['status'], ['confirmed', 'shipping'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Không tìm thấy cột status trong bảng orders.',
+                    'message' => 'Đơn VietQR chưa được thanh toán.',
+                ], 422);
+            }
+        }
+
+        if (($preflightOrder->payment_method ?? '') === 'bank' && ($preflightOrder->payment_status ?? '') === 'paid' && $validated['status'] === 'cancelled') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Đơn VietQR đã thanh toán không thể hủy trực tiếp.',
+            ], 422);
+        }
+
+        if ($validated['status'] === 'shipping') {
+            $currentStatus = strtolower((string) ($preflightOrder->status ?? 'pending'));
+            if ($currentStatus !== 'confirmed') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chỉ có thể tạo vận đơn GHN khi đơn đã được xác nhận.',
                 ], 422);
             }
 
-            $semanticMap = [
-                'pending' => ['pending', 'waiting_bank_transfer', 'bank_pending', 'waiting_payment', 'payment_pending'],
-                'confirmed' => ['confirmed', 'processing', 'packing'],
-                'shipping' => ['shipping', 'delivering'],
-                'completed' => ['completed', 'success', 'done'],
-                'cancelled' => ['cancelled', 'canceled', 'cancel'],
-            ];
+            try {
+                $shipment = $this->shipping->createOrderForOrder((int) $id);
+                $shipmentTrackingCode = $shipment['order_code'] ?? null;
+                if (!$shipmentTrackingCode) {
+                    throw new \RuntimeException('GHN chưa trả về mã vận đơn.');
+                }
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ], 503);
+            }
+        }
 
-            $normalizeStatus = function ($value) use ($semanticMap) {
-                $value = strtolower(trim((string) $value));
+        try {
+            return DB::transaction(function () use ($request, $id, $validated, $shipmentTrackingCode) {
+                $order = DB::table('orders')->where('id', $id)->lockForUpdate()->first();
+                if (!$order) return response()->json(['success' => false, 'message' => 'Không tìm thấy đơn hàng.'], 404);
 
-                foreach ($semanticMap as $key => $aliases) {
-                    if (in_array($value, $aliases, true)) {
-                        return $key;
+                $current = strtolower((string) ($order->status ?? 'pending'));
+                $next = $validated['status'];
+                $transitions = [
+                    'pending' => ['confirmed', 'cancelled'],
+                    'confirmed' => ['shipping', 'cancelled'],
+                    'shipping' => [],
+                    'completed' => [],
+                    'cancelled' => [],
+                ];
+
+                if ($current === $next) {
+                    return response()->json(['success' => true, 'message' => 'Trạng thái đơn hàng không thay đổi.', 'data' => $order]);
+                }
+
+                if (($order->payment_method ?? '') === 'bank' && ($order->payment_status ?? '') !== 'paid' && in_array($next, ['confirmed', 'shipping'], true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Đơn VietQR chưa được thanh toán.',
+                    ], 422);
+                }
+
+                if (($order->payment_method ?? '') === 'bank' && ($order->payment_status ?? '') === 'paid' && $next === 'cancelled') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Đơn VietQR đã thanh toán không thể hủy trực tiếp.',
+                    ], 422);
+                }
+
+                if (!isset($transitions[$current]) || !in_array($next, $transitions[$current], true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Không thể chuyển trạng thái ngược hoặc sai luồng.',
+                        'current_status' => $current,
+                        'allowed_next_statuses' => $transitions[$current] ?? [],
+                    ], 422);
+                }
+
+                if ($next === 'cancelled') {
+                    $mayRestore = $this->hasColumn('orders', 'stock_deducted_at')
+                        && !empty($order->stock_deducted_at)
+                        && (!$this->hasColumn('orders', 'stock_restored_at') || empty($order->stock_restored_at));
+
+                    if ($mayRestore && $this->hasTable('order_items')) {
+                        $items = DB::table('order_items')->where('order_id', $id)->get();
+                        foreach ($items as $item) {
+                            $qty = (int) ($item->quantity ?? 0);
+                            if ($qty <= 0) continue;
+                            $variantId = $item->product_variant_id ?? null;
+                            if ($variantId && $this->hasTable('product_variants')) {
+                                DB::table('product_variants')->where('id', $variantId)->lockForUpdate()->first();
+                                DB::table('product_variants')->where('id', $variantId)->increment('stock', $qty);
+                            } elseif ($this->hasColumn('products', 'stock') && !empty($item->product_id)) {
+                                DB::table('products')->where('id', $item->product_id)->lockForUpdate()->first();
+                                DB::table('products')->where('id', $item->product_id)->increment('stock', $qty);
+                            }
+                        }
+                        if ($this->hasColumn('orders', 'stock_restored_at')) {
+                            DB::table('orders')->where('id', $id)->update(['stock_restored_at' => now()]);
+                        }
+                    }
+
+                    if ($this->hasTable('voucher_usages')) {
+                        $usage = DB::table('voucher_usages')->where('order_id', $id)->where('status', 'used')->lockForUpdate()->first();
+                        if ($usage) {
+                            DB::table('voucher_usages')->where('id', $usage->id)->update(['status' => 'cancelled', 'updated_at' => now()]);
+                            if ($this->hasTable('vouchers')) {
+                                $voucher = DB::table('vouchers')->where('id', $usage->voucher_id)->lockForUpdate()->first();
+                                if ($voucher && (int) ($voucher->used_count ?? 0) > 0) DB::table('vouchers')->where('id', $voucher->id)->decrement('used_count');
+                            }
+                        }
                     }
                 }
 
-                return $value ?: 'pending';
-            };
+                $payload = ['status' => $next, 'updated_at' => now()];
+                if ($next === 'completed' && $this->hasColumn('orders', 'completed_at')) $payload['completed_at'] = now();
+                if ($next === 'cancelled' && $this->hasColumn('orders', 'cancelled_at')) $payload['cancelled_at'] = now();
+                if (!empty($shipmentTrackingCode) && $this->hasColumn('orders', 'tracking_code')) {
+                    $payload['tracking_code'] = trim($shipmentTrackingCode);
+                    if ($this->hasColumn('orders', 'shipping_provider')) $payload['shipping_provider'] = 'ghn';
+                }
+                if ($next === 'completed' && ($order->payment_method ?? '') === 'cod' && $this->hasColumn('orders', 'payment_status')) {
+                    $payload['payment_status'] = 'paid';
+                }
+                DB::table('orders')->where('id', $id)->update($payload);
 
-            DB::beginTransaction();
+                if ($next === 'shipping') {
+                    try {
+                        $this->shipping->startDeliverySimulationIfIdle((int) $id);
+                    } catch (\Throwable) {
+                    }
+                }
 
-            $order = DB::table('orders')
-                ->where('id', $id)
-                ->lockForUpdate()
-                ->first();
+                if ($this->hasTable('order_status_histories')) {
+                    DB::table('order_status_histories')->insert([
+                        'order_id' => $id,
+                        'changed_by' => $request->user()->id,
+                        'from_status' => $current,
+                        'to_status' => $next,
+                        'source' => 'admin',
+                        'note' => $validated['note'] ?? null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
 
-            if (!$order) {
-                DB::rollBack();
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Không tìm thấy đơn hàng.',
-                ], 404);
-            }
-
-            $currentStatus = $normalizeStatus($order->status ?? 'pending');
-            $nextStatus = $normalizeStatus($request->input('status', 'pending'));
-
-            $transitions = [
-                'pending' => ['confirmed', 'cancelled'],
-                'confirmed' => ['shipping', 'cancelled'],
-                'shipping' => ['completed'],
-                'completed' => [],
-                'cancelled' => [],
-            ];
-
-            if ($currentStatus === $nextStatus) {
-                DB::commit();
-
+                $updated = DB::table('orders')->where('id', $id)->first();
                 return response()->json([
                     'success' => true,
-                    'message' => 'Trạng thái đơn hàng không thay đổi.',
-                    'data' => $order,
-                    'order' => $order,
-                    'current_status' => $currentStatus,
-                    'allowed_next_statuses' => $transitions[$currentStatus] ?? [],
+                    'message' => $next === 'cancelled'
+                        ? 'Đã hủy đơn và hoàn tồn kho đúng một lần.'
+                        : ($next === 'shipping'
+                            ? 'Đã tạo vận đơn GHN và chuyển đơn sang trạng thái đang giao.'
+                            : 'Cập nhật trạng thái đơn hàng thành công.'),
+                    'data' => $updated,
+                    'order' => $updated,
+                    'previous_status' => $current,
+                    'current_status' => $next,
+                    'allowed_next_statuses' => $transitions[$next] ?? [],
                 ]);
-            }
-
-            if (!array_key_exists($currentStatus, $transitions)) {
-                DB::rollBack();
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Trạng thái hiện tại của đơn hàng không hợp lệ.',
-                    'current_status' => $currentStatus,
-                ], 422);
-            }
-
-            if (!in_array($nextStatus, $transitions[$currentStatus], true)) {
-                DB::rollBack();
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Không thể chuyển trạng thái ngược hoặc sai luồng.',
-                    'current_status' => $currentStatus,
-                    'requested_status' => $nextStatus,
-                    'allowed_next_statuses' => $transitions[$currentStatus],
-                ], 422);
-            }
-
-            $statusForDb = $this->resolveOrderStatusForDb($nextStatus);
-            $enumValues = $this->getOrderStatusEnumValues();
-
-            if (!$statusForDb) {
-                DB::rollBack();
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Trạng thái muốn lưu không tồn tại trong enum database.',
-                    'requested_status' => $nextStatus,
-                    'allowed_db_statuses' => $enumValues,
-                ], 422);
-            }
-
-            $inventoryResult = [
-                'deducted_items' => 0,
-                'sold_items' => 0,
-            ];
-
-            if ($nextStatus === 'completed') {
-                $inventoryResult = $this->applyCompletedOrderInventory($id);
-            }
-
-            $payload = [
-                'status' => $statusForDb,
-            ];
-
-            if ($nextStatus === 'completed' && $this->hasColumn('orders', 'completed_at')) {
-                $payload['completed_at'] = now();
-            }
-
-            if ($nextStatus === 'cancelled' && $this->hasColumn('orders', 'cancelled_at')) {
-                $payload['cancelled_at'] = now();
-            }
-
-            if ($this->hasColumn('orders', 'updated_at')) {
-                $payload['updated_at'] = now();
-            }
-
-            DB::table('orders')
-                ->where('id', $id)
-                ->update($payload);
-
-            $updatedOrder = DB::table('orders')
-                ->where('id', $id)
-                ->first();
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => $nextStatus === 'completed'
-                    ? 'Đơn hàng đã hoàn thành, đã trừ tồn kho và cập nhật số lượng đã bán.'
-                    : 'Cập nhật trạng thái đơn hàng thành công.',
-                'data' => $updatedOrder,
-                'order' => $updatedOrder,
-                'previous_status' => $currentStatus,
-                'saved_status' => $statusForDb,
-                'current_status' => $normalizeStatus($updatedOrder->status ?? $statusForDb),
-                'allowed_next_statuses' => $transitions[$nextStatus] ?? [],
-                'allowed_db_statuses' => $enumValues,
-                'inventory' => $inventoryResult,
-            ]);
-        } catch (\RuntimeException $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+            }, 3);
         } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Lỗi cập nhật trạng thái đơn hàng.',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Lỗi cập nhật trạng thái đơn hàng.', 'error' => $e->getMessage()], 500);
         }
     }
+
+
+    public function syncOrderShipping(Request $request, $id)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+
+        try {
+            $tracking = $this->shipping->syncOrderTracking((int) $id);
+            return response()->json([
+                'success' => true,
+                'message' => $tracking ? 'Đã đồng bộ trạng thái vận chuyển GHN.' : 'Đơn hàng chưa có vận đơn GHN để đồng bộ.',
+                'data' => [
+                    'tracking' => $tracking,
+                    'simulation' => $this->shipping->deliverySimulationState((int) $id),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 503);
+        }
+    }
+
 
 
     public function customers(Request $request)
@@ -1284,10 +1340,15 @@ class AdminSimpleController extends Controller
         if (!$this->hasTable('banners')) return response()->json(['success' => false, 'message' => 'Bảng banners chưa tồn tại.'], 404);
 
         $data = $request->all();
+        $data['cta_text'] = $data['cta_text'] ?? $data['button_text'] ?? null;
+        $data['cta_link'] = $data['cta_link'] ?? $data['button_link'] ?? null;
+        $data['position'] = $data['position'] ?? 'home_hero';
 
         if ($file = $this->uploadFile($request, 'image', 'banners')) {
-            $data['image'] = $file;
+            $data['image_url'] = $file;
         }
+
+        unset($data['button_text'], $data['button_link'], $data['image']);
 
         if (isset($data['is_active'])) {
             $data['is_active'] = $this->boolValue($data['is_active']);
@@ -1309,10 +1370,15 @@ class AdminSimpleController extends Controller
         if (!$this->hasTable('banners')) return response()->json(['success' => false, 'message' => 'Bảng banners chưa tồn tại.'], 404);
 
         $data = $request->all();
+        $data['cta_text'] = $data['cta_text'] ?? $data['button_text'] ?? null;
+        $data['cta_link'] = $data['cta_link'] ?? $data['button_link'] ?? null;
+        $data['position'] = $data['position'] ?? 'home_hero';
 
         if ($file = $this->uploadFile($request, 'image', 'banners')) {
-            $data['image'] = $file;
+            $data['image_url'] = $file;
         }
+
+        unset($data['button_text'], $data['button_link'], $data['image']);
 
         if (isset($data['is_active'])) {
             $data['is_active'] = $this->boolValue($data['is_active']);
@@ -1611,14 +1677,124 @@ class AdminSimpleController extends Controller
     public function promotions(Request $request)
     {
         if ($deny = $this->checkAdmin($request)) return $deny;
+        if (!$this->hasTable('vouchers')) return $this->emptyList('promotions');
 
-        if (!$this->hasTable('promotions')) {
-            return $this->emptyList('promotions');
-        }
-
-        $items = DB::table('promotions')->orderByDesc('id')->get();
+        $items = DB::table('vouchers')
+            ->orderByDesc('id')
+            ->limit((int) $request->input('per_page', 200))
+            ->get();
 
         return $this->listResponse('promotions', $items, count($items));
+    }
+
+    public function storePromotion(Request $request)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+
+        $request->merge([
+            'code' => strtoupper(trim((string) $request->input('code'))),
+            'title' => $request->input('title', $request->input('name')),
+            'discount_type' => $request->input('discount_type', $request->input('type')),
+            'discount_value' => $request->input('discount_value', $request->input('value')),
+        ]);
+
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:80', 'unique:vouchers,code'],
+            'title' => ['required', 'string', 'max:180'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'discount_type' => ['required', 'in:fixed,percent'],
+            'discount_value' => ['required', 'numeric', 'min:0.01'],
+            'min_order_value' => ['nullable', 'numeric', 'min:0'],
+            'max_discount' => ['nullable', 'numeric', 'min:0'],
+            'usage_limit' => ['nullable', 'integer', 'min:1'],
+            'per_user_limit' => ['nullable', 'integer', 'min:1'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        if ($validated['discount_type'] === 'percent' && (float) $validated['discount_value'] > 100) {
+            return response()->json(['success' => false, 'message' => 'Mức giảm phần trăm không được vượt quá 100%.'], 422);
+        }
+
+        $payload = $this->addCreateTime('vouchers', $this->filterData('vouchers', [
+            ...$validated,
+            'used_count' => 0,
+            'is_active' => $validated['is_active'] ?? true,
+        ]));
+
+        $id = DB::table('vouchers')->insertGetId($payload);
+        $promotion = DB::table('vouchers')->where('id', $id)->first();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Thêm mã giảm giá thành công.',
+            'data' => $promotion,
+        ], 201);
+    }
+
+    public function updatePromotion(Request $request, $id)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+        $promotion = DB::table('vouchers')->where('id', $id)->first();
+        if (!$promotion) return response()->json(['success' => false, 'message' => 'Không tìm thấy mã giảm giá.'], 404);
+
+        $request->merge([
+            'code' => strtoupper(trim((string) $request->input('code', $promotion->code))),
+            'title' => $request->input('title', $request->input('name', $promotion->title ?? '')),
+            'discount_type' => $request->input('discount_type', $request->input('type', $promotion->discount_type ?? 'fixed')),
+            'discount_value' => $request->input('discount_value', $request->input('value', $promotion->discount_value ?? 0)),
+        ]);
+
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:80', 'unique:vouchers,code,' . (int) $id],
+            'title' => ['required', 'string', 'max:180'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'discount_type' => ['required', 'in:fixed,percent'],
+            'discount_value' => ['required', 'numeric', 'min:0.01'],
+            'min_order_value' => ['nullable', 'numeric', 'min:0'],
+            'max_discount' => ['nullable', 'numeric', 'min:0'],
+            'usage_limit' => ['nullable', 'integer', 'min:1'],
+            'per_user_limit' => ['nullable', 'integer', 'min:1'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        if ($validated['discount_type'] === 'percent' && (float) $validated['discount_value'] > 100) {
+            return response()->json(['success' => false, 'message' => 'Mức giảm phần trăm không được vượt quá 100%.'], 422);
+        }
+
+        $payload = $this->filterData('vouchers', $validated);
+        DB::table('vouchers')->where('id', $id)->update($payload);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Cập nhật mã giảm giá thành công.',
+            'data' => DB::table('vouchers')->where('id', $id)->first(),
+        ]);
+    }
+
+    public function deletePromotion(Request $request, $id)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+        $promotion = DB::table('vouchers')->where('id', $id)->first();
+        if (!$promotion) return response()->json(['success' => false, 'message' => 'Không tìm thấy mã giảm giá.'], 404);
+
+        $inUse = $this->hasTable('orders') && $this->hasColumn('orders', 'voucher_id')
+            ? DB::table('orders')->where('voucher_id', $id)->exists()
+            : false;
+
+        if ($inUse) {
+            DB::table('vouchers')->where('id', $id)->update(['is_active' => 0, 'updated_at' => now()]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Mã đã phát sinh đơn hàng nên được tắt thay vì xóa để giữ lịch sử dữ liệu.',
+            ]);
+        }
+
+        DB::table('vouchers')->where('id', $id)->delete();
+        return response()->json(['success' => true, 'message' => 'Đã xóa mã giảm giá thành công.']);
     }
 
     public function ratings(Request $request)
@@ -1645,6 +1821,34 @@ class AdminSimpleController extends Controller
 
         return $this->listResponse('ratings', $items, count($items));
     }
+
+    public function updateRatingStatus(Request $request, $id)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+        $validated = $request->validate(['status' => ['required', 'in:pending,approved,hidden']]);
+        $review = DB::table('reviews')->where('id', $id)->first();
+        if (!$review) return response()->json(['success' => false, 'message' => 'Không tìm thấy đánh giá.'], 404);
+
+        DB::table('reviews')->where('id', $id)->update([
+            'status' => $validated['status'],
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Cập nhật trạng thái đánh giá thành công.',
+            'data' => DB::table('reviews')->where('id', $id)->first(),
+        ]);
+    }
+
+    public function deleteRating(Request $request, $id)
+    {
+        if ($deny = $this->checkAdmin($request)) return $deny;
+        $deleted = DB::table('reviews')->where('id', $id)->delete();
+        if (!$deleted) return response()->json(['success' => false, 'message' => 'Không tìm thấy đánh giá.'], 404);
+        return response()->json(['success' => true, 'message' => 'Đã xóa đánh giá.']);
+    }
+
     private function getOrderStatusEnumValues()
 {
     try {
@@ -1742,4 +1946,5 @@ private function resolveOrderStatusForDb($rawStatus)
 
     return null;
 }
+
 }
