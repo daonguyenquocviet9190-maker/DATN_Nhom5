@@ -31,7 +31,7 @@ export default async function CollectionDetailPage({ params }) {
   try {
     const response = await getProducts({
       brand: brand.id,
-      per_page: 100,
+      per_page: 400,
     });
 
     products = Array.isArray(response?.data) ? response.data : [];
