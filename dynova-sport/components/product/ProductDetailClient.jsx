@@ -1059,22 +1059,7 @@ export default function ProductDetailClient({
         </div>
       )}
 
-<<<<<<< HEAD
     {/* HERO SECTION BACKGROUND */}
-    <section className="relative overflow-hidden bg-slate-950 text-white">
-      <div className="absolute inset-0">
-        <img
-          src={getProductImageSafe(product)}
-          alt={product?.name || "Product background"}
-          onError={(event) => {
-            event.currentTarget.src = FALLBACK_IMAGE;
-          }}
-          className="h-full w-full object-cover opacity-20 blur-sm"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/95 to-slate-950/75" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(249,115,22,0.18),transparent_34%)]" />
-      </div>
-=======
       <section className="relative overflow-hidden bg-slate-950 text-white">
         <div className="absolute inset-0">
           <img
@@ -1138,7 +1123,6 @@ export default function ProductDetailClient({
         </div>
       </section>
 
->>>>>>> main
       <div className="container-page relative z-20 -mt-6">
         <button
           type="button"

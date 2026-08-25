@@ -452,20 +452,14 @@ export default function HomeClient({
               </span>
             </div>
 
-            <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
-              <button
-<<<<<<< HEAD
-onClick={() => handleAdd(product)}
-                className="btn-primary rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider"
-=======
-                onClick={() => handleAdd(product)}
-                disabled={totalStock <= 0}
-                className="btn-primary rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:bg-slate-300"
->>>>>>> main
-              >
-                {requiresSelection ? "Xem tùy chọn" : "Thêm vào giỏ"}
-              </button>
-
+           <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+  <button
+    onClick={() => handleAdd(product)}
+    disabled={totalStock <= 0}
+    className="btn-primary rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:bg-slate-300"
+  >
+    {requiresSelection ? "Xem tùy chọn" : "Thêm vào giỏ"}
+  </button>
               <button
                 type="button"
                 onClick={() => handleWishlist(product)}
