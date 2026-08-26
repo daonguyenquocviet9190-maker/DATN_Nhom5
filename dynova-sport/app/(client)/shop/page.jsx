@@ -271,7 +271,11 @@ export default function ShopPage() {
 
       try {
         const [productResponse, categoryResponse] = await Promise.all([
+<<<<<<< HEAD
           getProducts({ per_page: 400 }),
+=======
+          getProducts({ per_page: 500 }),
+>>>>>>> main
           getCategories(),
         ]);
 
