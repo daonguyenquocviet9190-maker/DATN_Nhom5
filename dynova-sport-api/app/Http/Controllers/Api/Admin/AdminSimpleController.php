@@ -1420,7 +1420,7 @@ class AdminSimpleController extends Controller
                     'settings' => [
                         'site_name' => 'Dynova Sport',
                         'hotline' => '0866 347 730',
-                        'email' => 'cskh@dynova.vn',
+                        'email' => 'cskhdynova@gmail.com',
                         'address' => 'TP. Hồ Chí Minh',
                     ],
                 ],
