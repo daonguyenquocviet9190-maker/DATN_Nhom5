@@ -271,7 +271,7 @@ export default function ClientLayout({ children }) {
 
               <span className="flex items-center gap-2">
                 <Mail size={13} className="text-orange-400" />
-                {settings?.email || "cskh@dynova.vn"}
+                {settings?.email || "cskhdynova@gmail.com"}
               </span>
             </div>
 
