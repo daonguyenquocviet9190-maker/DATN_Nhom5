@@ -719,10 +719,10 @@ export default function ClientLayout({ children }) {
                   <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/5 text-orange-400">
                     <Mail size={16} />
                   </span>
-                  {settings?.email || "cskh@dynova.vn"}
+                  {settings?.email || "cskhdynova@gmail.com"}
                 </p>
 
-                <p className="flex items-start gap-3">
+                <p className="flex items-start gap-3">  
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/5 text-orange-400">
                     <MapPin size={16} />
                   </span>
