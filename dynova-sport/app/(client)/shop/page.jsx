@@ -280,9 +280,6 @@ export default function ShopPage() {
           .filter(Boolean);
 
         const categoryList = extractCategories(categoryResponse);
-
-        if (!mounted) return;
-
         const finalProducts = normalizedProducts;
         const finalCategories = Array.isArray(categoryList) ? categoryList : [];
 

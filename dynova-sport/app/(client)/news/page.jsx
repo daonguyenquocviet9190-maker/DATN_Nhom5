@@ -43,7 +43,7 @@ const ALL_NEWS = [
     date: '08/06/2026',
     author: 'Khánh Nam',
     readTime: '4 phút đọc',
-    image: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=500&q=80'
+    image: 'https://motstore.vn/wp-content/uploads/2026/02/mau-giay-da-bong-san-co-nhan-tao-eda63d.webp'
   },
   {
     id: 5,
