@@ -69,7 +69,7 @@ const ALL_ARTICLES: Record<string, Article> = {
     date: '08 Tháng 6, 2026',
     author: 'Khánh Nam',
     readTime: '4 phút đọc',
-    img: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1000&auto=format&fit=crop&q=80',
+    img: 'https://motstore.vn/wp-content/uploads/2026/02/mau-giay-da-bong-san-co-nhan-tao-eda63d.webp',
     content:
       'Sân cỏ nhân tạo tại Việt Nam có đặc thù nền đất cứng, đòi hỏi giày có hệ thống đinh TF (Turf) phân bổ đều và đế ngoài linh hoạt. Top 5 mẫu đang được yêu thích: Adidas Predator TF, Nike Mercurial Vapor TF, Mizuno Morelia Neo TF, Puma Future TF, và New Balance Furon TF.',
   },
