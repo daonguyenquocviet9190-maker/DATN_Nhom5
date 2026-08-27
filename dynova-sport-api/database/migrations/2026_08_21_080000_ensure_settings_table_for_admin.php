@@ -64,7 +64,7 @@ return new class extends Migration
             DB::table('settings')->insert([
                 'site_name' => 'Dynova Sport',
                 'hotline' => '0866 347 730',
-                'email' => 'cskh@dynova.vn',
+                'email' => 'cskhdynova@gmail.com',
                 'address' => 'TP. Hồ Chí Minh',
                 'shipping_note' => 'Miễn phí giao hàng cho đơn từ 500K',
                 'return_policy' => 'Đổi trả 30 ngày',

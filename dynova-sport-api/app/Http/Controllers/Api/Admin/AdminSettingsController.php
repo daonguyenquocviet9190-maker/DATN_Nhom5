@@ -14,7 +14,7 @@ class AdminSettingsController extends Controller
         return [
             'site_name' => 'Dynova Sport',
             'hotline' => '0866 347 730',
-            'email' => 'cskh@dynova.vn',
+            'email' => 'cskhdynova@gmail.com',
             'address' => 'TP. Hồ Chí Minh',
             'facebook' => '',
             'instagram' => '',

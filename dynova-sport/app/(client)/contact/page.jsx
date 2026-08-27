@@ -28,9 +28,9 @@ const contactCards = [
   {
     icon: Mail,
     title: "Email",
-    value: "cskh@dynova.vn",
+    value: "cskhdynova@gmail.com",
     text: "Tiếp nhận góp ý, hợp tác và khiếu nại.",
-    href: "mailto:cskh@dynova.vn",
+    href: "mailto:cskhdynova@gmail.com",
   },
   {
     icon: Clock,
@@ -377,7 +377,7 @@ export default function ContactPage() {
                 </h3>
 
                 <p className="mt-2 text-sm leading-7 text-slate-500">
-                  Số 1, Đường B, Khu ADC, Phường Trung Mỹ Tây, Quận 12.
+                  Số 1, Phường Trung Mỹ Tây, Quận 12.
                 </p>
               </div>
             </div>
