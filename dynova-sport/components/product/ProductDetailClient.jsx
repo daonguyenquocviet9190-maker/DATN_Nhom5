@@ -1075,6 +1075,7 @@ export default function ProductDetailClient({
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(249,115,22,0.18),transparent_34%)]" />
         </div>
 
+<<<<<<< HEAD
         <div className="container-page relative z-10 py-10 md:py-14">
           <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-400">
             <Link
@@ -1160,6 +1161,37 @@ export default function ProductDetailClient({
                 </button>
               ))}
             </div>
+=======
+        <div className="mt-8 max-w-3xl">
+          {brandName && (
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
+              <Sparkles size={14} />
+              {brandName}
+            </div>
+          )}
+
+          <h1 className="mt-4 text-4xl font-black uppercase leading-tight tracking-[-0.04em] md:text-5xl">
+            {product?.name}
+          </h1>
+          {product?.short_description && (
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
+              {product.short_description}
+            </p>
+          )}
+
+        </div>
+      </div>
+    </section>
+    {/* MAIN CONTENT SECTION */}
+    <div className="container-page relative z-20 -mt-6">
+      <Link
+        href="/shop"
+        className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 shadow-sm transition hover:-translate-x-1 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+      >
+        <ArrowLeft size={16} />
+        Quay lại cửa hàng
+      </Link>
+>>>>>>> việt
 
             <div className="product-image-frame order-1 relative min-h-[480px] overflow-hidden rounded-[30px] bg-slate-100 lg:order-2">
               <img
@@ -1772,15 +1804,9 @@ export default function ProductDetailClient({
                 </h2>
               </div>
 
-              <button
-                type="button"
-                onClick={returnToShop}
-                className="hidden rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 sm:inline-flex"
-              >
-                Xem tất cả
-              </button>
             </div>
 
+<<<<<<< HEAD
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {relatedProducts
                 .slice(0, 4)
@@ -1791,10 +1817,50 @@ export default function ProductDetailClient({
                     returnUrl={shopReturnUrl}
                   />
                 ))}
+=======
+            <div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-orange-50 hover:text-orange-600"
+                  aria-label="Chia sẻ"
+                >
+                  <Share2 size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleWishlist}
+                  disabled={wishlistLoading}
+                  className={`flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                    liked
+                      ? "bg-orange-500 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-500"
+                  }`}
+                  aria-label="Yêu thích"
+                >
+                  {wishlistLoading ? (
+                    <Loader2 size={19} className="animate-spin" />
+                  ) : (
+                    <Heart
+                      size={19}
+                      className={liked ? "fill-current" : ""}
+                    />
+                  )}
+                </button>
+              </div>
+>>>>>>> việt
             </div>
           </section>
         )}
       </div>
     </div>
+<<<<<<< HEAD
   );
 }
+=======
+  </div>
+);
+}
+>>>>>>> việt
