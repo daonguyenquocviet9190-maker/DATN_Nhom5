@@ -2,51 +2,76 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
+    use HasFactory;
+
+    protected $table = 'products';
+
     protected $fillable = [
         'category_id',
         'brand_id',
         'name',
         'slug',
-        'brand',
         'short_description',
         'description',
         'image',
         'price',
-        'compare_price',
-        'rating',
-        'sold',
         'status',
         'is_featured',
     ];
 
     protected $casts = [
+        'category_id' => 'integer',
+        'brand_id' => 'integer',
         'price' => 'decimal:2',
-        'compare_price' => 'decimal:2',
-        'rating' => 'decimal:1',
         'is_featured' => 'boolean',
     ];
 
-    public function category()
+    public function category(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(
+            Category::class,
+            'category_id',
+            'id'
+        );
     }
 
-    public function brandInfo()
+    public function brand(): BelongsTo
     {
-        return $this->belongsTo(Brand::class, 'brand_id');
+        return $this->belongsTo(
+            Brand::class,
+            'brand_id',
+            'id'
+        );
     }
 
-    public function variants()
+    public function variants(): HasMany
     {
-        return $this->hasMany(ProductVariant::class);
+        return $this->hasMany(
+            ProductVariant::class,
+            'product_id',
+            'id'
+        );
     }
 
-    public function reviews()
+    public function reviews(): HasMany
     {
-        return $this->hasMany(Review::class);
+        return $this->hasMany(
+            Review::class,
+            'product_id',
+            'id'
+        );
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', 'active');
     }
 }

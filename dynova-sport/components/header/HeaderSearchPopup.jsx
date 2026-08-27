@@ -380,7 +380,7 @@ export default function HeaderSearchPopup({ open, onClose }) {
                     Gợi ý cho “{keyword.trim()}”
                   </p>
                   <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Hiển thị {suggestions.length} sản phẩm gần nhất từ API
+                    Hiển thị {suggestions.length} sản phẩm phù hợp
                   </p>
                 </div>
 
@@ -429,14 +429,14 @@ export default function HeaderSearchPopup({ open, onClose }) {
                         {(product.compare_price ||
                           product.old_price ||
                           product.oldPrice) && (
-                          <p className="text-xs font-bold text-slate-400 line-through">
-                            {formatCurrency(
-                              product.compare_price ||
+                            <p className="text-xs font-bold text-slate-400 line-through">
+                              {formatCurrency(
+                                product.compare_price ||
                                 product.old_price ||
                                 product.oldPrice
-                            )}
-                          </p>
-                        )}
+                              )}
+                            </p>
+                          )}
                       </div>
                     </div>
 
@@ -457,7 +457,7 @@ export default function HeaderSearchPopup({ open, onClose }) {
 
               <button
                 type="button"
-                onClick={handleSearch}
+                onClick={hFandleSearch}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-500 sm:hidden"
               >
                 Xem tất cả kết quả

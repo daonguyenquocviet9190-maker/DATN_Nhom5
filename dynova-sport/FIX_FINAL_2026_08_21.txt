@@ -1,0 +1,15 @@
+DYNOVA SPORT - FIX FINAL 2026-08-21
+
+- Sửa token auth đọc cả localStorage và sessionStorage.
+- Sửa profile/cart/orders khi đăng nhập không chọn ghi nhớ.
+- Checkout đồng bộ giỏ hàng tài khoản trước khi tạo đơn.
+- Backend ưu tiên dữ liệu cart_items trong database khi tạo đơn.
+- Sửa shipping provinces/districts/wards không còn phụ thuộc duy nhất vào GHN.
+- Khi GHN chưa cấu hình, checkout vẫn có địa chỉ dự phòng và phí giao hàng mặc định.
+- Trang chủ xử lý variant trước khi thêm giỏ.
+- Shop đổi nút nhiều variant thành “Xem tùy chọn”.
+- Trang chủ dùng tồn kho, giá variant, rating và sold_count từ backend.
+- Thêm kiểm tra quyền verified review trước khi cho gửi đánh giá.
+- Sửa ảnh contact bị 404 và thêm placeholder ảnh cục bộ.
+- Gỡ các dòng UI mang tính kỹ thuật như backend/API/Token/Shop ID.
+- Đã quét source runtime và loại bỏ các chú thích/gợi ý mang tính kỹ thuật không cần thiết.

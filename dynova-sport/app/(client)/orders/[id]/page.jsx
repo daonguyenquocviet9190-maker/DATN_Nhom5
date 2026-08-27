@@ -27,8 +27,11 @@ import { addToCart } from "@/utils/shopStorage";
 import {
   cancelOrder,
   getOrderById,
+  getOrderTracking,
   reorderOrder,
 } from "@/services/order.service";
+import OrderTrackingTimeline from "@/components/orders/OrderTrackingTimeline";
+import VietQrPaymentCard from "@/components/payment/VietQrPaymentCard";
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -229,6 +232,9 @@ function getAuthHeaders() {
     localStorage.getItem("dynova_auth_token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("token") ||
+    sessionStorage.getItem("dynova_auth_token") ||
+    sessionStorage.getItem("auth_token") ||
+    sessionStorage.getItem("token") ||
     "";
 
   return {
@@ -483,7 +489,6 @@ function getPaymentLabel(method = "") {
     BANK_TRANSFER: "Chuyển khoản ngân hàng",
     BANK: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
-    MOMO: "MoMo",
   };
 
   return map[clean] || method || "COD";
@@ -497,6 +502,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
+  const [trackingRefreshing, setTrackingRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [catalogMaps, setCatalogMaps] = useState({
@@ -505,9 +511,16 @@ export default function OrderDetailPage() {
   });
 
   const items = useMemo(() => getOrderItems(order), [order]);
-  const status = normalizeStatus(order?.status || "pending");
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+  const baseStatus = normalizeStatus(order?.status || "pending");
+  const bankUnpaid = bankPayment && !paymentPaid && baseStatus !== "cancelled";
+  const status = bankUnpaid ? "waiting_bank_transfer" : baseStatus;
   const statusInfo = statusMap[status] || statusMap.pending;
   const currentStepIndex = status === "cancelled" ? -1 : statusIndex[status] ?? 0;
+  const statusHistory = Array.isArray(order?.status_history) ? order.status_history : [];
+  const tracking = order?.tracking || null;
 
   const total = Number(
     order?.grand_total ||
@@ -527,21 +540,21 @@ export default function OrderDetailPage() {
     setTimeout(() => setNotice(""), 1800);
   };
 
-  const loadOrder = async () => {
+  const loadOrder = async ({ silent = false } = {}) => {
     if (!orderId) return;
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError("");
 
       const [response, nextCatalogMaps] = await Promise.all([
         getOrderById(orderId),
-        loadCatalogMaps(),
+        silent ? Promise.resolve(catalogMaps) : loadCatalogMaps(),
       ]);
 
       const data = extractOrder(response);
 
-      setCatalogMaps(nextCatalogMaps);
+      if (!silent) setCatalogMaps(nextCatalogMaps);
       setOrder(data);
     } catch (err) {
       if (err?.status === 401) {
@@ -549,15 +562,49 @@ export default function OrderDetailPage() {
         return;
       }
 
-      setError(err?.message || "Không thể tải chi tiết đơn hàng.");
+      if (!silent) setError(err?.message || "Không thể tải chi tiết đơn hàng.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  const loadTracking = async ({ silent = false } = {}) => {
+    if (!orderId || !order?.tracking_code) return;
+    try {
+      if (!silent) setTrackingRefreshing(true);
+      const data = await getOrderTracking(orderId);
+      setOrder((current) => ({
+        ...current,
+        status: data?.order_status ?? current?.status,
+        payment_status: data?.payment_status ?? current?.payment_status,
+        shipping_provider: data?.shipping_provider ?? current?.shipping_provider,
+        tracking_code: data?.tracking_code ?? current?.tracking_code,
+        ghn_status: data?.ghn_status ?? current?.ghn_status,
+        ghn_expected_delivery_at: data?.ghn_expected_delivery_at ?? current?.ghn_expected_delivery_at,
+        ghn_last_synced_at: data?.ghn_last_synced_at ?? current?.ghn_last_synced_at,
+        tracking: data?.tracking ?? current?.tracking,
+        shipping_status_history: data?.shipping_status_history ?? current?.shipping_status_history,
+        status_history: data?.status_history ?? current?.status_history,
+      }));
+    } catch (err) {
+      if (!silent) setError(err?.message || "Không thể cập nhật hành trình giao hàng.");
+    } finally { if (!silent) setTrackingRefreshing(false); }
+  };
+
+  useEffect(() => { loadOrder(); }, [orderId]);
+
   useEffect(() => {
-    loadOrder();
-  }, [orderId]);
+    if (!order?.tracking_code || status !== "shipping") return undefined;
+    const running = Boolean(order?.tracking?.delivery_map?.simulation?.running);
+    const interval = running ? 4000 : 30000;
+    const timer = window.setInterval(() => loadTracking({ silent: true }), interval);
+    return () => window.clearInterval(timer);
+  }, [
+    status,
+    order?.tracking_code,
+    order?.tracking?.delivery_map?.simulation?.running,
+    orderId,
+  ]);
 
   const handleCancel = async () => {
     if (!order?.id) return;
@@ -619,7 +666,7 @@ export default function OrderDetailPage() {
     }
   };
 
-  const canCancel = ["pending", "waiting_bank_transfer", "confirmed", "processing"].includes(status);
+  const canCancel = ["pending", "waiting_bank_transfer", "confirmed", "processing"].includes(status) && !(bankPayment && paymentPaid);
 
   if (loading) {
     return (
@@ -741,6 +788,48 @@ export default function OrderDetailPage() {
                 })}
               </div>
             )}
+
+            {statusHistory.length > 0 && (
+              <div className="mt-6 border-t border-slate-100 pt-5">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Lịch sử trạng thái</p>
+                <div className="mt-3 space-y-3">
+                  {statusHistory.map((entry, index) => {
+                    const target = normalizeStatus(entry?.to_status || "pending");
+                    const meta = statusMap[target] || statusMap.pending;
+                    return (
+                      <div key={entry?.id || index} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
+                        <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className={`text-sm font-black ${meta.text}`}>{meta.label}</p>
+                            <span className="text-[11px] font-bold text-slate-400">
+                              {entry?.created_at ? new Date(entry.created_at).toLocaleString("vi-VN") : ""}
+                            </span>
+                          </div>
+                          {entry?.note && <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{entry.note}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {bankUnpaid && (
+              <VietQrPaymentCard
+                orderId={order?.id}
+                className="mt-6"
+                onPaid={() => loadOrder({ silent: true })}
+              />
+            )}
+
+            <OrderTrackingTimeline
+              order={order}
+              tracking={tracking}
+              refreshing={trackingRefreshing}
+              onRefresh={() => loadTracking()}
+            />
+
           </section>
 
           <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -843,7 +932,7 @@ export default function OrderDetailPage() {
 
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">Trạng thái</span>
-                <span className="font-black text-orange-600">{order.payment_status === "paid" ? "Đã thanh toán" : "Chưa thanh toán"}</span>
+                <span className="font-black text-orange-600">{paymentPaid ? "Đã thanh toán" : bankPayment ? "Chờ thanh toán" : "Chưa thanh toán"}</span>
               </div>
 
               <div className="my-4 border-t border-slate-100" />

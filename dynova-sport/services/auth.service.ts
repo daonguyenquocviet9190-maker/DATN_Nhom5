@@ -2,6 +2,53 @@ const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
 ).replace(/\/$/, "");
 
+const AUTH_TOKEN_KEYS = [
+  "dynova_auth_token",
+  "auth_token",
+  "token",
+  "access_token",
+];
+
+const AUTH_USER_KEYS = [
+  "dynova_current_user",
+  "dynova_auth_user",
+  "dynova_user",
+  "auth_user",
+  "currentUser",
+  "current_user",
+  "user",
+];
+
+const AUTH_MISC_KEYS = [
+  "userDisplayName",
+  "dynova_remember_login",
+  "isLoggedIn",
+  "is_logged_in",
+];
+
+const LOGOUT_MARKER_KEY = "dynova_explicit_logout";
+
+function removeAuthDataFromStorage(storage: Storage) {
+  [
+    ...AUTH_TOKEN_KEYS,
+    ...AUTH_USER_KEYS,
+    ...AUTH_MISC_KEYS,
+  ].forEach((key) => storage.removeItem(key));
+}
+
+function getValueFromStorage(
+  storage: Storage,
+  keys: string[]
+): string {
+  for (const key of keys) {
+    const value = storage.getItem(key);
+
+    if (value) return value;
+  }
+
+  return "";
+}
+
 export type AuthRole = "admin" | "customer";
 
 export type AuthUser = {
@@ -194,17 +241,34 @@ export function saveAuthSession({
   if (typeof window === "undefined") return;
 
   const cleanUser = normalizeAuthUser(user);
+  const storage = remember ? localStorage : sessionStorage;
 
-  localStorage.setItem("dynova_auth_token", token || "");
-  localStorage.setItem("auth_token", token || "");
-  localStorage.setItem("token", token || "");
+  removeAuthDataFromStorage(localStorage);
+  removeAuthDataFromStorage(sessionStorage);
 
-  localStorage.setItem("dynova_current_user", JSON.stringify(cleanUser));
-  localStorage.setItem("currentUser", JSON.stringify(cleanUser));
-  localStorage.setItem("dynova_user", JSON.stringify(cleanUser));
-  localStorage.setItem("userDisplayName", cleanUser.fullName || "");
+  localStorage.removeItem(LOGOUT_MARKER_KEY);
+  sessionStorage.removeItem(LOGOUT_MARKER_KEY);
 
-  localStorage.setItem("dynova_remember_login", remember ? "1" : "0");
+  AUTH_TOKEN_KEYS.forEach((key) => {
+    storage.setItem(key, token || "");
+  });
+
+  AUTH_USER_KEYS.forEach((key) => {
+    storage.setItem(key, JSON.stringify(cleanUser));
+  });
+
+  storage.setItem(
+    "userDisplayName",
+    cleanUser.fullName || ""
+  );
+
+  storage.setItem("isLoggedIn", "true");
+  storage.setItem("is_logged_in", "1");
+
+  localStorage.setItem(
+    "dynova_remember_login",
+    remember ? "1" : "0"
+  );
 
   window.dispatchEvent(new Event("dynova:auth"));
   window.dispatchEvent(new Event("dynova:storage"));
@@ -213,42 +277,49 @@ export function saveAuthSession({
 export function getAuthToken(): string {
   if (typeof window === "undefined") return "";
 
+  const explicitlyLoggedOut =
+    localStorage.getItem(LOGOUT_MARKER_KEY) === "1" ||
+    sessionStorage.getItem(LOGOUT_MARKER_KEY) === "1";
+
+  if (explicitlyLoggedOut) return "";
+
   return (
-    localStorage.getItem("dynova_auth_token") ||
-    localStorage.getItem("auth_token") ||
-    localStorage.getItem("token") ||
-    ""
+    getValueFromStorage(localStorage, AUTH_TOKEN_KEYS) ||
+    getValueFromStorage(sessionStorage, AUTH_TOKEN_KEYS)
   );
 }
 
 export function getStoredAuthUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
 
-  return (
-    safeJsonParse<AuthUser>(localStorage.getItem("dynova_current_user")) ||
-    safeJsonParse<AuthUser>(localStorage.getItem("currentUser")) ||
-    safeJsonParse<AuthUser>(localStorage.getItem("dynova_user")) ||
-    null
-  );
+  if (!getAuthToken()) return null;
+
+  for (const storage of [localStorage, sessionStorage]) {
+    for (const key of AUTH_USER_KEYS) {
+      const user = safeJsonParse<AuthUser>(
+        storage.getItem(key)
+      );
+
+      if (user) return user;
+    }
+  }
+
+  return null;
 }
 
 export function clearAuthSession() {
   if (typeof window === "undefined") return;
 
-  [
-    "dynova_auth_token",
-    "auth_token",
-    "token",
-    "dynova_current_user",
-    "currentUser",
-    "dynova_user",
-    "userDisplayName",
-    "dynova_remember_login",
-  ].forEach((key) => localStorage.removeItem(key));
+  removeAuthDataFromStorage(localStorage);
+  removeAuthDataFromStorage(sessionStorage);
+
+  localStorage.setItem(LOGOUT_MARKER_KEY, "1");
+  sessionStorage.setItem(LOGOUT_MARKER_KEY, "1");
 
   window.dispatchEvent(new Event("dynova:auth"));
   window.dispatchEvent(new Event("dynova:storage"));
   window.dispatchEvent(new Event("dynova:wishlist"));
+  window.dispatchEvent(new Event("dynova:cart"));
 }
 
 export async function loginWithApi(payload: LoginPayload): Promise<LoginResult> {
@@ -279,12 +350,12 @@ export async function loginWithApi(payload: LoginPayload): Promise<LoginResult> 
   const rawUser = extractUser(data);
 
   if (!token) {
-    throw createApiError("API đăng nhập chưa trả token.", response.status, data);
+    throw createApiError("Không thể hoàn tất đăng nhập. Vui lòng thử lại.", response.status, data);
   }
 
   if (!rawUser) {
     throw createApiError(
-      "API đăng nhập chưa trả thông tin user.",
+      "Không thể tải thông tin tài khoản sau khi đăng nhập.",
       response.status,
       data
     );
@@ -345,7 +416,7 @@ export async function registerWithApi(
 
   if (!rawUser) {
     throw createApiError(
-      "API đăng ký chưa trả thông tin user.",
+      "Không thể tải thông tin tài khoản sau khi đăng ký.",
       response.status,
       data
     );
@@ -433,10 +504,13 @@ export async function fetchMeWithApi(): Promise<AuthUser | null> {
   const rawUser = extractUser(data) || data?.data || data;
   const user = normalizeAuthUser(rawUser);
 
+  const remember =
+    localStorage.getItem("dynova_remember_login") === "1";
+
   saveAuthSession({
     token,
     user,
-    remember: true,
+    remember,
   });
 
   return user;

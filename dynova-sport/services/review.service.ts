@@ -21,6 +21,7 @@ export type ApiReview = {
   user_id?: number | string | null;
   product_id?: number | string | null;
   order_id?: number | string | null;
+  order_item_id?: number | string | null;
   rating: number;
   content: string;
   status?: string;
@@ -95,9 +96,24 @@ export async function getProductReviews(
   };
 }
 
+
+export async function getReviewEligibility(productId: number | string) {
+  const response = await apiFetch<any>(
+    `/reviews/eligibility?product_id=${encodeURIComponent(String(productId))}`
+  );
+
+  return {
+    can_review: Boolean(response?.data?.can_review),
+    order_id: response?.data?.order_id ?? null,
+    order_item_id: response?.data?.order_item_id ?? null,
+    reason: response?.data?.reason || "",
+  };
+}
+
 export async function createReview(payload: {
   product_id: number | string;
   order_id?: number | string | null;
+  order_item_id?: number | string | null;
   rating: number;
   content: string;
 }) {

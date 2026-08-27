@@ -153,6 +153,9 @@ function getAuthHeaders() {
     localStorage.getItem("dynova_auth_token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("token") ||
+    sessionStorage.getItem("dynova_auth_token") ||
+    sessionStorage.getItem("auth_token") ||
+    sessionStorage.getItem("token") ||
     "";
 
   return {
@@ -382,9 +385,14 @@ function getItemSize(item, catalogMaps = {}) {
     item?.option_size ||
     item?.attributes_size ||
     getOptionValue(item, ["size", "kich_thuoc", "kích thước"]) ||
+    item?.product_variant?.size?.name ||
     item?.product_variant?.size ||
+    item?.productVariant?.size?.name ||
     item?.productVariant?.size ||
+    item?.variant?.size?.name ||
     item?.variant?.size ||
+    catalogVariant?.size?.name ||
+    catalogVariant?.size_name ||
     catalogVariant?.size ||
     "Freesize"
   );
@@ -400,9 +408,14 @@ function getItemColor(item, catalogMaps = {}) {
     item?.option_color ||
     item?.attributes_color ||
     getOptionValue(item, ["color", "mau", "màu", "mau_sac", "màu sắc"]) ||
+    item?.product_variant?.color?.name ||
     item?.product_variant?.color ||
+    item?.productVariant?.color?.name ||
     item?.productVariant?.color ||
+    item?.variant?.color?.name ||
     item?.variant?.color ||
+    catalogVariant?.color?.name ||
+    catalogVariant?.color_name ||
     catalogVariant?.color ||
     "Mặc định"
   );
@@ -470,6 +483,19 @@ function normalizeStatus(status = "") {
   return "pending";
 }
 
+function getDisplayStatus(order) {
+  const status = normalizeStatus(order?.status);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+
+  if (bankPayment && !paymentPaid && status !== "cancelled") {
+    return "waiting_bank_transfer";
+  }
+
+  return status;
+}
+
 function getStatusMeta(status) {
   const normalized = normalizeStatus(status);
 
@@ -518,7 +544,6 @@ function getPaymentLabel(method = "") {
     COD: "Thanh toán khi nhận hàng",
     BANK: "Chuyển khoản ngân hàng",
     VNPAY: "VNPAY",
-    MOMO: "MoMo",
   };
 
   return map[normalized] || method || "Chưa xác định";
@@ -536,14 +561,19 @@ function getOrderItems(order) {
 }
 
 function getOrderTotal(order) {
-  return Number(
-    order?.grand_total ||
-      order?.total ||
-      order?.total_price ||
-      order?.final_total ||
-      order?.subtotal ||
-      0
-  );
+  const rawTotal =
+    order?.grand_total ??
+    order?.total_amount ??
+    order?.final_total ??
+    order?.total ??
+    order?.total_price ??
+    order?.payable_total ??
+    order?.subtotal ??
+    0;
+
+  const total = Number(rawTotal);
+
+  return Number.isFinite(total) ? total : 0;
 }
 
 function getOrderPhone(order) {
@@ -612,16 +642,29 @@ function getItemQuantity(item) {
 }
 
 function getItemPrice(item) {
-  return Number(item?.price || item?.unit_price || item?.sale_price || 0);
+  const rawPrice =
+    item?.price ??
+    item?.unit_price ??
+    item?.snapshot_price ??
+    item?.sale_price ??
+    0;
+
+  const price = Number(rawPrice);
+
+  return Number.isFinite(price) ? price : 0;
 }
 
 function getItemTotal(item) {
-  return Number(
-    item?.total ||
-      item?.subtotal ||
-      item?.line_total ||
-      getItemPrice(item) * getItemQuantity(item)
-  );
+  const rawTotal =
+    item?.line_total ??
+    item?.subtotal ??
+    item?.total_price ??
+    item?.total ??
+    getItemPrice(item) * getItemQuantity(item);
+
+  const total = Number(rawTotal);
+
+  return Number.isFinite(total) ? total : 0;
 }
 
 function getOrderCode(order) {
@@ -641,13 +684,16 @@ function getCreatedDate(order) {
 }
 
 function canCancelOrder(order) {
-  const status = normalizeStatus(order?.status);
+  const status = getDisplayStatus(order);
+  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
+  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
+  const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
 
-  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status);
+  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status) && !(bankPayment && paymentPaid);
 }
 
 function getStepDone(order, stepKey) {
-  const status = normalizeStatus(order?.status);
+  const status = getDisplayStatus(order);
 
   if (status === "cancelled") return false;
 
@@ -773,7 +819,7 @@ function EmptyState({ hasFilter }) {
       <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-slate-500">
         {hasFilter
           ? "Bạn thử đổi bộ lọc hoặc tìm bằng mã đơn khác nha."
-          : "Bạn có thể quay lại cửa hàng để chọn sản phẩm và trải nghiệm luồng đặt hàng đầy đủ."}
+          : "Khám phá các sản phẩm phù hợp và theo dõi đơn hàng của bạn tại đây."}
       </p>
 
       <Link
@@ -788,12 +834,15 @@ function EmptyState({ hasFilter }) {
 }
 
 function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
-  const statusMeta = getStatusMeta(order.status);
+  const statusMeta = getStatusMeta(getDisplayStatus(order));
   const StatusIcon = statusMeta.icon;
   const items = getOrderItems(order);
 
   return (
-    <article className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/80 md:p-6">
+    <article
+      id={`order-${order.id}`}
+      className="scroll-mt-28 rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/80 md:p-6"
+    >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -924,6 +973,8 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
         </div>
       </div>
 
+
+
       <div className="mt-5 grid gap-2 sm:grid-cols-4">
         {orderSteps.map((step, index) => {
           const done = getStepDone(order, step.key);
@@ -976,7 +1027,7 @@ export default function OrdersPage() {
   const computedStats = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
-        const status = normalizeStatus(order.status);
+        const status = getDisplayStatus(order);
 
         acc.total += 1;
         acc[status] = Number(acc[status] || 0) + 1;
@@ -997,7 +1048,7 @@ export default function OrdersPage() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      const status = normalizeStatus(order.status);
+      const status = getDisplayStatus(order);
       const code = getOrderCode(order).toLowerCase();
       const phone = String(getOrderPhone(order) || "").toLowerCase();
       const customer = String(

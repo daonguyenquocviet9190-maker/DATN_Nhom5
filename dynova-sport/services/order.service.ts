@@ -26,6 +26,88 @@ export type OrderItem = {
   line_total?: number;
 };
 
+export type OrderStatusHistory = {
+  id?: number | string;
+  from_status?: string | null;
+  to_status?: string | null;
+  source?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+};
+
+export type OrderTrackingLog = {
+  status?: string | null;
+  status_label?: string | null;
+  description?: string | null;
+  updated_date?: string | null;
+  source?: string | null;
+  location?: string | null;
+  is_simulated?: boolean;
+};
+
+export type DeliveryMapPoint = {
+  label?: string | null;
+  address?: string | null;
+  progress?: number;
+};
+
+export type DeliverySimulation = {
+  enabled?: boolean;
+  auto_start?: boolean;
+  status?: string | null;
+  running?: boolean;
+  paused?: boolean;
+  completed?: boolean;
+  progress?: number;
+  elapsed_seconds?: number;
+  duration_seconds?: number;
+  speed?: number;
+  current_status?: string | null;
+  current_status_label?: string | null;
+  started_at?: string | null;
+  paused_at?: string | null;
+  server_time?: string | null;
+  message?: string | null;
+};
+
+export type DeliveryMap = {
+  mode?: string | null;
+  environment?: string | null;
+  is_live_gps?: boolean;
+  simulated?: boolean;
+  status?: string | null;
+  status_label?: string | null;
+  progress?: number;
+  direction?: "forward" | "return" | string;
+  current_location?: string | null;
+  updated_at?: string | null;
+  origin?: DeliveryMapPoint | null;
+  pickup_hub?: DeliveryMapPoint | null;
+  sorting_hub?: DeliveryMapPoint | null;
+  delivery_hub?: DeliveryMapPoint | null;
+  destination?: DeliveryMapPoint | null;
+  checkpoints?: DeliveryMapPoint[];
+  disclaimer?: string | null;
+  simulation?: DeliverySimulation | null;
+};
+
+export type OrderTracking = {
+  order_code?: string | null;
+  status?: string | null;
+  status_label?: string | null;
+  leadtime?: string | null;
+  expected_delivery_time?: string | null;
+  finish_date?: string | null;
+  updated_date?: string | null;
+  current_warehouse_id?: number | string | null;
+  next_warehouse_id?: number | string | null;
+  logs?: OrderTrackingLog[];
+  sync_error?: string | null;
+  environment?: string | null;
+  simulated?: boolean;
+  delivery_map?: DeliveryMap | null;
+};
+
 export type Order = {
   id: number | string;
   order_code?: string;
@@ -63,6 +145,16 @@ export type Order = {
   created_at?: string;
   createdAt?: string;
   updated_at?: string;
+
+  shipping_provider?: string | null;
+  tracking_code?: string | null;
+  tracking?: OrderTracking | null;
+  ghn_status?: string | null;
+  ghn_expected_delivery_at?: string | null;
+  ghn_last_synced_at?: string | null;
+  shipping_status_history?: any[];
+  status_history?: OrderStatusHistory[];
+  payment_transactions?: any[];
 
   items?: OrderItem[];
   order_items?: OrderItem[];
@@ -324,4 +416,9 @@ export async function getOrders(
 
 export async function getOrderById(id: number | string) {
   return getOrderDetail(id);
+}
+
+export async function getOrderTracking(id: number | string) {
+  const response: any = await apiFetch(`/orders/${id}/tracking`);
+  return response?.data || {};
 }

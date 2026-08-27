@@ -1,0 +1,8 @@
+DYNOVA SPORT API - FIX FINAL 2026-08-21
+
+- Order dùng transaction + lockForUpdate và ưu tiên cart_items của user trong database.
+- Shipping master data dùng GHN khi cấu hình; có nguồn địa chỉ dự phòng khi GHN chưa sẵn sàng.
+- Không trả 503 chỉ vì thiếu GHN token ở API danh sách địa chỉ.
+- Thêm API kiểm tra điều kiện verified review.
+- Home API trả sold_count, average_rating, reviews_count, variants và tồn kho thật.
+- PHP source đã lint không lỗi cú pháp.

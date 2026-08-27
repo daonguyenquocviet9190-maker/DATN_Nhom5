@@ -2,19 +2,62 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
   Eye,
   EyeOff,
+  Loader2,
   Lock,
   Mail,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 
-import { loginWithApi, normalizeAuthRole } from "@/services/auth.service";
+import {
+  loginWithApi,
+  normalizeAuthRole,
+} from "@/services/auth.service";
+
+function isSafeInternalPath(value) {
+  if (typeof value !== "string") return false;
+
+  const path = value.trim();
+
+  return (
+    path.startsWith("/") &&
+    !path.startsWith("//") &&
+    !path.includes("\\")
+  );
+}
+
+function resolveRedirectPath(role, redirectUrl) {
+  const safeRedirect = isSafeInternalPath(redirectUrl)
+    ? redirectUrl
+    : "";
+
+  if (role === "admin") {
+    return safeRedirect.startsWith("/admin")
+      ? safeRedirect
+      : "/admin";
+  }
+
+  if (safeRedirect && !safeRedirect.startsWith("/admin")) {
+    return safeRedirect;
+  }
+
+  return "/profile";
+}
+
+function getErrorMessage(error, fallback) {
+  return (
+    error?.data?.message ||
+    error?.data?.error ||
+    error?.message ||
+    fallback
+  );
+}
 
 function Field({
   label,
@@ -25,6 +68,7 @@ function Field({
   placeholder,
   rightSlot,
   autoComplete,
+  disabled,
 }) {
   return (
     <label className="block">
@@ -40,12 +84,13 @@ function Field({
 
         <input
           required
+          disabled={disabled}
           type={type}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
           autoComplete={autoComplete}
-          className="h-[54px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm font-bold text-slate-950 outline-none transition duration-300 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10"
+          className="h-[54px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm font-bold text-slate-950 outline-none transition duration-300 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-60"
         />
 
         {rightSlot}
@@ -54,6 +99,7 @@ function Field({
   );
 }
 
+<<<<<<< HEAD
 function resolveRedirectPath(role, redirectUrl) {
   const safeRedirect =
     typeof redirectUrl === "string" && redirectUrl.startsWith("/")
@@ -83,6 +129,8 @@ function getErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+=======
+>>>>>>> main
 export default function LoginPage() {
   const router = useRouter();
 
@@ -101,9 +149,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setRedirectUrl(params.get("redirect") || "");
+    const redirect = params.get("redirect") || "";
+
+    setRedirectUrl(
+      isSafeInternalPath(redirect)
+        ? redirect
+        : ""
+    );
   }, []);
 
+<<<<<<< HEAD
   const redirectLabel = useMemo(() => {
     if (redirectUrl.includes("checkout")) return "thanh toán";
     if (redirectUrl.includes("profile")) return "hồ sơ";
@@ -112,9 +167,11 @@ export default function LoginPage() {
     return "tài khoản";
   }, [redirectUrl]);
 
+=======
+>>>>>>> main
   const updateForm = (key, value) => {
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       [key]: value,
     }));
 
@@ -127,22 +184,26 @@ export default function LoginPage() {
 
     if (loading) return;
 
-    setError("");
-    setSuccessText("");
-
-    const email = form.email.trim();
+    const email = form.email.trim().toLowerCase();
 
     if (!email) {
       setError("Vui lòng nhập email.");
       return;
     }
 
-    if (!form.password.trim()) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Email chưa đúng định dạng.");
+      return;
+    }
+
+    if (!form.password) {
       setError("Vui lòng nhập mật khẩu.");
       return;
     }
 
     setLoading(true);
+    setError("");
+    setSuccessText("");
 
     try {
       const auth = await loginWithApi({
@@ -156,15 +217,26 @@ export default function LoginPage() {
 
       setSuccessText(
         role === "admin"
+<<<<<<< HEAD
           ? "Đăng nhập quản trị thành công. Đang chuyển đến Admin..."
           : "Đăng nhập thành công. Đang chuyển trang..."
+=======
+          ? "Đăng nhập quản trị thành công."
+          : "Đăng nhập thành công."
+>>>>>>> main
       );
 
       window.setTimeout(() => {
         router.replace(nextPath);
-      }, 650);
-    } catch (err) {
-      setError(getErrorMessage(err, "Email hoặc mật khẩu không đúng."));
+        router.refresh();
+      }, 450);
+    } catch (requestError) {
+      setError(
+        getErrorMessage(
+          requestError,
+          "Email hoặc mật khẩu không đúng."
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -225,28 +297,52 @@ export default function LoginPage() {
                 DNV
               </div>
 
+<<<<<<< HEAD
               <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-orange-500">
                 Welcome back
               </p>
+=======
+              <div className="text-left">
+                <p className="text-xl font-black uppercase tracking-[-0.04em] text-slate-950">
+                  Dynova
+                </p>
+
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-orange-500">
+                  Sport Shop
+                </p>
+              </div>
+            </Link>
+          </div>
+>>>>>>> main
 
               <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
                 Đăng nhập tài khoản
               </h2>
 
               <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
+<<<<<<< HEAD
                 Đăng nhập để tiếp tục {redirectLabel}. Hệ thống sẽ tự kiểm tra
                 quyền admin hoặc customer.
+=======
+                Truy cập tài khoản và tiếp tục mua sắm tại Dynova Sport.
+>>>>>>> main
               </p>
             </div>
 
             {error && (
-              <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-600">
+              <div
+                role="alert"
+                className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-600"
+              >
                 {error}
               </div>
             )}
 
             {successText && (
-              <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold leading-6 text-emerald-600">
+              <div
+                role="status"
+                className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold leading-6 text-emerald-600"
+              >
                 {successText}
               </div>
             )}
@@ -257,9 +353,12 @@ export default function LoginPage() {
                 icon={Mail}
                 type="email"
                 value={form.email}
-                onChange={(event) => updateForm("email", event.target.value)}
-                placeholder="Nhập email"
+                onChange={(event) =>
+                  updateForm("email", event.target.value)
+                }
+                placeholder="name@email.com"
                 autoComplete="email"
+                disabled={loading}
               />
 
               <Field
@@ -272,16 +371,33 @@ export default function LoginPage() {
                 }
                 placeholder="Nhập mật khẩu"
                 autoComplete="current-password"
+                disabled={loading}
                 rightSlot={
                   <button
                     type="button"
+<<<<<<< HEAD
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
                     aria-label={
                       showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"
+=======
+                    disabled={loading}
+                    onClick={() =>
+                      setShowPassword((previous) => !previous)
+                    }
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500 disabled:opacity-50"
+                    aria-label={
+                      showPassword
+                        ? "Ẩn mật khẩu"
+                        : "Hiện mật khẩu"
+>>>>>>> main
                     }
                   >
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    {showPassword ? (
+                      <EyeOff size={17} />
+                    ) : (
+                      <Eye size={17} />
+                    )}
                   </button>
                 }
               />
@@ -291,11 +407,16 @@ export default function LoginPage() {
                   <input
                     type="checkbox"
                     checked={form.remember}
+                    disabled={loading}
                     onChange={(event) =>
-                      updateForm("remember", event.target.checked)
+                      updateForm(
+                        "remember",
+                        event.target.checked
+                      )
                     }
                     className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
                   />
+
                   Ghi nhớ đăng nhập
                 </label>
 
@@ -314,8 +435,13 @@ export default function LoginPage() {
               >
                 {loading ? (
                   <>
+<<<<<<< HEAD
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                     Đang kiểm tra...
+=======
+                    <Loader2 size={17} className="animate-spin" />
+                    Đang đăng nhập...
+>>>>>>> main
                   </>
                 ) : (
                   <>
@@ -327,9 +453,17 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
+<<<<<<< HEAD
               <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
               Admin sẽ được chuyển đến trang quản trị. Customer sẽ vào hồ sơ
               hoặc trang đang cần đăng nhập.
+=======
+              <ShieldCheck
+                className="mr-2 inline text-emerald-500"
+                size={15}
+              />
+              Tài khoản được bảo vệ trong suốt quá trình sử dụng.
+>>>>>>> main
             </div>
 
             <p className="mt-6 text-center text-sm text-slate-500">

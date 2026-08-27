@@ -3,53 +3,189 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    private function normalizeEmail(?string $email): string
+    {
+        return mb_strtolower(trim((string) $email));
+    }
+
+    private function normalizePhone(?string $phone): string
+    {
+        $phone = preg_replace('/[\s.\-()]/', '', (string) $phone);
+
+        if (str_starts_with($phone, '+84')) {
+            $phone = '0' . substr($phone, 3);
+        }
+
+        return $phone;
+    }
+
     private function userResource(User $user): array
 {
+    $user->loadMissing('role:id,name');
+
+    $rawRole = mb_strtolower(
+        trim((string) ($user->role?->name ?? 'customer'))
+    );
+
+    $adminRoles = [
+        'admin',
+        'administrator',
+        'quản trị',
+        'quản trị viên',
+        'quan tri',
+        'quan tri vien',
+    ];
+
+    $roleName = in_array($rawRole, $adminRoles, true)
+        ? 'admin'
+        : 'customer';
+
     return [
         'id' => $user->id,
+        'role_id' => $user->role_id,
         'name' => $user->name ?: $user->full_name,
         'fullName' => $user->full_name ?: $user->name,
+        'full_name' => $user->full_name ?: $user->name,
         'email' => $user->email,
         'phone' => $user->phone,
-        'role' => $user->role ?: 'customer',
+        'role' => $roleName,
+        'role_name' => $roleName,
+        'role_data' => $user->role
+            ? [
+                'id' => $user->role->id,
+                'name' => $user->role->name,
+            ]
+            : null,
         'created_at' => $user->created_at,
     ];
 }
 
-    public function register(Request $request)
+
+    private function customerRole(): Role
+{
+    $role = Role::query()
+        ->where(function ($query) {
+            $query
+                ->whereRaw('LOWER(name) = ?', ['customer'])
+                ->orWhere('name', 'Khách hàng')
+                ->orWhere('name', 'khách hàng');
+        })
+        ->first();
+
+    if (!$role) {
+        throw ValidationException::withMessages([
+            'role' => [
+                'Hệ thống chưa có quyền khách hàng.',
+            ],
+        ]);
+    }
+
+    return $role;
+}
+
+
+    private function tokenName(Request $request): string
     {
-        $validated = $request->validate([
-            'fullName' => ['nullable', 'string', 'max:255'],
-            'name' => ['nullable', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'phone' => ['required', 'string', 'max:20'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
-        ], [
-            'email.unique' => 'Email này đã được sử dụng.',
-            'password.confirmed' => 'Mật khẩu xác nhận không khớp.',
+        $device = sha1(
+            (string) $request->userAgent() .
+            '|' .
+            (string) $request->ip()
+        );
+
+        return 'dynova-web-' . substr($device, 0, 16);
+    }
+
+    public function register(Request $request): JsonResponse
+    {
+        $request->merge([
+            'email' => $this->normalizeEmail($request->input('email')),
+            'phone' => $this->normalizePhone($request->input('phone')),
         ]);
 
-       $displayName = $validated['fullName'] ?? $validated['name'] ?? 'Khách hàng';
+        $validated = $request->validate([
+            'fullName' => [
+                'nullable',
+                'required_without:name',
+                'string',
+                'min:2',
+                'max:100',
+            ],
+            'name' => [
+                'nullable',
+                'required_without:fullName',
+                'string',
+                'min:2',
+                'max:100',
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email'),
+            ],
+            'phone' => [
+                'required',
+                'regex:/^0[0-9]{9}$/',
+                Rule::unique('users', 'phone'),
+            ],
+            'password' => [
+                'required',
+                'confirmed',
+                Password::min(8)->letters()->numbers(),
+            ],
+        ], [
+            'fullName.required_without' => 'Vui lòng nhập họ và tên.',
+            'name.required_without' => 'Vui lòng nhập họ và tên.',
+            'fullName.min' => 'Họ và tên cần tối thiểu 2 ký tự.',
+            'name.min' => 'Họ và tên cần tối thiểu 2 ký tự.',
+            'email.required' => 'Vui lòng nhập email.',
+            'email.email' => 'Email chưa đúng định dạng.',
+            'email.unique' => 'Email này đã được sử dụng.',
+            'phone.required' => 'Vui lòng nhập số điện thoại.',
+            'phone.regex' => 'Số điện thoại chưa đúng định dạng.',
+            'phone.unique' => 'Số điện thoại này đã được sử dụng.',
+            'password.required' => 'Vui lòng nhập mật khẩu.',
+            'password.confirmed' => 'Mật khẩu xác nhận không khớp.',
+            'password.min' => 'Mật khẩu cần tối thiểu 8 ký tự.',
+        ]);
 
-            $user = User::create([
+        $displayName = trim((string) ($validated['fullName'] ?? $validated['name']));
+        $customerRole = $this->customerRole();
+
+        $user = DB::transaction(function () use (
+            $validated,
+            $displayName,
+            $customerRole
+        ) {
+            return User::query()->create([
+                'role_id' => $customerRole->id,
                 'name' => $displayName,
                 'full_name' => $displayName,
                 'email' => $validated['email'],
                 'phone' => $validated['phone'],
-                'role' => 'customer',
-                'password' => Hash::make($validated['password']),
+                'password' => $validated['password'],
             ]);
+        });
 
-        $token = $user->createToken('dynova-web-token')->plainTextToken;
+        $user->load('role:id,name');
+
+        $token = $user
+            ->createToken($this->tokenName($request))
+            ->plainTextToken;
 
         return response()->json([
             'success' => true,
@@ -61,25 +197,68 @@ class AuthController extends Controller
         ], 201);
     }
 
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
+        $request->merge([
+            'email' => $this->normalizeEmail($request->input('email')),
+        ]);
+
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
             'remember' => ['nullable', 'boolean'],
+        ], [
+            'email.required' => 'Vui lòng nhập email.',
+            'email.email' => 'Email chưa đúng định dạng.',
+            'password.required' => 'Vui lòng nhập mật khẩu.',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $user = User::query()
+            ->with('role:id,name')
+            ->where('email', $validated['email'])
+            ->first();
 
-        if (!$user || !Hash::check($validated['password'], $user->password)) {
+        if (
+            !$user ||
+            !$user->password ||
+            !Hash::check($validated['password'], $user->password)
+        ) {
             throw ValidationException::withMessages([
                 'email' => ['Email hoặc mật khẩu không đúng.'],
             ]);
         }
 
-        $user->tokens()->where('name', 'dynova-web-token')->delete();
+        if (
+            array_key_exists('is_active', $user->getAttributes()) &&
+            !$user->is_active
+        ) {
+            throw ValidationException::withMessages([
+                'email' => ['Tài khoản đã bị khóa.'],
+            ]);
+        }
 
-        $token = $user->createToken('dynova-web-token')->plainTextToken;
+        if (
+            array_key_exists('status', $user->getAttributes()) &&
+            in_array(
+                mb_strtolower((string) $user->status),
+                ['inactive', 'blocked', 'locked'],
+                true
+            )
+        ) {
+            throw ValidationException::withMessages([
+                'email' => ['Tài khoản đã bị khóa.'],
+            ]);
+        }
+
+        $tokenName = $this->tokenName($request);
+
+        $user->tokens()
+            ->where('name', $tokenName)
+            ->delete();
+
+        $token = $user
+            ->createToken($tokenName)
+            ->plainTextToken;
 
         return response()->json([
             'success' => true,
@@ -91,18 +270,45 @@ class AuthController extends Controller
         ]);
     }
 
-    public function forgotPassword(Request $request)
+    public function forgotPassword(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'email' => ['required', 'email'],
+        $request->merge([
+            'email' => $this->normalizeEmail($request->input('email')),
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ], [
+            'email.required' => 'Vui lòng nhập email.',
+            'email.email' => 'Email chưa đúng định dạng.',
+        ]);
 
+        $user = User::query()
+            ->where('email', $validated['email'])
+            ->first();
+
+        // Không tiết lộ email có tồn tại hay không.
         if (!$user) {
-            throw ValidationException::withMessages([
-                'email' => ['Email này chưa tồn tại trong hệ thống.'],
+            return response()->json([
+                'success' => true,
+                'message' => 'Nếu email tồn tại, mã OTP sẽ được gửi đến hộp thư của bạn.',
+                'data' => [],
             ]);
+        }
+
+        $existing = DB::table('password_reset_tokens')
+            ->where('email', $validated['email'])
+            ->first();
+
+        if ($existing && $existing->created_at) {
+            $seconds = Carbon::parse($existing->created_at)->diffInSeconds(now());
+
+            if ($seconds < 60) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vui lòng chờ khoảng ' . (60 - $seconds) . ' giây trước khi yêu cầu mã OTP mới.',
+                ], 429);
+            }
         }
 
         $otp = (string) random_int(100000, 999999);
@@ -115,25 +321,67 @@ class AuthController extends Controller
             ]
         );
 
+        try {
+            Mail::send(
+                'emails.password-reset-otp',
+                [
+                    'otp' => $otp,
+                    'userName' => $user->full_name ?: $user->name ?: 'Khách hàng',
+                    'expiresInMinutes' => 10,
+                ],
+                function ($message) use ($validated) {
+                    $message
+                        ->to($validated['email'])
+                        ->subject('Mã OTP đặt lại mật khẩu - Dynova Sport');
+                }
+            );
+        } catch (\Throwable $e) {
+            DB::table('password_reset_tokens')
+                ->where('email', $validated['email'])
+                ->delete();
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể gửi email OTP. Vui lòng kiểm tra cấu hình SMTP của hệ thống và thử lại.',
+            ], 503);
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Mã OTP đặt lại mật khẩu đã được tạo.',
-            'data' => [
-                // demo DATN: trả OTP để test nhanh
-                // lên production thì bỏ dòng này và gửi OTP qua email
-                'dev_otp' => $otp,
-            ],
+            'message' => 'Mã OTP đã được gửi đến email của bạn. Mã có hiệu lực trong 10 phút.',
+            'data' => [],
         ]);
     }
 
-    public function resetPassword(Request $request)
+    public function resetPassword(Request $request): JsonResponse
     {
+        $request->merge([
+            'email' => $this->normalizeEmail($request->input('email')),
+            'otp' => trim((string) (
+                $request->input('otp')
+                ?? $request->input('token')
+                ?? $request->input('code')
+            )),
+        ]);
+
         $validated = $request->validate([
             'email' => ['required', 'email'],
-            'otp' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
+            'otp' => ['required', 'digits:6'],
+            'password' => [
+                'required',
+                'confirmed',
+                Password::min(8)->letters()->numbers(),
+            ],
         ], [
+            'email.required' => 'Vui lòng nhập email.',
+            'email.email' => 'Email chưa đúng định dạng.',
+            'otp.required' => 'Vui lòng nhập mã OTP.',
+            'otp.digits' => 'Mã OTP phải gồm 6 chữ số.',
+            'password.required' => 'Vui lòng nhập mật khẩu mới.',
             'password.confirmed' => 'Mật khẩu xác nhận không khớp.',
+            'password.min' => 'Mật khẩu cần tối thiểu 8 ký tự.',
         ]);
 
         $record = DB::table('password_reset_tokens')
@@ -164,17 +412,27 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::where('email', $validated['email'])->firstOrFail();
-
-        $user->update([
-            'password' => Hash::make($validated['password']),
-        ]);
-
-        DB::table('password_reset_tokens')
+        $user = User::query()
             ->where('email', $validated['email'])
-            ->delete();
+            ->first();
 
-        $user->tokens()->delete();
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['Không thể đặt lại mật khẩu.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($validated, $user) {
+            $user->update([
+                'password' => $validated['password'],
+            ]);
+
+            DB::table('password_reset_tokens')
+                ->where('email', $validated['email'])
+                ->delete();
+
+            $user->tokens()->delete();
+        });
 
         return response()->json([
             'success' => true,
@@ -182,19 +440,24 @@ class AuthController extends Controller
         ]);
     }
 
-    public function me(Request $request)
+    public function me(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $user->loadMissing('role:id,name');
+
         return response()->json([
             'success' => true,
             'data' => [
-                'user' => $this->userResource($request->user()),
+                'user' => $this->userResource($user),
             ],
         ]);
     }
 
-    public function logout(Request $request)
+    public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()?->delete();
+        $request->user()
+            ->currentAccessToken()
+            ?->delete();
 
         return response()->json([
             'success' => true,

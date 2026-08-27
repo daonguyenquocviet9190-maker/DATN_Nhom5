@@ -16,12 +16,10 @@ import {
   Mail,
   MapPin,
   Menu,
-  MessageCircle,
   PackageCheck,
   Phone,
   RotateCcw,
   Search,
-  Send,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -31,41 +29,17 @@ import {
   X,
 } from "lucide-react";
 
+import { getCart } from "@/utils/shopStorage";
 import {
-  getCart,
-  getCurrentUser,
-  getSettings,
-  logoutUser,
-} from "@/utils/shopStorage";
+  getAuthToken,
+  getStoredAuthUser,
+  logoutWithApi,
+} from "@/services/auth.service";
 import { getWishlist as getWishlistApi } from "@/services/wishlist.service";
+import { getDefaultPublicSettings, getPublicSettings } from "@/services/settings.service";
 import HeaderSearchPopup from "@/components/header/HeaderSearchPopup";
 
 const BRAND_LOGO = "/images/dynova-logo.jpg";
-
-function SocialIcon({ type }) {
-  if (type === "facebook") {
-    return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
-        <path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5h1.7V4.9c-.8-.1-1.6-.2-2.4-.2-2.4 0-4 1.5-4 4.1V11H7.8v3h2.6v8h3.1Z" />
-      </svg>
-    );
-  }
-
-  if (type === "instagram") {
-    return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
-        <path d="M7.8 2h8.4A5.8 5.8 0 0 1 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8A5.8 5.8 0 0 1 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2Zm0 2A3.8 3.8 0 0 0 4 7.8v8.4A3.8 3.8 0 0 0 7.8 20h8.4a3.8 3.8 0 0 0 3.8-3.8V7.8A3.8 3.8 0 0 0 16.2 4H7.8Zm8.7 2.4a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2ZM12 7.2A4.8 4.8 0 1 1 12 16.8 4.8 4.8 0 0 1 12 7.2Zm0 2A2.8 2.8 0 1 0 12 14.8 2.8 2.8 0 0 0 12 9.2Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
-      <path d="M16.6 5.8c-1.1-.7-1.9-1.8-2.1-3.1h-3v12.1a2.4 2.4 0 1 1-2.4-2.4c.2 0 .5 0 .7.1V9.4c-.2 0-.5-.1-.7-.1a5.5 5.5 0 1 0 5.5 5.5V8.7c1.2.9 2.6 1.4 4.1 1.4V7c-.8 0-1.5-.4-2.1-1.2Z" />
-    </svg>
-  );
-}
-
 
 function BrandLogo({ mode = "header" }) {
   const isFooter = mode === "footer";
@@ -139,21 +113,12 @@ export default function ClientLayout({ children }) {
   const [openUser, setOpenUser] = useState(false);
   const [openMobile, setOpenMobile] = useState(false);
   const [openSearch, setOpenSearch] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatInput, setChatInput] = useState("");
-  const [settings, setSettings] = useState(null);
+  const [settings, setSettings] = useState(getDefaultPublicSettings());
   const [showBackTop, setShowBackTop] = useState(false);
-
-  const [messages, setMessages] = useState([
-    {
-      role: "shop",
-      text: "Dynova xin chào. Bạn cần tư vấn size, đơn hàng hay thanh toán?",
-    },
-  ]);
 
   const menuItems = [
     { name: "Trang chủ", href: "/" },
-    { name: "Flash Sale", href: "/sale", hot: true },
+    // { name: "Flash Sale", href: "/sale", hot: true },
     { name: "Sản phẩm", href: "/shop" },
     { name: "Bộ sưu tập", href: "/collections" },
     { name: "Tin tức", href: "/news" },
@@ -184,26 +149,14 @@ export default function ClientLayout({ children }) {
     {
       title: "CSKH",
       links: [
-        { name: "Chat với chúng tôi", href: "https://zalo.me/0866347730" },
+        { name: "Chat với chúng tôi", href: "/chat" },
         { name: "FAQ (Câu hỏi thường gặp)", href: "/faq" },
       ],
     },
   ];
 
-  //   const loadWishlistCount = async () => {
-  //   try {
-  //     const data = await getWishlistApi();
 
-  //     const total =
-  //       data?.total ??
-  //       data?.items?.length ??
-  //       0;
 
-  //     setWishlistCount(Number(total) || 0);
-  //   } catch (error) {
-  //     setWishlistCount(0);
-  //   }
-  // };
 
   const loadWishlistCount = async () => {
     try {
@@ -221,13 +174,13 @@ export default function ClientLayout({ children }) {
   };
 
   const syncState = () => {
-    setUser(getCurrentUser());
+    const token = getAuthToken();
+    setUser(token ? getStoredAuthUser() : null);
 
     setCartCount(
       getCart().reduce((sum, item) => sum + Number(item.quantity || 0), 0)
     );
 
-    setSettings(getSettings());
     loadWishlistCount();
   };
 
@@ -254,6 +207,12 @@ export default function ClientLayout({ children }) {
   }, []);
 
   useEffect(() => {
+    getPublicSettings()
+      .then((response) => setSettings(response.settings || getDefaultPublicSettings()))
+      .catch(() => setSettings(getDefaultPublicSettings()));
+  }, []);
+
+  useEffect(() => {
     const handleScroll = () => {
       setShowBackTop(window.scrollY > 500);
     };
@@ -276,37 +235,20 @@ export default function ClientLayout({ children }) {
   }, []);
 
 
-  const handleLogout = () => {
-    logoutUser();
-
+  const handleLogout = async () => {
     setUser(null);
     setCartCount(0);
     setWishlistCount(0);
     setOpenUser(false);
 
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("dynova:auth"));
-      window.dispatchEvent(new Event("dynova:storage"));
-      window.dispatchEvent(new Event("dynova:wishlist"));
+    try {
+      await logoutWithApi();
+    } catch {
+      // logoutWithApi luôn xóa phiên local trong finally.
+    } finally {
+      router.replace("/");
+      router.refresh();
     }
-
-    router.push("/");
-  };
-
-  const sendChat = (preset) => {
-    const text = (preset || chatInput).trim();
-    if (!text) return;
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text },
-      {
-        role: "shop",
-        text: "Mình đã nhận thông tin. Nhân viên Dynova sẽ phản hồi trong ít phút. Bạn có thể để lại số điện thoại nếu cần gọi lại.",
-      },
-    ]);
-
-    setChatInput("");
   };
 
   const scrollToTop = () => {
@@ -329,7 +271,7 @@ export default function ClientLayout({ children }) {
 
               <span className="flex items-center gap-2">
                 <Mail size={13} className="text-orange-400" />
-                {settings?.email || "cskh@dynova.vn"}
+                {settings?.email || "cskhdynova@gmail.com"}
               </span>
             </div>
 
@@ -723,7 +665,7 @@ export default function ClientLayout({ children }) {
               <div className="mt-6 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">
                   <BadgeCheck size={14} className="text-orange-400" />
-                  Chính hãng demo
+                  Cam kết chính hãng
                 </span>
 
                 <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">
@@ -777,10 +719,10 @@ export default function ClientLayout({ children }) {
                   <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/5 text-orange-400">
                     <Mail size={16} />
                   </span>
-                  {settings?.email || "cskh@dynova.vn"}
+                  {settings?.email || "cskhdynova@gmail.com"}
                 </p>
 
-                <p className="flex items-start gap-3">
+                <p className="flex items-start gap-3">  
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/5 text-orange-400">
                     <MapPin size={16} />
                   </span>
@@ -789,22 +731,16 @@ export default function ClientLayout({ children }) {
               </div>
 
               <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-sm font-black">Nhận ưu đãi mới</p>
+                <p className="text-sm font-black">Ưu đãi dành cho bạn</p>
                 <p className="mt-1 text-xs leading-5 text-slate-400">
-                  Theo dõi Dynova để cập nhật sản phẩm mới, khuyến mãi và mẹo
-                  chọn đồ thể thao.
+                  Khám phá chương trình khuyến mãi và sản phẩm đang được ưu đãi.
                 </p>
-
-                <div className="mt-4 flex gap-2">
-                  <input
-                    className="h-11 min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-orange-400"
-                    placeholder="Email của bạn"
-                  />
-
-                  <button className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white transition hover:bg-orange-600">
-                    <Send size={16} />
-                  </button>
-                </div>
+                <Link
+                  href="/sale"
+                  className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl bg-orange-500 px-5 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
+                >
+                  Xem ưu đãi
+                </Link>
               </div>
             </div>
           </div>
@@ -814,33 +750,12 @@ export default function ClientLayout({ children }) {
               © {new Date().getFullYear()} Dynova Sport. All rights reserved.
             </p>
 
-            <div className="flex items-center gap-3">
-              <span className="font-semibold">Social</span>
-
-              <a
-                href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-orange-400 hover:bg-orange-500 hover:text-white"
-                aria-label="Facebook"
-              >
-                <SocialIcon type="facebook" />
-              </a>
-
-              <a
-                href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-orange-400 hover:bg-orange-500 hover:text-white"
-                aria-label="Instagram"
-              >
-                <SocialIcon type="instagram" />
-              </a>
-
-              <a
-                href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-orange-400 hover:bg-orange-500 hover:text-white"
-                aria-label="TikTok"
-              >
-                <SocialIcon type="tiktok" />
-              </a>
-            </div>
+            <Link
+              href="/contact"
+              className="font-semibold text-slate-400 transition hover:text-orange-400"
+            >
+              Liên hệ hỗ trợ
+            </Link>
           </div>
         </div>
       </footer>
@@ -855,76 +770,13 @@ export default function ClientLayout({ children }) {
         </button>
       )}
 
-      <div className="fixed bottom-5 right-5 z-[60]">
-        {chatOpen && (
-          <div className="chat-panel float-in mb-3 w-[calc(100vw-40px)] max-w-sm overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="bg-slate-950 p-4 text-white">
-              <p className="text-sm font-black uppercase tracking-wider">
-                Chat Dynova
-              </p>
-              <p className="mt-1 text-xs text-slate-300">
-                Hỗ trợ tư vấn size, đơn hàng và thanh toán.
-              </p>
-            </div>
-
-            <div className="max-h-72 space-y-3 overflow-y-auto p-4">
-              {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={
-                    "rounded-2xl px-3 py-2 text-sm leading-6 " +
-                    (message.role === "user"
-                      ? "ml-8 bg-orange-500 text-white"
-                      : "mr-8 bg-slate-100 text-slate-700")
-                  }
-                >
-                  {message.text}
-                </div>
-              ))}
-
-              <div className="flex flex-wrap gap-2">
-                {["Tư vấn size", "Kiểm tra đơn", "Hỗ trợ thanh toán"].map(
-                  (item) => (
-                    <button
-                      key={item}
-                      onClick={() => sendChat(item)}
-                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
-                    >
-                      {item}
-                    </button>
-                  )
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-2 border-t border-slate-100 p-3">
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                className="input-control py-2 text-sm"
-                placeholder="Nhập tin nhắn..."
-              />
-
-              <button
-                onClick={() => sendChat()}
-                className="btn-primary rounded-xl px-3"
-                aria-label="Gửi"
-              >
-                <Send size={16} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        <button
-          onClick={() => setChatOpen(!chatOpen)}
-          className="btn-primary flex h-14 w-14 items-center justify-center rounded-2xl shadow-xl shadow-orange-500/25"
-          aria-label="Chat trực tuyến"
-        >
-          {chatOpen ? <X size={22} /> : <MessageCircle size={22} />}
-        </button>
-      </div>
+      <Link
+        href="/contact"
+        className="btn-primary fixed bottom-5 right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-2xl shadow-xl shadow-orange-500/25"
+        aria-label="Liên hệ hỗ trợ"
+      >
+        <Headphones size={22} />
+      </Link>
     </>
   );
 }

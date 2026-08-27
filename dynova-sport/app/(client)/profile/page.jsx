@@ -29,7 +29,11 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
-import { logoutWithApi } from "@/services/auth.service";
+import {
+  clearAuthSession,
+  getAuthToken,
+  logoutWithApi,
+} from "@/services/auth.service";
 import {
   getProfile,
   updateProfile,
@@ -98,6 +102,35 @@ function statusLabel(status = "") {
   };
 
   return map[clean] || status || "Chưa xác định";
+}
+
+function getOrderTotal(order) {
+  const rawTotal =
+    order?.grand_total ??
+    order?.total_amount ??
+    order?.final_total ??
+    order?.total ??
+    order?.total_price ??
+    order?.payable_total ??
+    order?.subtotal ??
+    0;
+
+  const total = Number(rawTotal);
+
+  return Number.isFinite(total) ? total : 0;
+}
+
+function getPaymentLabel(method = "") {
+  const clean = String(method || "").trim().toUpperCase();
+
+  const map = {
+    COD: "Thanh toán khi nhận hàng",
+    BANK: "Chuyển khoản ngân hàng",
+    BANK_TRANSFER: "Chuyển khoản ngân hàng",
+    VNPAY: "VNPAY",
+  };
+
+  return map[clean] || method || "Chưa xác định";
 }
 
 function Field({
@@ -255,6 +288,16 @@ export default function ProfilePage() {
     setLoading(true);
     setError("");
 
+    if (!getAuthToken()) {
+      clearAuthSession();
+      setUser(null);
+      setStats({});
+      setRecentOrders([]);
+      setLoading(false);
+      router.replace("/login?redirect=/profile");
+      return;
+    }
+
     try {
       const data = await getProfile();
       const profileUser = data.user;
@@ -268,21 +311,18 @@ export default function ProfilePage() {
       setRecentOrders(data.recent_orders || []);
       fillForm(profileUser);
     } catch (err) {
-      console.log("PROFILE ERROR:", err);
-
       if (err.status === 401) {
-        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-
-        setTimeout(() => {
-          router.push("/login?redirect=/profile");
-        }, 900);
-
+        clearAuthSession();
+        setUser(null);
+        setStats({});
+        setRecentOrders([]);
+        router.replace("/login?redirect=/profile");
         return;
       }
 
       setError(
         err.message ||
-        "Không thể tải hồ sơ. Vui lòng kiểm tra route /api/profile bên Laravel."
+        "Không thể tải hồ sơ. Vui lòng thử lại sau."
       );
     } finally {
       setLoading(false);
@@ -419,14 +459,17 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    const ok = window.confirm("Bạn có chắc muốn đăng xuất không?");
-
-    if (!ok) return;
+    setUser(null);
+    setStats({});
+    setRecentOrders([]);
 
     try {
       await logoutWithApi();
+    } catch {
+      // Phiên local vẫn được xóa ngay cả khi backend tạm thời không phản hồi.
     } finally {
-      router.push("/login");
+      router.replace("/login");
+      router.refresh();
     }
   };
 
@@ -597,7 +640,7 @@ export default function ProfilePage() {
               </p>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Tài khoản của bạn đang được bảo vệ bằng Laravel Sanctum token.
+                Tài khoản của bạn đang được bảo vệ an toàn.
               </p>
             </div>
           </aside>
@@ -651,7 +694,12 @@ export default function ProfilePage() {
                     </div>
 
                     <p className="text-3xl font-black tracking-[-0.04em] text-orange-500">
-                      {formatCurrency(stats.total_spent || 0)}
+                      {formatCurrency(
+                        stats.total_spent ??
+                          stats.completed_total ??
+                          stats.totalSpent ??
+                          0
+                      )}
                     </p>
                   </div>
                 </div>
@@ -686,8 +734,7 @@ export default function ProfilePage() {
                       </h3>
 
                       <p className="mt-2 text-sm text-slate-500">
-                        Hãy mua sắm để kiểm tra luồng đặt hàng, thanh toán và
-                        theo dõi đơn.
+                        Hãy mua sắm để theo dõi đơn hàng và lịch sử mua sắm.
                       </p>
 
                       <Link
@@ -702,7 +749,7 @@ export default function ProfilePage() {
                       {recentOrders.map((order) => (
                         <Link
                           key={order.id}
-                          href="/orders"
+                          href={`/orders?order=${order.id}`}
                           className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-lg hover:shadow-slate-200/70 md:flex-row md:items-center md:justify-between"
                         >
                           <div>
@@ -712,7 +759,9 @@ export default function ProfilePage() {
 
                             <p className="mt-1 text-sm font-bold text-slate-500">
                               {formatDate(order.created_at)} •{" "}
-                              {order.payment_method || "COD"}
+                              {getPaymentLabel(
+                                order.payment_method || order.paymentMethod
+                              )}
                             </p>
                           </div>
 
@@ -722,7 +771,7 @@ export default function ProfilePage() {
                             </span>
 
                             <span className="text-lg font-black text-slate-950">
-                              {formatCurrency(order.total || 0)}
+                              {formatCurrency(getOrderTotal(order))}
                             </span>
                           </div>
                         </Link>
@@ -951,8 +1000,7 @@ export default function ProfilePage() {
 
                 <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-sm font-bold leading-7 text-slate-500">
                   <ShieldCheck className="mr-2 inline text-emerald-500" size={17} />
-                  Sau khi đổi mật khẩu, bạn vẫn có thể tiếp tục dùng phiên đăng
-                  nhập hiện tại. Các token khác có thể xử lý đăng xuất sau nếu cần.
+                  Mật khẩu mới sẽ được áp dụng cho những lần đăng nhập tiếp theo.
                 </div>
 
                 <button

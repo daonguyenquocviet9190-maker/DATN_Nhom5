@@ -18,6 +18,7 @@ export type ShippingFeePayload = {
   province: string;
   provinceCode?: string;
   district?: string;
+  districtCode?: string | number;
   ward?: string;
   wardCode?: string;
   address: string;
@@ -47,6 +48,7 @@ export type CheckoutOrderPayload = {
     province: string;
     provinceCode?: string;
     district?: string;
+    districtCode?: string | number;
     ward?: string;
     wardCode?: string;
     address: string;
@@ -55,6 +57,7 @@ export type CheckoutOrderPayload = {
   items: CartItemPayload[];
   coupon?: string;
   paymentMethod: string;
+  checkoutMode?: "cart" | "buy_now";
   subtotal: number;
   discount: number;
   shippingFee: number;
@@ -81,18 +84,16 @@ export type CheckoutOrderResponse = {
 
 export type PaymentSessionPayload = {
   orderId: number | string;
-  provider: "VNPAY" | "MOMO" | string;
-  amount: number;
-  returnUrl: string;
+  provider: "VNPAY" | string;
 };
 
 export type PaymentSessionResponse = {
   success?: boolean;
   message?: string;
   data?: {
+    paymentUrl?: string | null;
     payment_url?: string | null;
     provider?: string;
-    demo?: boolean;
   };
   payment_url?: string | null;
   payUrl?: string | null;

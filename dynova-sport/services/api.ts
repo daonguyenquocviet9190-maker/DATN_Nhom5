@@ -1,3 +1,5 @@
+import { clearAuthSession, getAuthToken } from "./auth.service";
+
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
@@ -18,13 +20,7 @@ export class ApiError extends Error {
 }
 
 function getStoredToken() {
-  if (typeof window === "undefined") return null;
-
-  return (
-    localStorage.getItem("dynova_auth_token") ||
-    localStorage.getItem("auth_token") ||
-    localStorage.getItem("token")
-  );
+  return getAuthToken();
 }
 
 export async function apiFetch<T = unknown>(
@@ -64,10 +60,20 @@ export async function apiFetch<T = unknown>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    const validationMessage =
+      data?.errors && typeof data.errors === "object"
+        ? Object.values(data.errors).flat().filter(Boolean).join(" ")
+        : "";
+
+    if (response.status === 401 && auth && token) {
+      clearAuthSession();
+    }
+
     throw new ApiError(
-      data?.message ||
+      validationMessage ||
+        data?.message ||
         data?.error ||
-        "Không thể kết nối API. Vui lòng thử lại.",
+        "Không thể kết nối hệ thống. Vui lòng thử lại.",
       response.status,
       data
     );

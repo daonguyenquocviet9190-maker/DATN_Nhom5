@@ -377,8 +377,8 @@ useEffect(() => {
             },
             {
               icon: PackageCheck,
-              title: "Dữ liệu API",
-              text: "Lấy từ brands và products.",
+              title: "Sản phẩm cập nhật",
+              text: "Thông tin sản phẩm được cập nhật thường xuyên.",
             },
             {
               icon: Truck,
@@ -429,8 +429,7 @@ useEffect(() => {
             </div>
 
             <p className="max-w-xl text-sm leading-7 text-slate-500">
-              Lookbook được tạo từ ảnh sản phẩm thực tế của thương hiệu trong
-              database.
+              Lookbook được tổng hợp từ các sản phẩm nổi bật của thương hiệu.
             </p>
           </div>
 
@@ -479,7 +478,7 @@ useEffect(() => {
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              Hiển thị sản phẩm lấy từ endpoint /api/products?brand={brand.id}.
+              Khám phá các sản phẩm hiện có của thương hiệu này.
             </p>
           </div>
 

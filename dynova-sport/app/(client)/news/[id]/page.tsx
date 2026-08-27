@@ -17,7 +17,6 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-// ---- Kiểu dữ liệu bài viết ----
 type Article = {
   id: number;
   title: string;
@@ -29,7 +28,6 @@ type Article = {
   content: string;
 };
 
-// ---- Kho dữ liệu tất cả bài viết ----
 const ALL_ARTICLES: Record<string, Article> = {
   '1': {
     id: 1,
@@ -97,9 +95,118 @@ const ALL_ARTICLES: Record<string, Article> = {
     content:
       'Phối đồ tập gym không chỉ về thẩm mỹ mà còn ảnh hưởng đến hiệu suất tập luyện. Nguyên tắc cơ bản: chọn một màu chủ đạo (neutral: đen, xám, navy) và một màu nhấn (cam, đỏ, xanh lá). Chất liệu ưu tiên: polyester/spandex blend thoáng khí. Nam giới: áo tank top + quần short + giày cross-training. Nữ giới: áo sports bra + legging compression + giày có arch support tốt.',
   },
+  '7': {
+    id: 7,
+    title: 'Chạy Bộ Buổi Sáng Hay Buổi Tối Tốt Hơn? Giải Đáp Từ Chuyên Gia Thể Thao',
+    category: 'Kiến thức chuyên môn',
+    date: '28 Tháng 5, 2026',
+    author: 'Minh Trí',
+    readTime: '5 phút đọc',
+    img: 'https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Chạy buổi sáng giúp kích hoạt trao đổi chất sớm, tận dụng không khí trong lành và tạo thói quen kỷ luật cho cả ngày, nhưng cơ thể chưa "khởi động" đầy đủ nên dễ chấn thương hơn nếu bỏ qua bước làm nóng. Chạy buổi tối lại tận dụng lúc thân nhiệt và độ linh hoạt cơ khớp ở mức cao nhất trong ngày, giúp hiệu suất tốt hơn, nhưng có thể ảnh hưởng giấc ngủ nếu chạy quá sát giờ nghỉ. Lựa chọn khung giờ phù hợp phụ thuộc vào nhịp sinh học và lịch trình cá nhân của từng người, quan trọng nhất vẫn là duy trì đều đặn.',
+  },
+  '8': {
+    id: 8,
+    title: 'Hướng Dẫn Chọn Giày Tập Gym Đúng Chuẩn Cho Người Mới Tập',
+    category: 'Kiến thức chuyên môn',
+    date: '25 Tháng 5, 2026',
+    author: 'Khánh Nam',
+    readTime: '5 phút đọc',
+    img: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Giày tập gym cần đế phẳng và cứng cáp để tạo điểm tựa vững chắc khi squat hoặc deadlift, khác hoàn toàn với giày chạy bộ vốn có đệm êm để giảm chấn động. Với các bài cardio hoặc HIIT, nên ưu tiên giày có độ linh hoạt cao ở mũi chân và trọng lượng nhẹ để dễ dàng đổi hướng. Người mới tập nên chọn một đôi giày đa năng (cross-training) có thể đáp ứng cả hai nhu cầu trước khi đầu tư giày chuyên biệt cho từng bộ môn.',
+  },
+  '9': {
+    id: 9,
+    title: 'Yoga Và Pilates: Nên Tập Môn Nào Để Cải Thiện Vóc Dáng Nhanh Nhất',
+    category: 'Xu hướng',
+    date: '22 Tháng 5, 2026',
+    author: 'Thùy Linh',
+    readTime: '6 phút đọc',
+    img: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Yoga tập trung vào sự dẻo dai, hơi thở và cân bằng tinh thần, phù hợp với người muốn giảm căng thẳng và cải thiện linh hoạt cơ thể toàn diện. Pilates thiên về kích hoạt nhóm cơ lõi (core), giúp săn chắc vòng eo và cải thiện tư thế nhanh hơn nhờ các bài tập có kiểm soát chặt chẽ. Nếu mục tiêu là giảm stress và tăng độ mềm dẻo, yoga là lựa chọn phù hợp; nếu muốn vóc dáng săn chắc rõ rệt trong thời gian ngắn, Pilates thường cho kết quả nhanh hơn.',
+  },
+  '10': {
+    id: 10,
+    title: 'Bí Quyết Chọn Vợt Cầu Lông Phù Hợp Với Trình Độ Người Chơi',
+    category: 'Kiến thức chuyên môn',
+    date: '19 Tháng 5, 2026',
+    author: 'Hoàng Anh',
+    readTime: '5 phút đọc',
+    img: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Trọng lượng vợt (thường từ 3U đến 5U) ảnh hưởng trực tiếp đến tốc độ vung vợt và độ bền sức khi thi đấu dài hơi. Người mới nên chọn vợt nhẹ, độ cứng thấp (flexible) để dễ tạo lực và giảm áp lực lên cổ tay. Người chơi có kỹ thuật vững hơn có thể chuyển sang vợt nặng và cứng hơn (stiff) để tăng độ chính xác và lực đập cầu. Điểm cân bằng của vợt (balance point) cũng quyết định vợt thiên về tấn công hay phòng thủ.',
+  },
+  '11': {
+    id: 11,
+    title: 'Trang Phục Đạp Xe Mùa Hè: Vừa Thoáng Mát Vừa Chống Nắng Hiệu Quả',
+    category: 'Mẹo thời trang',
+    date: '16 Tháng 5, 2026',
+    author: 'Minh Trí',
+    readTime: '4 phút đọc',
+    img: 'https://images.unsplash.com/photo-1541625602330-2277a4c46182?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Trang phục đạp xe mùa hè cần ưu tiên vải có chỉ số chống tia UV (UPF 30+ trở lên) kết hợp khả năng thấm hút mồ hôi nhanh để tránh bí bách khi vận động ngoài trời nắng nóng. Áo tay dài mỏng nhẹ giúp bảo vệ da tốt hơn áo tay ngắn dù nghe có vẻ ngược đời, vì lớp vải tạo bóng râm trực tiếp lên da. Quần đạp xe nên có lớp đệm mút (chamois) êm ái để giảm ma sát khi ngồi yên trong thời gian dài, cùng với đó là mũ bảo hiểm thoáng khí và kính chống UV bảo vệ mắt.',
+  },
+  '12': {
+    id: 12,
+    title: 'Bơi Lội Giảm Cân Có Hiệu Quả Không? Lịch Tập Bơi Cho Người Mới',
+    category: 'Xu hướng',
+    date: '13 Tháng 5, 2026',
+    author: 'Khánh Nam',
+    readTime: '6 phút đọc',
+    img: 'https://images.unsplash.com/photo-1530549387789-4c1017266635?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Bơi lội đốt calo hiệu quả tương đương chạy bộ nhưng tác động lên khớp thấp hơn nhiều nhờ lực nâng của nước, phù hợp với người có vấn đề về khớp gối hoặc thừa cân. Để giảm cân hiệu quả, nên duy trì tần suất 3-4 buổi/tuần, mỗi buổi 30-45 phút với cường độ vừa phải, kết hợp các kiểu bơi khác nhau (sải, ếch, bướm) để kích hoạt nhiều nhóm cơ. Người mới nên bắt đầu với các bài bơi ngắn xen kẽ nghỉ, sau đó tăng dần quãng đường và giảm thời gian nghỉ theo từng tuần.',
+  },
+  '13': {
+    id: 13,
+    title: 'Ưu Đãi Tháng 6: Giảm Đến 40% Toàn Bộ Trang Phục Chạy Bộ Dynova',
+    category: 'Khuyến mãi',
+    date: '10 Tháng 5, 2026',
+    author: 'Tin Tức Dynova',
+    readTime: '2 phút đọc',
+    img: 'https://images.unsplash.com/photo-1483721310020-03333e577078?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Nhân dịp hưởng ứng mùa giải chạy bộ sôi động nhất trong năm, Dynova Sport triển khai chương trình giảm giá đến 40% cho toàn bộ dòng trang phục chạy bộ, bao gồm áo công nghệ Pro-Dry, quần short siêu nhẹ và tất chống phồng rộp. Chương trình áp dụng tại cửa hàng và trên website chính thức, số lượng có hạn theo từng size. Đây là thời điểm lý tưởng để các runner nâng cấp tủ đồ chuẩn bị cho các giải chạy cuối năm.',
+  },
+  '14': {
+    id: 14,
+    title: 'Tennis Cho Người Mới: Trang Bị Cần Thiết Và Lỗi Sai Thường Gặp',
+    category: 'Kiến thức chuyên môn',
+    date: '07 Tháng 5, 2026',
+    author: 'Hoàng Anh',
+    readTime: '5 phút đọc',
+    img: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Người mới chơi tennis cần chuẩn bị vợt có độ cứng thấp để dễ kiểm soát, giày tennis chuyên dụng với đế bám sân tốt tránh trơn trượt, và trang phục co giãn thoáng khí giúp di chuyển linh hoạt trên sân. Lỗi thường gặp nhất là cầm vợt quá chặt khiến cổ tay dễ chấn thương, đứng sai tư thế chờ bóng làm giảm tốc độ phản ứng, và bỏ qua bước khởi động kỹ trước khi vào trận. Việc luyện tập đúng kỹ thuật cơ bản ngay từ đầu sẽ giúp hạn chế chấn thương và tiến bộ nhanh hơn.',
+  },
+  '15': {
+    id: 15,
+    title: 'Chạy Bộ Đường Dài: Cách Xây Dựng Lịch Tập Chuẩn Bị Cho Half Marathon',
+    category: 'Xu hướng',
+    date: '04 Tháng 5, 2026',
+    author: 'Minh Trí',
+    readTime: '7 phút đọc',
+    img: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Chinh phục cự ly 21km đòi hỏi một lộ trình tập luyện khoa học kéo dài khoảng 8 tuần, kết hợp giữa các buổi chạy dài tăng dần quãng đường, buổi chạy tốc độ (tempo run) và ngày nghỉ phục hồi hợp lý. Tuần đầu tiên nên bắt đầu với quãng đường quen thuộc, sau đó tăng khoảng 10% mỗi tuần để tránh quá tải. Hai tuần cuối trước ngày thi đấu (taper) cần giảm khối lượng tập để cơ thể phục hồi hoàn toàn, đảm bảo thể lực tốt nhất khi bước vào đường đua chính thức.',
+  },
+  '16': {
+    id: 16,
+    title: 'Tất Chạy Bộ Chống Phồng Rộp: Có Thực Sự Cần Thiết Cho Runner?',
+    category: 'Mẹo thời trang',
+    date: '01 Tháng 5, 2026',
+    author: 'Thùy Linh',
+    readTime: '4 phút đọc',
+    img: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=1000&auto=format&fit=crop&q=80',
+    content:
+      'Phồng rộp chân xảy ra do ma sát lặp lại giữa da và bề mặt tất hoặc giày trong suốt quá trình chạy, đặc biệt nghiêm trọng ở các cự ly dài như half hoặc full marathon. Tất chạy bộ chuyên dụng thường có thiết kế liền mạch (seamless), chất liệu thoát ẩm nhanh và lớp đệm gia cố ở gót, mũi chân giúp giảm đáng kể ma sát so với tất thông thường. Đầu tư một đôi tất chuyên dụng là khoản chi nhỏ nhưng mang lại hiệu quả bảo vệ rõ rệt, đặc biệt quan trọng với các runner tập luyện cường độ cao và thường xuyên.',
+  },
 };
 
-// Danh sách bài viết tóm tắt dùng cho phần "Bài viết liên quan"
 const RELATED_ARTICLES = Object.values(ALL_ARTICLES).map(({ id, title, date, img, category }) => ({
   id, title, date, img, category,
 }));
@@ -133,7 +240,6 @@ export default function NewsDetailPage() {
         setTimeout(() => setCopied(false), 2000);
       }
     } catch {
-      // người dùng huỷ chia sẻ, không cần xử lý gì thêm
     }
   };
 
@@ -152,18 +258,14 @@ export default function NewsDetailPage() {
 
   return (
     <div className={`${archivo.variable} ${inter.variable} bg-white min-h-screen pb-16 sm:pb-20 text-[#0F0F0F]`} style={{ fontFamily: 'var(--font-inter)' }}>
-
-      {/* ẢNH BÌA */}
-      <div className="relative w-full h-[38vh] sm:h-[45vh] md:h-[50vh] min-h-[280px] bg-[#0F0F0F]">
+<div className="relative w-full h-[38vh] sm:h-[45vh] md:h-[50vh] min-h-[280px] bg-[#0F0F0F]">
         <img
           src={article.img}
           alt={article.title}
           className="w-full h-full object-cover opacity-75"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-
-        {/* Nút quay lại */}
-        <div className="absolute top-4 left-4 sm:top-6 sm:left-8 lg:left-12 z-10">
+<div className="absolute top-4 left-4 sm:top-6 sm:left-8 lg:left-12 z-10">
           <button
             onClick={() => router.back()}
             className="flex items-center gap-1.5 sm:gap-2 bg-white/10 hover:bg-[#FF5A1F] active:bg-[#FF5A1F] text-white px-3 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider backdrop-blur-sm transition-all border border-white/30 hover:border-[#FF5A1F]"
@@ -172,9 +274,7 @@ export default function NewsDetailPage() {
             <ArrowLeft size={13} /> Quay lại
           </button>
         </div>
-
-        {/* Tiêu đề trên ảnh */}
-        <div className="absolute bottom-5 left-4 right-4 sm:bottom-8 sm:left-8 lg:left-12 sm:right-8 max-w-5xl space-y-3 sm:space-y-4 text-white">
+<div className="absolute bottom-5 left-4 right-4 sm:bottom-8 sm:left-8 lg:left-12 sm:right-8 max-w-5xl space-y-3 sm:space-y-4 text-white">
           <span
             className="inline-flex items-center gap-1.5 bg-[#FF5A1F] text-white text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5"
             style={{ fontFamily: 'var(--font-archivo)' }}
@@ -189,12 +289,8 @@ export default function NewsDetailPage() {
           </h1>
         </div>
       </div>
-
-      {/* NỘI DUNG */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-6 sm:pt-10 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-10">
-
-        {/* Metadata: hàng ngang trên mobile, cột dọc từ md trở lên */}
-        <div className="md:col-span-3 flex flex-wrap items-center gap-x-5 gap-y-3 md:flex-col md:items-start md:gap-4 border-b md:border-b-0 md:border-r-2 border-neutral-200 pb-5 md:pb-0 md:pr-4 text-xs text-neutral-500">
+<div className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-6 sm:pt-10 grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-10">
+<div className="md:col-span-3 flex flex-wrap items-center gap-x-5 gap-y-3 md:flex-col md:items-start md:gap-4 border-b md:border-b-0 md:border-r-2 border-neutral-200 pb-5 md:pb-0 md:pr-4 text-xs text-neutral-500">
           <div className="flex items-center gap-2 font-semibold whitespace-nowrap">
             <Calendar size={14} className="text-[#FF5A1F] shrink-0" /> {article.date}
           </div>
@@ -212,9 +308,7 @@ export default function NewsDetailPage() {
             <Share2 size={14} className="shrink-0" /> {copied ? 'Đã sao chép!' : 'Chia sẻ bài viết'}
           </button>
         </div>
-
-        {/* Nội dung chính */}
-        <div className="md:col-span-9 space-y-5 sm:space-y-6">
+<div className="md:col-span-9 space-y-5 sm:space-y-6">
           <p
             className="text-base sm:text-lg text-neutral-700 leading-relaxed sm:leading-loose font-normal first-letter:text-4xl sm:first-letter:text-5xl first-letter:font-black first-letter:text-[#FF5A1F] first-letter:mr-2 first-letter:float-left"
             style={{ fontFamily: 'var(--font-inter)' }}
@@ -231,9 +325,7 @@ export default function NewsDetailPage() {
           <p className="text-base sm:text-lg text-neutral-700 leading-relaxed sm:leading-loose font-normal">
             Sản phẩm và trang thiết bị thể thao phục vụ bài viết hiện đang có sẵn tại toàn bộ hệ thống showroom của Dynova trên toàn quốc hoặc đặt mua trực tuyến thông qua danh mục sản phẩm chính thức của chúng tôi.
           </p>
-
-          {/* Bài viết liên quan */}
-          {relatedArticles.length > 0 && (
+{relatedArticles.length > 0 && (
             <div className="pt-6 sm:pt-8 border-t-2 border-neutral-200">
               <h3
                 className="uppercase tracking-wide mb-5 sm:mb-6 font-extrabold text-sm sm:text-base"

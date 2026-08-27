@@ -3,9 +3,8 @@
 import "./shop.css";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -18,147 +17,323 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Sparkles,
-  Star,
   X,
 } from "lucide-react";
 
-import {
-  categories as localCategories,
-  formatCurrency,
-} from "@/data/shop";
-
-import {
-  addToCart,
-  getProducts as getLocalProducts,
-} from "@/utils/shopStorage";
-
+import { formatCurrency } from "@/data/shop";
+import { addToCart } from "@/utils/shopStorage";
+import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 import { getProducts } from "@/services/product.service";
 import { getCategories } from "@/services/category.service";
-
 import {
   getWishlist as getWishlistApi,
   toggleWishlistApi,
 } from "@/services/wishlist.service";
-
-
-function extractProducts(response) {
-  return (
-    response?.data?.products ||
-    response?.data?.data ||
-    response?.data ||
-    response?.products ||
-    response ||
-    []
-  );
-}
+import {
+  extractProducts,
+  getProductBrandName,
+  getProductCategoryId,
+  getProductCategoryName,
+  getProductDisplayPrice,
+  getProductOriginalPrice,
+  getProductTotalStock,
+  normalizeProduct,
+} from "@/utils/productNormalizer";
 
 function extractCategories(response) {
-  return (
-    response?.data?.categories ||
-    response?.data?.data ||
-    response?.data ||
-    response?.categories ||
-    response ||
-    []
-  );
+  const candidates = [
+    response?.data?.categories?.data,
+    response?.data?.categories,
+    response?.data?.data?.data,
+    response?.data?.data,
+    response?.data,
+    response?.categories?.data,
+    response?.categories,
+    response,
+  ];
+
+  return candidates.find(Array.isArray) || [];
+}
+
+const PAGE_SIZE = 12;
+const SHOP_SCROLL_KEY = "dynova_shop_scroll_y_v2";
+const SHOP_CACHE_KEY = "dynova_shop_cache_v2";
+const SHOP_STATE_KEY = "dynova_shop_state_v2";
+const SHOP_NAVIGATION_KEY = "dynova_shop_navigation_v2";
+const SHOP_CACHE_TTL = 5 * 60 * 1000;
+const SHOP_RETURN_WINDOW = 30 * 60 * 1000;
+
+let shopRuntimeCache = {
+  items: [],
+  categories: [],
+  wishlist: [],
+  state: null,
+  scrollY: 0,
+  savedAt: 0,
+};
+
+function readSessionObject(key) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
+}
+
+function buildShopUrl(pathname, state, highestPrice) {
+  const params = new URLSearchParams();
+
+  if (state.query.trim()) {
+    params.set("q", state.query.trim());
+  }
+
+  if (state.category !== "all") {
+    params.set("category", state.category);
+  }
+
+  if (state.brand !== "all") {
+    params.set("brand", state.brand);
+  }
+
+  if (
+    Number(state.maxPrice) > 0 &&
+    Number(state.maxPrice) < Number(highestPrice)
+  ) {
+    params.set("maxPrice", String(state.maxPrice));
+  }
+
+  if (state.sort !== "newest") {
+    params.set("sort", state.sort);
+  }
+
+  if (Number(state.currentPage) > 1) {
+    params.set("page", String(state.currentPage));
+  }
+
+  const queryString = params.toString();
+
+  return queryString
+    ? `${pathname}?${queryString}`
+    : pathname;
 }
 
 export default function ShopPage() {
   const router = useRouter();
+  const pathname = usePathname();
 
-  const [items, setItems] = useState([]);
-  const [apiCategories, setApiCategories] = useState([]);
+  const initialRuntime =
+    typeof window !== "undefined" &&
+    shopRuntimeCache?.state?.url ===
+      window.location.pathname + window.location.search
+      ? shopRuntimeCache
+      : null;
 
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
-  const [brand, setBrand] = useState("all");
-  const [maxPrice, setMaxPrice] = useState(5000000);
-  const [sort, setSort] = useState("featured");
-
-  const [wishlist, setWishlist] = useState([]);
+  const [items, setItems] = useState(
+    () => initialRuntime?.items || []
+  );
+  const [apiCategories, setApiCategories] = useState(
+    () => initialRuntime?.categories || []
+  );
+  const [query, setQuery] = useState(
+    () => initialRuntime?.state?.query || ""
+  );
+  const [category, setCategory] = useState(
+    () => initialRuntime?.state?.category || "all"
+  );
+  const [brand, setBrand] = useState(
+    () => initialRuntime?.state?.brand || "all"
+  );
+  const [maxPrice, setMaxPrice] = useState(
+    () => initialRuntime?.state?.maxPrice || 5000000
+  );
+  const [sort, setSort] = useState(
+    () => initialRuntime?.state?.sort || "newest"
+  );
+  const [wishlist, setWishlist] = useState(
+    () => initialRuntime?.wishlist || []
+  );
   const [wishlistLoadingId, setWishlistLoadingId] = useState(null);
-
   const [notice, setNotice] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [filterOpen, setFilterOpen] = useState(false);
-
-  const PAGE_SIZE = 12;
-  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(
+    () => !initialRuntime?.items?.length
+  );
+  const [filterOpen, setFilterOpen] = useState(
+    () => Boolean(initialRuntime?.state?.filterOpen)
+  );
+  const [currentPage, setCurrentPage] = useState(
+    () => initialRuntime?.state?.currentPage || 1
+  );
+  const [stateReady, setStateReady] = useState(
+    () => Boolean(initialRuntime?.state)
+  );
+  const skipFirstPageReset = useRef(true);
 
   useEffect(() => {
-    async function loadShopData() {
+    let mounted = true;
+
+    const currentUrl =
+      window.location.pathname + window.location.search;
+
+    const params = new URLSearchParams(window.location.search);
+    const categoryParam = params.get("category") || "all";
+    const keywordParam = params.get("q") || "";
+    const brandParam = params.get("brand") || "all";
+    const rawMaxPriceParam = params.get("maxPrice");
+    const maxPriceParam =
+      rawMaxPriceParam !== null &&
+      rawMaxPriceParam.trim() !== "" &&
+      Number(rawMaxPriceParam) > 0
+        ? Number(rawMaxPriceParam)
+        : null;
+    const sortParam = params.get("sort") || "newest";
+    const parsedPage = Number(params.get("page"));
+    const pageParam =
+      Number.isFinite(parsedPage) && parsedPage > 0
+        ? parsedPage
+        : 1;
+
+    const runtime =
+      shopRuntimeCache?.state?.url === currentUrl
+        ? shopRuntimeCache
+        : null;
+
+    const storedState = readSessionObject(SHOP_STATE_KEY);
+    const matchingStoredState =
+      storedState?.url === currentUrl
+        ? storedState
+        : null;
+
+    const cached = readSessionObject(SHOP_CACHE_KEY);
+    const cacheIsFresh =
+      Array.isArray(cached?.products) &&
+      Date.now() - Number(cached?.savedAt || 0) < SHOP_CACHE_TTL;
+
+    const warmProducts = Array.isArray(runtime?.items) && runtime.items.length
+      ? runtime.items
+      : cacheIsFresh
+        ? cached.products
+        : [];
+
+    const warmCategories =
+      Array.isArray(runtime?.categories) && runtime.categories.length
+        ? runtime.categories
+        : cacheIsFresh &&
+            Array.isArray(cached?.categories) &&
+            cached.categories.length
+          ? cached.categories
+          : [];
+
+    const warmPrices = warmProducts
+      .map(getProductDisplayPrice)
+      .filter((price) => Number.isFinite(price) && price > 0);
+
+    const warmHighest =
+      warmPrices.length > 0
+        ? Math.max(...warmPrices, 5000000)
+        : 5000000;
+
+    setCategory(categoryParam);
+    setQuery(keywordParam);
+    setBrand(brandParam);
+    setSort(sortParam);
+    setCurrentPage(pageParam);
+    setFilterOpen(Boolean(matchingStoredState?.filterOpen));
+
+    if (warmProducts.length > 0) {
+      setItems(warmProducts);
+      setApiCategories(warmCategories);
+      setMaxPrice(
+        maxPriceParam
+          ? Math.min(maxPriceParam, warmHighest)
+          : warmHighest
+      );
+      setLoading(false);
+      setStateReady(true);
+    } else {
+      setLoading(true);
+    }
+
+    const navigation = readSessionObject(SHOP_NAVIGATION_KEY);
+    const returningFromDetail =
+      warmProducts.length > 0 &&
+      navigation?.from === currentUrl &&
+      Date.now() - Number(navigation?.savedAt || 0) <
+        SHOP_RETURN_WINDOW;
+
+    async function loadFreshShopData() {
+      if (returningFromDetail) {
+        return;
+      }
+
       try {
-        setLoading(true);
-
-        const params =
-          typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search)
-            : new URLSearchParams();
-
-        const categoryParam = params.get("category");
-        const q = params.get("q");
-
-        if (categoryParam) {
-          setCategory(categoryParam);
-        }
-
-        if (q) {
-          setQuery(q);
-        }
-
         const [productResponse, categoryResponse] = await Promise.all([
-          getProducts({ per_page: 100 }),
+          getProducts({ per_page: 500 }),
           getCategories(),
         ]);
 
-        console.log("SHOP PRODUCTS RESPONSE:", productResponse);
-        console.log("SHOP CATEGORIES RESPONSE:", categoryResponse);
+        const normalizedProducts = extractProducts(productResponse)
+          .map(normalizeProduct)
+          .filter(Boolean);
 
-        const apiProducts = extractProducts(productResponse);
-        const apiCategoryList = extractCategories(categoryResponse);
+        const categoryList = extractCategories(categoryResponse);
+        const finalProducts = normalizedProducts;
+        const finalCategories = Array.isArray(categoryList) ? categoryList : [];
 
-        const finalProducts = Array.isArray(apiProducts)
-          ? apiProducts
-          : [];
+        const prices = finalProducts
+          .map(getProductDisplayPrice)
+          .filter((price) => Number.isFinite(price) && price > 0);
 
-        const finalCategories = Array.isArray(apiCategoryList)
-          ? apiCategoryList
-          : [];
+        const highest = prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
 
-        if (finalProducts.length > 0) {
-          setItems(finalProducts);
-        } else {
-          setItems(getLocalProducts());
-        }
+        setItems(finalProducts);
+        setApiCategories(finalCategories);
+        setMaxPrice(maxPriceParam ? Math.min(maxPriceParam, highest) : highest);
 
-        if (finalCategories.length > 0) {
-          setApiCategories(finalCategories);
-        } else {
-          setApiCategories(localCategories);
-        }
-
-        const prices = finalProducts.map((item) => Number(item?.price || 0));
-        const max = prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
-
-        setMaxPrice(max);
-      } catch (error) {
-        console.log("Shop API error:", error);
-
-        const fallbackProducts = getLocalProducts();
-
-        setItems(fallbackProducts);
-        setApiCategories(localCategories);
-
-        const prices = fallbackProducts.map((item) => Number(item?.price || 0));
-        const max = prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
-
-        setMaxPrice(max);
+        sessionStorage.setItem(
+          SHOP_CACHE_KEY,
+          JSON.stringify({
+            products: finalProducts,
+            categories: finalCategories,
+            savedAt: Date.now(),
+          })
+        );
+      } catch {
+        if (!mounted || warmProducts.length > 0) return;
+        setItems([]);
+        setApiCategories([]);
+        setMaxPrice(maxPriceParam || 5000000);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setStateReady(true);
+        }
+      }
+    }
+
+    async function loadWishlistData() {
+      const authToken = [localStorage, sessionStorage]
+        .map((storage) =>
+          storage.getItem("dynova_auth_token") ||
+          storage.getItem("auth_token") ||
+          storage.getItem("access_token") ||
+          storage.getItem("token") ||
+          ""
+        )
+        .find(Boolean) || "";
+
+      if (!authToken) {
+        if (mounted) setWishlist([]);
+        return;
       }
 
       try {
         const wishlistData = await getWishlistApi();
+
+        if (!mounted) return;
 
         const ids = (wishlistData?.items || [])
           .map((item) => item.product_id || item.product?.id)
@@ -166,83 +341,223 @@ export default function ShopPage() {
           .map(Number);
 
         setWishlist(ids);
-      } catch (error) {
-        console.log("Wishlist API error:", error);
-        setWishlist([]);
+      } catch {
+        if (mounted && !runtime?.wishlist?.length) {
+          setWishlist([]);
+        }
       }
     }
 
-    loadShopData();
+    if (!returningFromDetail) {
+      loadFreshShopData();
+    } else {
+      setLoading(false);
+      setStateReady(true);
+    }
+
+    loadWishlistData();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const safeCategories =
-    Array.isArray(apiCategories) && apiCategories.length > 0
-      ? apiCategories
-      : localCategories;
-
-
-  const getProductCategoryName = (product) => {
-    if (typeof product?.category === "string") {
-      return product.category;
-    }
-
-    return (
-      product?.category?.name ||
-      product?.category_name ||
-      product?.categoryName ||
-      "Dynova Sport"
-    );
-  };
-
-  const getProductBrandName = (product) => {
-    if (typeof product?.brand === "string") {
-      return product.brand;
-    }
-
-    return (
-      product?.brand?.name ||
-      product?.brand_name ||
-      product?.brandName ||
-      "Dynova"
-    );
-  };
-
-  const getProductCategoryId = (product) => {
-    return String(
-      product?.category_id ||
-      product?.categoryId ||
-      product?.category?.id ||
-      ""
-    );
-  };
-
-  const normalizeProductForStorage = (product) => {
-    return {
-      ...product,
-      id: product.id,
-      product_id: product.id,
-      image: getProductImage(product),
-      category: getProductCategoryName(product),
-      categoryId: getProductCategoryId(product),
-      brand: getProductBrandName(product),
-      oldPrice:
-        product.oldPrice ||
-        product.compare_price ||
-        product.old_price ||
-        product.original_price,
-    };
-  };
+  const safeCategories = Array.isArray(apiCategories) ? apiCategories : [];
 
   const brands = useMemo(() => {
     return Array.from(
-      new Set(items.map((item) => getProductBrandName(item)).filter(Boolean))
-    );
+      new Set(
+        items
+          .map((item) => getProductBrandName(item))
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, "vi"));
   }, [items]);
 
   const highestPrice = useMemo(() => {
-    const prices = items.map((item) => Number(item?.price || 0));
-    return prices.length > 0 ? Math.max(...prices, 5000000) : 5000000;
+    const prices = items
+      .map(getProductDisplayPrice)
+      .filter((price) => Number.isFinite(price) && price > 0);
+
+    return prices.length > 0
+      ? Math.max(...prices, 5000000)
+      : 5000000;
   }, [items]);
+
+  const lowestPrice = useMemo(() => {
+    const prices = items
+      .map(getProductDisplayPrice)
+      .filter((price) => Number.isFinite(price) && price > 0);
+
+    if (prices.length === 0) return 0;
+
+    return Math.max(
+      0,
+      Math.floor(Math.min(...prices) / 50000) * 50000
+    );
+  }, [items]);
+
+  const currentShopUrl = useMemo(
+    () =>
+      buildShopUrl(
+        pathname,
+        {
+          query,
+          category,
+          brand,
+          maxPrice,
+          sort,
+          currentPage,
+        },
+        highestPrice
+      ),
+    [
+      pathname,
+      query,
+      category,
+      brand,
+      maxPrice,
+      sort,
+      currentPage,
+      highestPrice,
+    ]
+  );
+
+  useEffect(() => {
+    if (!stateReady || typeof window === "undefined") return;
+
+    const snapshot = {
+      url: currentShopUrl,
+      query,
+      category,
+      brand,
+      maxPrice,
+      sort,
+      currentPage,
+      filterOpen,
+      savedAt: Date.now(),
+    };
+
+    shopRuntimeCache = {
+      ...shopRuntimeCache,
+      items,
+      categories: safeCategories,
+      wishlist,
+      state: snapshot,
+      savedAt: Date.now(),
+    };
+
+    sessionStorage.setItem(
+      SHOP_STATE_KEY,
+      JSON.stringify(snapshot)
+    );
+  }, [
+    stateReady,
+    currentShopUrl,
+    query,
+    category,
+    brand,
+    maxPrice,
+    sort,
+    currentPage,
+    filterOpen,
+    items,
+    safeCategories,
+    wishlist,
+  ]);
+
+  useEffect(() => {
+    if (!stateReady || typeof window === "undefined") return;
+
+    const currentUrl =
+      window.location.pathname + window.location.search;
+
+    if (currentShopUrl !== currentUrl) {
+      router.replace(currentShopUrl, { scroll: false });
+    }
+  }, [
+    stateReady,
+    router,
+    currentShopUrl,
+  ]);
+
+  useEffect(() => {
+    if (!stateReady || loading || typeof window === "undefined") return;
+
+    const savedScroll = Number(
+      sessionStorage.getItem(SHOP_SCROLL_KEY) ||
+        shopRuntimeCache.scrollY ||
+        0
+    );
+
+    if (savedScroll > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.scrollTo({
+            top: savedScroll,
+            behavior: "auto",
+          });
+
+          shopRuntimeCache.scrollY = savedScroll;
+          sessionStorage.removeItem(SHOP_SCROLL_KEY);
+        });
+      });
+    }
+  }, [stateReady, loading]);
+
+  const getProductDetailHref = (productId) => {
+    return `/shop/product/${productId}?from=${encodeURIComponent(
+      currentShopUrl
+    )}`;
+  };
+
+  const rememberShopPosition = (productId) => {
+    if (typeof window === "undefined") return;
+
+    const scrollY = window.scrollY;
+    const detailUrl = getProductDetailHref(productId);
+    const snapshot = {
+      url: currentShopUrl,
+      query,
+      category,
+      brand,
+      maxPrice,
+      sort,
+      currentPage,
+      filterOpen,
+      savedAt: Date.now(),
+    };
+
+    shopRuntimeCache = {
+      ...shopRuntimeCache,
+      items,
+      categories: safeCategories,
+      wishlist,
+      state: snapshot,
+      scrollY,
+      savedAt: Date.now(),
+    };
+
+    sessionStorage.setItem(
+      SHOP_SCROLL_KEY,
+      String(scrollY)
+    );
+
+    sessionStorage.setItem(
+      SHOP_STATE_KEY,
+      JSON.stringify(snapshot)
+    );
+
+    sessionStorage.setItem(
+      SHOP_NAVIGATION_KEY,
+      JSON.stringify({
+        from: currentShopUrl,
+        to: detailUrl,
+        productId: String(productId),
+        savedAt: Date.now(),
+      })
+    );
+  };
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -250,27 +565,34 @@ export default function ShopPage() {
     const result = items
       .filter((product) => {
         if (category === "all") return true;
-        return getProductCategoryId(product) === String(category);
+
+        return (
+          getProductCategoryId(product) === String(category)
+        );
       })
       .filter((product) => {
         if (brand === "all") return true;
+
         return getProductBrandName(product) === brand;
       })
-      .filter((product) => Number(product?.price || 0) <= maxPrice)
+      .filter(
+        (product) =>
+          getProductDisplayPrice(product) <= maxPrice
+      )
       .filter((product) => {
         if (!keyword) return true;
-
-        const tags = Array.isArray(product?.tags)
-          ? product.tags.join(" ")
-          : "";
 
         const text = [
           product?.name,
           getProductBrandName(product),
+          getProductCategoryName(product),
           product?.short_description,
           product?.description,
-          getProductCategoryName(product),
-          tags,
+          ...(product?.variants || []).flatMap((variant) => [
+            variant?.size_name,
+            variant?.color_name,
+            variant?.sku,
+          ]),
         ]
           .filter(Boolean)
           .join(" ")
@@ -281,30 +603,38 @@ export default function ShopPage() {
 
     if (sort === "price-asc") {
       return [...result].sort(
-        (a, b) => Number(a.price || 0) - Number(b.price || 0)
+        (a, b) =>
+          getProductDisplayPrice(a) -
+          getProductDisplayPrice(b)
       );
     }
 
     if (sort === "price-desc") {
       return [...result].sort(
-        (a, b) => Number(b.price || 0) - Number(a.price || 0)
-      );
-    }
-
-    if (sort === "rating") {
-      return [...result].sort(
-        (a, b) => Number(b.rating || 0) - Number(a.rating || 0)
+        (a, b) =>
+          getProductDisplayPrice(b) -
+          getProductDisplayPrice(a)
       );
     }
 
     return [...result].sort(
-      (a, b) => Number(b.sold || 0) - Number(a.sold || 0)
+      (a, b) =>
+        new Date(b?.created_at || 0).getTime() -
+          new Date(a?.created_at || 0).getTime() ||
+        Number(b?.id || 0) - Number(a?.id || 0)
     );
   }, [items, query, category, brand, maxPrice, sort]);
 
   useEffect(() => {
-  setCurrentPage(1);
-}, [query, category, brand, maxPrice, sort]);
+    if (!stateReady) return;
+
+    if (skipFirstPageReset.current) {
+      skipFirstPageReset.current = false;
+      return;
+    }
+
+    setCurrentPage(1);
+  }, [stateReady, query, category, brand, maxPrice, sort]);
 
   const selectedCategoryName = useMemo(() => {
     if (category === "all") return "Tất cả sản phẩm";
@@ -316,51 +646,61 @@ export default function ShopPage() {
     return found?.name || "Danh mục sản phẩm";
   }, [category, safeCategories]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filtered.length / PAGE_SIZE)
+  );
 
-const safeCurrentPage = Math.min(currentPage, totalPages);
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const paginatedProducts = filtered.slice(startIndex, endIndex);
 
-const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
-const endIndex = startIndex + PAGE_SIZE;
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
-const paginatedProducts = filtered.slice(startIndex, endIndex);
+  const goToPage = (page) => {
+    const nextPage = Math.min(
+      Math.max(page, 1),
+      totalPages
+    );
 
-useEffect(() => {
-  if (currentPage > totalPages) {
-    setCurrentPage(totalPages);
-  }
-}, [currentPage, totalPages]);
+    setCurrentPage(nextPage);
 
-const goToPage = (page) => {
-  const nextPage = Math.min(Math.max(page, 1), totalPages);
+    if (typeof window !== "undefined") {
+      window.scrollTo({
+        top: 420,
+        behavior: "smooth",
+      });
+    }
+  };
 
-  setCurrentPage(nextPage);
+  const paginationNumbers = useMemo(() => {
+    const pages = [];
+    const maxButtons = 5;
 
-  if (typeof window !== "undefined") {
-    window.scrollTo({
-      top: 420,
-      behavior: "smooth",
-    });
-  }
-};
+    let start = Math.max(1, safeCurrentPage - 2);
+    let end = Math.min(
+      totalPages,
+      start + maxButtons - 1
+    );
 
-const paginationNumbers = useMemo(() => {
-  const pages = [];
-  const maxButtons = 5;
+    if (end - start < maxButtons - 1) {
+      start = Math.max(
+        1,
+        end - maxButtons + 1
+      );
+    }
 
-  let start = Math.max(1, safeCurrentPage - 2);
-  let end = Math.min(totalPages, start + maxButtons - 1);
+    for (let page = start; page <= end; page += 1) {
+      pages.push(page);
+    }
 
-  if (end - start < maxButtons - 1) {
-    start = Math.max(1, end - maxButtons + 1);
-  }
-
-  for (let page = start; page <= end; page += 1) {
-    pages.push(page);
-  }
-
-  return pages;
-}, [safeCurrentPage, totalPages]);
+    return pages;
+  }, [safeCurrentPage, totalPages]);
 
   const showNotice = (message) => {
     setNotice(message);
@@ -368,10 +708,53 @@ const paginationNumbers = useMemo(() => {
   };
 
   const handleAdd = (product) => {
-    addToCart(normalizeProductForStorage(product), { quantity: 1 });
+    const variants = Array.isArray(product?.variants)
+      ? product.variants.filter(
+          (variant) =>
+            variant.is_active &&
+            Number(variant.stock || 0) > 0
+        )
+      : [];
+
+    if (variants.length !== 1) {
+      rememberShopPosition(product.id);
+      router.push(getProductDetailHref(product.id));
+      return;
+    }
+
+    const variant = variants[0];
+    const finalPrice =
+      Number(variant.discount_price || 0) > 0 &&
+      Number(variant.discount_price) <
+        Number(variant.price || 0)
+        ? Number(variant.discount_price)
+        : Number(variant.price || product.price || 0);
+
+    addToCart(
+      {
+        ...product,
+        product_id: product.id,
+        variant_id: variant.id,
+        product_variant_id: variant.id,
+        selected_variant: variant,
+        size_id: variant.size_id,
+        color_id: variant.color_id,
+        size: variant.size_name,
+        color: variant.color_name,
+        sku: variant.sku,
+        price: finalPrice,
+        image: variant.image
+          ? getProductImage({ image: variant.image })
+          : getProductImage(product),
+        brand: getProductBrandName(product),
+        category: getProductCategoryName(product),
+      },
+      { quantity: 1 }
+    );
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dynova:storage"));
+      window.dispatchEvent(new Event("dynova:cart"));
     }
 
     showNotice("Đã thêm sản phẩm vào giỏ hàng.");
@@ -380,27 +763,24 @@ const paginationNumbers = useMemo(() => {
   const handleWishlist = async (product) => {
     const productId = product?.id || product?.product_id;
 
-    if (!productId) {
-      showNotice("Sản phẩm này chưa có ID nên chưa thể lưu yêu thích.");
-      return;
-    }
+    if (!productId) return;
 
     setWishlistLoadingId(productId);
 
     try {
       const result = await toggleWishlistApi(productId);
 
-      setWishlist((prev) => {
-        const cleanPrev = prev.map(Number);
+      setWishlist((previous) => {
+        const ids = previous.map(Number);
         const numericId = Number(productId);
 
         if (result?.wishlisted) {
-          return cleanPrev.includes(numericId)
-            ? cleanPrev
-            : [...cleanPrev, numericId];
+          return ids.includes(numericId)
+            ? ids
+            : [...ids, numericId];
         }
 
-        return cleanPrev.filter((id) => id !== numericId);
+        return ids.filter((id) => id !== numericId);
       });
 
       if (typeof window !== "undefined") {
@@ -413,13 +793,16 @@ const paginationNumbers = useMemo(() => {
           ? "Đã thêm vào danh sách yêu thích."
           : "Đã xóa khỏi danh sách yêu thích."
       );
-    } catch (err) {
-      if (err.status === 401) {
+    } catch (error) {
+      if (error?.status === 401) {
         router.push("/login?redirect=/wishlist");
         return;
       }
 
-      showNotice(err.message || "Không thể cập nhật yêu thích.");
+      showNotice(
+        error?.message ||
+          "Không thể cập nhật yêu thích."
+      );
     } finally {
       setWishlistLoadingId(null);
     }
@@ -430,7 +813,7 @@ const paginationNumbers = useMemo(() => {
     setCategory("all");
     setBrand("all");
     setMaxPrice(highestPrice);
-    setSort("featured");
+    setSort("newest");
   };
 
   return (
@@ -444,7 +827,7 @@ const paginationNumbers = useMemo(() => {
       <section className="relative overflow-hidden bg-slate-950 text-white">
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1600&auto=format&fit=crop&q=85"
+            src="/images/category-placeholder.svg"
             alt="Shop Dynova"
             className="h-full w-full object-cover opacity-35"
           />
@@ -465,13 +848,14 @@ const paginationNumbers = useMemo(() => {
             </h1>
 
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 md:text-base">
-              Lọc sản phẩm theo danh mục, thương hiệu, khoảng giá và sắp xếp để
-              chọn đúng trang bị cho mục tiêu tập luyện.
+              Khám phá sản phẩm phù hợp với nhu cầu luyện tập và thi đấu.
             </p>
           </div>
 
           <div className="hidden rounded-3xl border border-white/10 bg-white/10 p-5 text-right backdrop-blur lg:block">
-            <p className="text-sm font-bold text-slate-300">Đang hiển thị</p>
+            <p className="text-sm font-bold text-slate-300">
+              Đang hiển thị
+            </p>
             <p className="mt-1 text-3xl font-black text-orange-300">
               {filtered.length}
             </p>
@@ -490,7 +874,8 @@ const paginationNumbers = useMemo(() => {
                 {selectedCategoryName}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                Tìm thấy {filtered.length} sản phẩm phù hợp · Trang {safeCurrentPage}/{totalPages}
+                Tìm thấy {filtered.length} sản phẩm phù hợp · Trang{" "}
+                {safeCurrentPage}/{totalPages}
               </p>
             </div>
 
@@ -500,36 +885,48 @@ const paginationNumbers = useMemo(() => {
                   className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400"
                   size={17}
                 />
-
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(event) =>
+                    setQuery(event.target.value)
+                  }
                   className="shop-search-input"
-                  placeholder="Tìm sản phẩm..."
+                  placeholder="Tìm sản phẩm, thương hiệu, màu, size..."
                 />
               </div>
 
               <button
-                onClick={() => setFilterOpen(!filterOpen)}
+                onClick={() =>
+                  setFilterOpen((value) => !value)
+                }
                 className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 lg:hidden"
               >
                 <SlidersHorizontal size={17} />
                 Bộ lọc
                 <ChevronDown
                   size={16}
-                  className={filterOpen ? "rotate-180 transition" : "transition"}
+                  className={
+                    filterOpen
+                      ? "rotate-180 transition"
+                      : "transition"
+                  }
                 />
               </button>
 
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value)}
+                onChange={(event) =>
+                  setSort(event.target.value)
+                }
                 className="input-control h-12 min-w-[190px]"
               >
-                <option value="featured">Bán chạy</option>
-                <option value="rating">Đánh giá cao</option>
-                <option value="price-asc">Giá thấp đến cao</option>
-                <option value="price-desc">Giá cao đến thấp</option>
+                <option value="newest">Mới nhất</option>
+                <option value="price-asc">
+                  Giá thấp đến cao
+                </option>
+                <option value="price-desc">
+                  Giá cao đến thấp
+                </option>
               </select>
             </div>
           </div>
@@ -544,8 +941,13 @@ const paginationNumbers = useMemo(() => {
           >
             <div className="mb-5 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <SlidersHorizontal className="text-orange-500" size={18} />
-                <h2 className="font-black text-slate-950">Bộ lọc</h2>
+                <SlidersHorizontal
+                  className="text-orange-500"
+                  size={18}
+                />
+                <h2 className="font-black text-slate-950">
+                  Bộ lọc
+                </h2>
               </div>
 
               <button
@@ -576,19 +978,21 @@ const paginationNumbers = useMemo(() => {
                     {category === "all" && <Check size={15} />}
                   </button>
 
-                  {safeCategories.map((cat) => (
+                  {safeCategories.map((item) => (
                     <button
-                      key={cat.id}
-                      onClick={() => setCategory(String(cat.id))}
+                      key={item.id}
+                      onClick={() =>
+                        setCategory(String(item.id))
+                      }
                       className={
                         "category-filter-btn " +
-                        (String(category) === String(cat.id)
+                        (String(category) === String(item.id)
                           ? "category-filter-active"
                           : "category-filter-normal")
                       }
                     >
-                      <span>{cat.name}</span>
-                      {String(category) === String(cat.id) && (
+                      <span>{item.name}</span>
+                      {String(category) === String(item.id) && (
                         <Check size={15} />
                       )}
                     </button>
@@ -603,10 +1007,14 @@ const paginationNumbers = useMemo(() => {
 
                 <select
                   value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
+                  onChange={(event) =>
+                    setBrand(event.target.value)
+                  }
                   className="input-control"
                 >
-                  <option value="all">Tất cả thương hiệu</option>
+                  <option value="all">
+                    Tất cả thương hiệu
+                  </option>
 
                   {brands.map((item) => (
                     <option key={item} value={item}>
@@ -623,11 +1031,13 @@ const paginationNumbers = useMemo(() => {
 
                 <input
                   type="range"
-                  min="0"
+                  min={lowestPrice}
                   max={highestPrice}
                   step="50000"
                   value={maxPrice}
-                  onChange={(e) => setMaxPrice(Number(e.target.value))}
+                  onChange={(event) =>
+                    setMaxPrice(Number(event.target.value))
+                  }
                   className="custom-slider w-full"
                 />
 
@@ -636,7 +1046,9 @@ const paginationNumbers = useMemo(() => {
                 </div>
               </label>
 
-              {(query || category !== "all" || brand !== "all") && (
+              {(query ||
+                category !== "all" ||
+                brand !== "all") && (
                 <button
                   onClick={resetFilters}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
@@ -651,27 +1063,26 @@ const paginationNumbers = useMemo(() => {
           <section>
             {loading ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-[430px] animate-pulse rounded-3xl bg-white"
-                  />
-                ))}
+                {Array.from({ length: 6 }).map(
+                  (_, index) => (
+                    <div
+                      key={index}
+                      className="h-[430px] animate-pulse rounded-3xl bg-white"
+                    />
+                  )
+                )}
               </div>
             ) : filtered.length === 0 ? (
               <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-orange-50 text-orange-500">
                   <PackageSearch size={28} />
                 </div>
-
                 <p className="mt-5 text-lg font-black text-slate-950">
                   Không tìm thấy sản phẩm phù hợp
                 </p>
-
                 <p className="mt-2 text-sm text-slate-500">
                   Hãy thử bỏ bớt bộ lọc hoặc đổi từ khóa tìm kiếm.
                 </p>
-
                 <button
                   onClick={resetFilters}
                   className="btn-primary mt-6 rounded-2xl px-5 py-3 text-sm font-black uppercase tracking-wider"
@@ -682,7 +1093,28 @@ const paginationNumbers = useMemo(() => {
             ) : (
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {paginatedProducts.map((product) => {
-                  const liked = wishlist.includes(Number(product.id));
+                  const liked = wishlist.includes(
+                    Number(product.id)
+                  );
+
+                  const brandName =
+                    getProductBrandName(product);
+                  const categoryName =
+                    getProductCategoryName(product);
+                  const displayPrice =
+                    getProductDisplayPrice(product);
+                  const originalPrice =
+                    getProductOriginalPrice(product);
+                  const totalStock =
+                    getProductTotalStock(product);
+                  const availableVariants =
+                    product?.variants?.filter(
+                      (variant) =>
+                        variant.is_active &&
+                        Number(variant.stock || 0) > 0
+                    ) || [];
+                  const requiresSelection =
+                    availableVariants.length !== 1;
 
                   return (
                     <article
@@ -690,25 +1122,35 @@ const paginationNumbers = useMemo(() => {
                       className="product-card-shop group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white"
                     >
                       <div className="relative overflow-hidden bg-slate-100">
-                        <Link href={"/shop/product/" + product.id}>
+                        <Link
+                          href={getProductDetailHref(product.id)}
+                          onClick={() => rememberShopPosition(product.id)}
+                        >
                           <img
                             src={getProductImage(product)}
                             alt={product.name}
-                            onError={(e) => {
-                              e.currentTarget.src = PRODUCT_FALLBACK;
+                            onError={(event) => {
+                              event.currentTarget.src =
+                                PRODUCT_FALLBACK;
                             }}
                             className="aspect-[4/4.35] w-full object-cover transition duration-500 group-hover:scale-105"
                           />
                         </Link>
 
-                        <span className="absolute left-3 top-3 rounded-full bg-slate-950 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white">
-                          {product.badge || "Hot"}
-                        </span>
+                        {brandName && (
+                          <span className="absolute left-3 top-3 rounded-full bg-slate-950 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white">
+                            {brandName}
+                          </span>
+                        )}
 
                         <button
                           type="button"
-                          onClick={() => handleWishlist(product)}
-                          disabled={wishlistLoadingId === product.id}
+                          onClick={() =>
+                            handleWishlist(product)
+                          }
+                          disabled={
+                            wishlistLoadingId === product.id
+                          }
                           className={
                             "absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition disabled:cursor-not-allowed disabled:opacity-70 " +
                             (liked
@@ -717,76 +1159,100 @@ const paginationNumbers = useMemo(() => {
                           }
                           aria-label="Yêu thích"
                         >
-                          {wishlistLoadingId === product.id ? (
-                            <Loader2 size={17} className="animate-spin" />
+                          {wishlistLoadingId ===
+                          product.id ? (
+                            <Loader2
+                              size={17}
+                              className="animate-spin"
+                            />
                           ) : (
                             <Heart
                               size={17}
-                              className={liked ? "fill-current" : ""}
+                              className={
+                                liked ? "fill-current" : ""
+                              }
                             />
                           )}
                         </button>
                       </div>
 
                       <div className="flex flex-1 flex-col p-5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="line-clamp-1 text-[11px] font-black uppercase tracking-wider text-orange-500">
-                            {getProductCategoryName(product)}
-                          </p>
+                        <p className="line-clamp-1 text-[11px] font-black uppercase tracking-wider text-orange-500">
+                          {categoryName || "Sản phẩm"}
+                        </p>
 
-                          <p className="flex items-center gap-1 text-xs font-bold text-slate-500">
-                            <Star
-                              size={13}
-                              className="fill-amber-400 text-amber-400"
-                            />
-                            {product.rating || 4.8}
+                        {brandName && (
+                          <p className="mt-2 text-xs font-bold text-slate-400">
+                            Thương hiệu:{" "}
+                            <span className="text-slate-700">
+                              {brandName}
+                            </span>
                           </p>
-                        </div>
+                        )}
 
-                        <Link href={"/shop/product/" + product.id}>
+                        <Link
+                          href={getProductDetailHref(product.id)}
+                          onClick={() => rememberShopPosition(product.id)}
+                        >
                           <h3 className="mt-2 line-clamp-2 min-h-11 text-base font-black leading-6 text-slate-950 transition hover:text-orange-600">
                             {product.name}
                           </h3>
                         </Link>
 
-                        <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">
-                          {product.short_description ||
-                            product.description ||
-                            "Sản phẩm thể thao chất lượng, phù hợp luyện tập hằng ngày."}
-                        </p>
+                        {product.short_description && (
+                          <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">
+                            {product.short_description}
+                          </p>
+                        )}
 
                         <div className="mt-4 flex items-end justify-between gap-3">
                           <div>
                             <p className="text-lg font-black text-slate-950">
-                              {formatCurrency(product.price || 0)}
+                              {formatCurrency(displayPrice)}
                             </p>
 
-                            {(product.oldPrice ||
-                              product.compare_price ||
-                              product.old_price) && (
+                            {originalPrice &&
+                              Number(originalPrice) >
+                                Number(displayPrice) && (
                                 <p className="text-xs font-bold text-slate-400 line-through">
                                   {formatCurrency(
-                                    product.oldPrice ||
-                                    product.compare_price ||
-                                    product.old_price
+                                    originalPrice
                                   )}
                                 </p>
                               )}
                           </div>
 
-                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-600">
-                            <Check size={12} className="mr-1 inline" />
-                            Còn hàng
-                          </span>
+                          {totalStock !== null && (
+                            <span
+                              className={
+                                "rounded-full px-3 py-1 text-xs font-black " +
+                                (Number(totalStock) > 0
+                                  ? "bg-emerald-50 text-emerald-600"
+                                  : "bg-rose-50 text-rose-600")
+                              }
+                            >
+                              {Number(totalStock) > 0
+                                ? `Còn ${totalStock}`
+                                : "Hết hàng"}
+                            </span>
+                          )}
                         </div>
 
                         <div className="mt-auto pt-5">
                           <button
-                            onClick={() => handleAdd(product)}
-                            className="btn-primary flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black uppercase tracking-wider"
+                            onClick={() =>
+                              handleAdd(product)
+                            }
+                            disabled={
+                              totalStock !== null &&
+                              Number(totalStock) <= 0
+                            }
+                            className="btn-primary flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:bg-slate-300"
                           >
                             <ShoppingBag size={15} />
-                            Thêm vào giỏ
+                            {requiresSelection
+                              ? "Xem tùy chọn"
+                              : "Thêm vào giỏ"}
                           </button>
                         </div>
                       </div>
@@ -795,99 +1261,70 @@ const paginationNumbers = useMemo(() => {
                 })}
               </div>
             )}
+
             {totalPages > 1 && (
-  <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
-    <p className="text-sm font-bold text-slate-500">
-      Hiển thị{" "}
-      <span className="font-black text-slate-950">
-        {filtered.length === 0 ? 0 : startIndex + 1}
-      </span>
-      {" - "}
-      <span className="font-black text-slate-950">
-        {Math.min(endIndex, filtered.length)}
-      </span>
-      {" / "}
-      <span className="font-black text-slate-950">
-        {filtered.length}
-      </span>{" "}
-      sản phẩm
-    </p>
+              <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
+                <p className="text-sm font-bold text-slate-500">
+                  Hiển thị{" "}
+                  <span className="font-black text-slate-950">
+                    {filtered.length === 0
+                      ? 0
+                      : startIndex + 1}
+                  </span>
+                  {" - "}
+                  <span className="font-black text-slate-950">
+                    {Math.min(endIndex, filtered.length)}
+                  </span>
+                  {" / "}
+                  <span className="font-black text-slate-950">
+                    {filtered.length}
+                  </span>{" "}
+                  sản phẩm
+                </p>
 
-    <div className="flex flex-wrap items-center justify-center gap-2">
-      <button
-        type="button"
-        onClick={() => goToPage(safeCurrentPage - 1)}
-        disabled={safeCurrentPage === 1}
-        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label="Trang trước"
-      >
-        <ChevronLeft size={18} />
-      </button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      goToPage(safeCurrentPage - 1)
+                    }
+                    disabled={safeCurrentPage === 1}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
 
-      {paginationNumbers[0] > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={() => goToPage(1)}
-            className="h-11 min-w-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-          >
-            1
-          </button>
+                  {paginationNumbers.map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => goToPage(page)}
+                      className={
+                        "h-11 min-w-11 rounded-2xl border px-4 text-sm font-black transition " +
+                        (safeCurrentPage === page
+                          ? "border-orange-500 bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600")
+                      }
+                    >
+                      {page}
+                    </button>
+                  ))}
 
-          {paginationNumbers[0] > 2 && (
-            <span className="px-1 text-sm font-black text-slate-400">
-              ...
-            </span>
-          )}
-        </>
-      )}
-
-      {paginationNumbers.map((page) => (
-        <button
-          key={page}
-          type="button"
-          onClick={() => goToPage(page)}
-          className={
-            "h-11 min-w-11 rounded-2xl border px-4 text-sm font-black transition " +
-            (safeCurrentPage === page
-              ? "border-orange-500 bg-orange-500 text-white shadow-lg shadow-orange-500/20"
-              : "border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600")
-          }
-        >
-          {page}
-        </button>
-      ))}
-
-      {paginationNumbers[paginationNumbers.length - 1] < totalPages && (
-        <>
-          {paginationNumbers[paginationNumbers.length - 1] < totalPages - 1 && (
-            <span className="px-1 text-sm font-black text-slate-400">
-              ...
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={() => goToPage(totalPages)}
-            className="h-11 min-w-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-          >
-            {totalPages}
-          </button>
-        </>
-      )}
-
-      <button
-        type="button"
-        onClick={() => goToPage(safeCurrentPage + 1)}
-        disabled={safeCurrentPage === totalPages}
-        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label="Trang sau"
-      >
-        <ChevronRight size={18} />
-      </button>
-    </div>
-  </div>
-)}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      goToPage(safeCurrentPage + 1)
+                    }
+                    disabled={
+                      safeCurrentPage === totalPages
+                    }
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>

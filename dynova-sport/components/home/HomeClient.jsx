@@ -44,6 +44,32 @@ function encodePath(path) {
     .join("/");
 }
 
+
+function getDisplayPrice(product) {
+  const directPrice = Number(
+    product?.display_price ??
+      product?.sale_price ??
+      product?.discount_price ??
+      product?.price ??
+      0
+  );
+
+  if (Number.isFinite(directPrice) && directPrice > 0) {
+    return directPrice;
+  }
+
+  const variantPrices = (Array.isArray(product?.variants) ? product.variants : [])
+    .filter((variant) => Number(variant?.is_active ?? 1) !== 0)
+    .map((variant) => {
+      const salePrice = Number(variant?.discount_price || 0);
+      const price = Number(variant?.price || 0);
+      return salePrice > 0 ? salePrice : price;
+    })
+    .filter((price) => Number.isFinite(price) && price > 0);
+
+  return variantPrices.length > 0 ? Math.min(...variantPrices) : 0;
+}
+
 function getBannerImage(banner) {
   const value =
     banner?.image_url ||
@@ -123,7 +149,7 @@ export default function HomeClient({
 
   const bestSeller = useMemo(() => {
     return [...safeProducts]
-      .sort((a, b) => Number(b?.sold || 0) - Number(a?.sold || 0))
+      .sort((a, b) => Number(b?.sold_count || b?.sold || 0) - Number(a?.sold_count || a?.sold || 0))
       .slice(0, 4);
   }, [safeProducts]);
 
@@ -242,7 +268,40 @@ export default function HomeClient({
   };
 
   const handleAdd = (product) => {
-    addToCart(normalizeProductForStorage(product), { quantity: 1 });
+    const variants = Array.isArray(product?.variants)
+      ? product.variants.filter(
+          (variant) => Number(variant?.is_active ?? 1) !== 0 && Number(variant?.stock || 0) > 0
+        )
+      : [];
+
+    if (variants.length !== 1) {
+      router.push("/shop/product/" + product.id);
+      return;
+    }
+
+    const variant = variants[0];
+    const basePrice = Number(variant?.price || product?.price || 0);
+    const salePrice = Number(variant?.discount_price || 0);
+    const finalPrice = salePrice > 0 && salePrice < basePrice ? salePrice : basePrice;
+
+    addToCart(
+      normalizeProductForStorage({
+        ...product,
+        product_id: product.id,
+        product_variant_id: variant.id,
+        variant_id: variant.id,
+        selected_variant: variant,
+        size_id: variant?.size_id ?? variant?.size?.id ?? null,
+        color_id: variant?.color_id ?? variant?.color?.id ?? null,
+        size: variant?.size_name || variant?.size?.name || "",
+        color: variant?.color_name || variant?.color?.name || "",
+        sku: variant?.sku || "",
+        price: finalPrice,
+        stock: Number(variant?.stock || 0),
+        image: variant?.image || product?.image,
+      }),
+      { quantity: 1, product_variant_id: variant.id }
+    );
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("dynova:storage"));
@@ -312,6 +371,20 @@ export default function HomeClient({
   const ProductCard = ({ product }) => {
     if (!product) return null;
 
+    const availableVariants = Array.isArray(product?.variants)
+      ? product.variants.filter(
+          (variant) => Number(variant?.is_active ?? 1) !== 0 && Number(variant?.stock || 0) > 0
+        )
+      : [];
+    const totalStock = Number(
+      product?.total_stock ??
+        availableVariants.reduce((sum, variant) => sum + Number(variant?.stock || 0), 0)
+    );
+    const requiresSelection = availableVariants.length !== 1;
+    const displayPrice = getDisplayPrice(product);
+    const rating = Number(product?.average_rating || 0);
+    const reviewCount = Number(product?.reviews_count || 0);
+
     return (
       <article className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl">
         <Link
@@ -327,9 +400,11 @@ export default function HomeClient({
             className="aspect-[4/4.25] w-full object-cover transition duration-500 group-hover:scale-105"
           />
 
-          <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-orange-600 shadow-sm">
-            Hot
-          </span>
+          {(product?.is_featured || product?.isFeatured) && (
+            <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-orange-600 shadow-sm">
+              Nổi bật
+            </span>
+          )}
         </Link>
 
         <div className="flex flex-1 flex-col p-4">
@@ -338,10 +413,12 @@ export default function HomeClient({
               {getProductCategory(product)}
             </p>
 
-            <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-500">
-              <Star size={13} className="fill-orange-400 text-orange-400" />
-              {product.rating || 4.8}
-            </span>
+            {reviewCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-500">
+                <Star size={13} className="fill-orange-400 text-orange-400" />
+                {rating.toFixed(1)}
+              </span>
+            )}
           </div>
 
           <Link href={"/shop/product/" + product.id}>
@@ -361,21 +438,27 @@ export default function HomeClient({
                   Giá bán
                 </p>
                 <p className="text-base font-black text-slate-950">
-                  {formatCurrency(product.price || 0)}
+                  {formatCurrency(displayPrice)}
                 </p>
               </div>
 
-              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-600">
-                Còn hàng
+              <span className={
+                "rounded-full px-2.5 py-1 text-[11px] font-black " +
+                (totalStock > 0
+                  ? "bg-emerald-50 text-emerald-600"
+                  : "bg-rose-50 text-rose-600")
+              }>
+                {totalStock > 0 ? `Còn ${totalStock}` : "Hết hàng"}
               </span>
             </div>
 
             <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
               <button
                 onClick={() => handleAdd(product)}
-                className="btn-primary rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider"
+                disabled={totalStock <= 0}
+                className="btn-primary rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                Thêm giỏ
+                {requiresSelection ? "Xem tùy chọn" : "Thêm vào giỏ"}
               </button>
 
               <button
@@ -861,7 +944,12 @@ export default function HomeClient({
 
             {bestSeller.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                {bestSeller.map((product, index) => (
+                {bestSeller.map((product, index) => {
+                  const displayPrice = getDisplayPrice(product);
+                  const rating = Number(product?.average_rating || product?.rating || 0);
+                  const reviewCount = Number(product?.reviews_count || 0);
+
+                  return (
                   <Link
                     key={product.id}
                     href={"/shop/product/" + product.id}
@@ -898,7 +986,7 @@ export default function HomeClient({
                       <div className="mt-auto flex items-end justify-between gap-3 pt-3">
                         <div>
                           <p className="text-base font-black text-slate-950">
-                            {formatCurrency(product.price || 0)}
+                            {formatCurrency(displayPrice)}
                           </p>
 
                           {(product.compare_price || product.old_price) && (
@@ -910,17 +998,24 @@ export default function HomeClient({
                           )}
                         </div>
 
-                        <p className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-600">
-                          <Star
-                            size={13}
-                            className="fill-amber-400 text-amber-400"
-                          />
-                          {product.rating || 4.8}
-                        </p>
+                        {reviewCount > 0 && rating > 0 ? (
+                          <p className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-600">
+                            <Star
+                              size={13}
+                              className="fill-amber-400 text-amber-400"
+                            />
+                            {rating.toFixed(1)}
+                          </p>
+                        ) : (
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-500">
+                            Mới
+                          </span>
+                        )}
                       </div>
                     </div>
                   </Link>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="grid min-h-[310px] place-items-center rounded-[28px] border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
