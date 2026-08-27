@@ -15,7 +15,6 @@ import {
   PackageCheck,
   Plus,
   RotateCcw,
-  Scale,
   Ruler,
   Share2,
   ShieldCheck,
@@ -35,7 +34,6 @@ import {
 } from "@/services/wishlist.service";
 import ProductReviews from "@/components/reviews/ProductReviews";
 import { getAuthToken } from "@/services/auth.service";
-import { addCompareId } from "@/utils/compareStorage";
 
 const API_HOST = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -46,7 +44,6 @@ const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&auto=format&fit=crop&q=85";
 
 const SHOP_NAVIGATION_KEY = "dynova_shop_navigation_v2";
-const BUY_NOW_KEY = "dynova_buy_now_v1";
 const SHOP_RETURN_WINDOW = 30 * 60 * 1000;
 
 function getSafeShopReturnUrl(value) {
@@ -143,7 +140,7 @@ function getBrandName(product) {
   }
 
   return (
-    product?.brand?.name ||
+product?.brand?.name ||
     product?.brand_data?.name ||
     product?.brandInfo?.name ||
     product?.brand_name ||
@@ -206,8 +203,8 @@ function normalizeVariant(variant) {
 
   const discountPrice =
     variant?.discount_price !== null &&
-      variant?.discount_price !== undefined &&
-      variant?.discount_price !== ""
+    variant?.discount_price !== undefined &&
+    variant?.discount_price !== ""
       ? Number(variant.discount_price)
       : null;
 
@@ -258,9 +255,9 @@ function normalizeVariant(variant) {
     discount_price: discountPrice,
     stock: Number(
       variant?.stock ??
-      variant?.quantity ??
-      variant?.qty ??
-      0
+        variant?.quantity ??
+        variant?.qty ??
+        0
     ),
     image:
       variant?.image_url ||
@@ -279,7 +276,7 @@ function getVariantFinalPrice(variant) {
   if (
     discountPrice > 0 &&
     price > 0 &&
-    discountPrice < price
+discountPrice < price
   ) {
     return discountPrice;
   }
@@ -315,9 +312,9 @@ function getGallery(product, variants) {
         typeof item === "string"
           ? item
           : item?.url ||
-          item?.image ||
-          item?.image_url ||
-          "";
+            item?.image ||
+            item?.image_url ||
+            "";
 
       if (raw) images.push(normalizeImage(raw));
     });
@@ -329,9 +326,9 @@ function getGallery(product, variants) {
         typeof item === "string"
           ? item
           : item?.url ||
-          item?.image ||
-          item?.image_url ||
-          "";
+            item?.image ||
+            item?.image_url ||
+            "";
 
       if (raw) images.push(normalizeImage(raw));
     });
@@ -389,9 +386,9 @@ function getProductOriginalPrice(product, variants) {
 function getProductRating(product) {
   const rating = Number(
     product?.average_rating ||
-    product?.rating_average ||
-    product?.rating ||
-    0
+      product?.rating_average ||
+      product?.rating ||
+      0
   );
 
   return Number.isFinite(rating) ? rating : 0;
@@ -400,9 +397,9 @@ function getProductRating(product) {
 function getProductReviewCount(product) {
   const count = Number(
     product?.reviews_count ||
-    product?.review_count ||
-    product?.total_reviews ||
-    0
+      product?.review_count ||
+      product?.total_reviews ||
+      0
   );
 
   return Number.isFinite(count) ? count : 0;
@@ -424,7 +421,7 @@ function buildCartProduct({
     key: [
       product?.id,
       variantId || "default",
-      selectedVariant?.size_id || "no-size",
+selectedVariant?.size_id || "no-size",
       selectedVariant?.color_id || "no-color",
     ].join("-"),
 
@@ -538,7 +535,7 @@ export default function ProductDetailClient({
   relatedProducts = [],
 }) {
   const router = useRouter();
-  const pathname = usePathname();
+const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const shopReturnUrl = useMemo(
@@ -565,7 +562,7 @@ export default function ProductDetailClient({
       navigation?.from === shopReturnUrl &&
       String(navigation?.productId || "") === String(product?.id || "") &&
       Date.now() - Number(navigation?.savedAt || 0) <
-      SHOP_RETURN_WINDOW &&
+        SHOP_RETURN_WINDOW &&
       window.history.length > 1;
 
     if (cameDirectlyFromShop) {
@@ -654,12 +651,12 @@ export default function ProductDetailClient({
 
   const [selectedColorId, setSelectedColorId] = useState(
     firstVariant?.color_id
-      ? String(firstVariant.color_id)
+? String(firstVariant.color_id)
       : ""
   );
 
   const [selectedSizeId, setSelectedSizeId] = useState(
-    variants.length === 1 && firstVariant?.size_id
+    firstVariant?.size_id
       ? String(firstVariant.size_id)
       : ""
   );
@@ -678,7 +675,6 @@ export default function ProductDetailClient({
     if (!firstVariant) {
       setSelectedColorId("");
       setSelectedSizeId("");
-      setQuantity(1);
       return;
     }
 
@@ -689,13 +685,11 @@ export default function ProductDetailClient({
     );
 
     setSelectedSizeId(
-      variants.length === 1 && firstVariant.size_id
+      firstVariant.size_id
         ? String(firstVariant.size_id)
         : ""
     );
-
-    setQuantity(1);
-  }, [firstVariant?.id, variants.length]);
+  }, [firstVariant?.id]);
 
   useEffect(() => {
     setMainImage(gallery[0] || FALLBACK_IMAGE);
@@ -732,44 +726,62 @@ export default function ProductDetailClient({
     variantsForSelectedColor,
   ]);
 
-  const productHasColors = colorOptions.length > 0;
-  const productHasSizes = allSizeOptions.length > 0;
-
-  const hasRequiredSelection =
-    (!productHasColors || Boolean(selectedColorId)) &&
-    (!productHasSizes || Boolean(selectedSizeId));
-
   const selectedVariant = useMemo(() => {
-    if (variants.length === 0 || !hasRequiredSelection) {
-      return null;
-    }
+    if (variants.length === 0) return null;
 
     return (
       variants.find((variant) => {
         const colorMatched =
-          !productHasColors ||
+          !selectedColorId ||
           String(variant.color_id) ===
-          String(selectedColorId);
+            String(selectedColorId);
 
         const sizeMatched =
-          !productHasSizes ||
+          !selectedSizeId ||
           String(variant.size_id) ===
-          String(selectedSizeId);
+            String(selectedSizeId);
 
         return colorMatched && sizeMatched;
       }) || null
     );
   }, [
     variants,
-    hasRequiredSelection,
-    productHasColors,
-    productHasSizes,
     selectedColorId,
     selectedSizeId,
   ]);
 
   useEffect(() => {
-    if (selectedVariant?.image) {
+    if (!selectedColorId) return;
+
+    const currentSizeStillExists =
+      variantsForSelectedColor.some(
+        (variant) =>
+          String(variant.size_id) ===
+          String(selectedSizeId)
+      );
+
+    if (!currentSizeStillExists) {
+      const nextVariant =
+        variantsForSelectedColor.find(
+          (variant) => variant.stock > 0
+        ) ||
+        variantsForSelectedColor[0] ||
+        null;
+
+      setSelectedSizeId(
+        nextVariant?.size_id
+          ? String(nextVariant.size_id)
+          : ""
+      );
+    }
+  }, [
+    selectedColorId,
+    selectedSizeId,
+    variantsForSelectedColor,
+  ]);
+
+  useEffect(() => {
+if (selectedVariant?.image) {
       setMainImage(
         normalizeImage(selectedVariant.image)
       );
@@ -800,28 +812,26 @@ export default function ProductDetailClient({
 
   const originalPrice =
     selectedVariant &&
-      Number(selectedVariant.discount_price || 0) > 0 &&
-      Number(selectedVariant.discount_price) <
+    Number(selectedVariant.discount_price || 0) > 0 &&
+    Number(selectedVariant.discount_price) <
       Number(selectedVariant.price || 0)
       ? Number(selectedVariant.price)
       : getProductOriginalPrice(product, variants);
 
   const stock = selectedVariant
     ? Number(selectedVariant.stock || 0)
-    : variants.length === 0
-      ? Number(
-        product?.stock ??
-        product?.total_stock ??
-        product?.quantity ??
-        0
-      )
-      : 0;
-
-  const hasCompletedVariant =
-    variants.length === 0 || Boolean(selectedVariant);
-
-  const canPurchase =
-    hasCompletedVariant && stock > 0;
+    : variants.length > 0
+      ? variants.reduce(
+          (total, variant) =>
+            total + Number(variant.stock || 0),
+          0
+        )
+      : Number(
+          product?.stock ??
+            product?.total_stock ??
+            product?.quantity ??
+            0
+        );
 
   const productRating = getProductRating(product);
   const reviewCount = getProductReviewCount(product);
@@ -867,21 +877,22 @@ export default function ProductDetailClient({
         String(variant.color_id) === String(colorId)
     );
 
-    const previewVariant =
+    const nextVariant =
       colorVariants.find(
-        (variant) => Number(variant.stock || 0) > 0
+        (variant) => variant.stock > 0
       ) ||
       colorVariants[0] ||
       null;
 
     setSelectedColorId(String(colorId));
-
     setSelectedSizeId(
-      productHasSizes ? "" : selectedSizeId
+      nextVariant?.size_id
+        ? String(nextVariant.size_id)
+        : ""
     );
 
-    if (previewVariant?.image) {
-      setMainImage(normalizeImage(previewVariant.image));
+    if (nextVariant?.image) {
+      setMainImage(normalizeImage(nextVariant.image));
     }
 
     setQuantity(1);
@@ -893,7 +904,7 @@ export default function ProductDetailClient({
   };
 
   const isSizeAvailable = (sizeId) => {
-    return variantsForSelectedColor.some(
+return variantsForSelectedColor.some(
       (variant) =>
         String(variant.size_id) === String(sizeId) &&
         Number(variant.stock) > 0
@@ -920,18 +931,10 @@ export default function ProductDetailClient({
       return;
     }
 
-    if (productHasColors && !selectedColorId) {
-      showNotice("Vui lòng chọn màu sắc.");
-      return;
-    }
-
-    if (productHasSizes && !selectedSizeId) {
-      showNotice("Vui lòng chọn kích thước.");
-      return;
-    }
-
     if (variants.length > 0 && !selectedVariant) {
-      showNotice("Phân loại đã chọn không tồn tại.");
+      showNotice(
+        "Vui lòng chọn đầy đủ màu sắc và kích thước."
+      );
       return;
     }
 
@@ -946,25 +949,6 @@ export default function ProductDetailClient({
       selectedImage: mainImage,
       displayPrice,
     });
-
-    if (buyNow) {
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(
-          BUY_NOW_KEY,
-          JSON.stringify({
-            item: {
-              ...cartProduct,
-              quantity,
-              qty: quantity,
-            },
-            createdAt: Date.now(),
-          })
-        );
-      }
-
-      router.push("/checkout?mode=buy-now");
-      return;
-    }
 
     addToCart(cartProduct, {
       quantity,
@@ -983,6 +967,11 @@ export default function ProductDetailClient({
       window.dispatchEvent(
         new Event("dynova:cart")
       );
+    }
+
+    if (buyNow) {
+      router.push("/checkout");
+      return;
     }
 
     showNotice("Đã thêm đúng biến thể vào giỏ hàng.");
@@ -1021,7 +1010,7 @@ export default function ProductDetailClient({
 
       showNotice(
         error?.message ||
-        "Không thể cập nhật yêu thích."
+          "Không thể cập nhật yêu thích."
       );
     } finally {
       setWishlistLoading(false);
@@ -1052,7 +1041,7 @@ export default function ProductDetailClient({
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f8fb] pb-16">
+<div className="min-h-screen bg-[#f7f8fb] pb-16">
       {notice && (
         <div className="product-float-in fixed right-5 top-24 z-[90] max-w-sm rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
           {notice}
@@ -1074,7 +1063,6 @@ export default function ProductDetailClient({
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/95 to-slate-950/75" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(249,115,22,0.18),transparent_34%)]" />
         </div>
-
 
         <div className="container-page relative z-10 py-10 md:py-14">
           <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-400">
@@ -1132,8 +1120,7 @@ export default function ProductDetailClient({
           <ArrowLeft size={16} />
           Quay lại cửa hàng
         </button>
-
-        <section className="product-detail-card grid gap-8 rounded-[34px] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
+<section className="product-detail-card grid gap-8 rounded-[34px] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
           <div className="grid gap-4 lg:grid-cols-[92px_1fr]">
             <div className="order-2 flex gap-3 overflow-x-auto pb-1 lg:order-1 lg:flex-col lg:overflow-visible lg:pb-0">
               {gallery.map((image) => (
@@ -1201,21 +1188,12 @@ export default function ProductDetailClient({
 
                 <div className="flex gap-2">
                   <button
-                    type="button"
+type="button"
                     onClick={handleShare}
                     className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-orange-50 hover:text-orange-600"
                     aria-label="Chia sẻ"
                   >
                     <Share2 size={18} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { addCompareId(product.id); router.push("/compare"); }}
-                    className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 shadow-sm transition hover:bg-orange-50 hover:text-orange-500"
-                    aria-label="So sánh"
-                  >
-                    <Scale size={19} />
                   </button>
 
                   <button
@@ -1285,12 +1263,12 @@ export default function ProductDetailClient({
 
                 <div className="mt-2 flex flex-wrap items-end gap-3">
                   <span className="text-3xl font-black text-orange-600 md:text-4xl">
-                    {formatCurrency(displayPrice)}
+{formatCurrency(displayPrice)}
                   </span>
 
                   {originalPrice &&
                     Number(originalPrice) >
-                    Number(displayPrice) && (
+                      Number(displayPrice) && (
                       <span className="pb-1 text-sm font-bold text-slate-400 line-through">
                         {formatCurrency(originalPrice)}
                       </span>
@@ -1299,12 +1277,12 @@ export default function ProductDetailClient({
 
                 {originalPrice &&
                   Number(originalPrice) >
-                  Number(displayPrice) && (
+                    Number(displayPrice) && (
                     <p className="mt-2 inline-flex rounded-full bg-orange-500 px-3 py-1 text-xs font-black text-white">
                       Tiết kiệm{" "}
                       {formatCurrency(
                         Number(originalPrice) -
-                        Number(displayPrice)
+                          Number(displayPrice)
                       )}
                     </p>
                   )}
@@ -1355,7 +1333,7 @@ export default function ProductDetailClient({
                         );
                       })}
                     </div>
-                  </div>
+</div>
                 )}
 
                 {sizeOptions.length > 0 && (
@@ -1371,7 +1349,7 @@ export default function ProductDetailClient({
 
                       <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-400">
                         <Ruler size={14} />
-                        Chọn size phù hợp
+                        Bảng size
                       </span>
                     </div>
 
@@ -1406,27 +1384,6 @@ export default function ProductDetailClient({
                         );
                       })}
                     </div>
-
-                    {productHasSizes && !selectedSizeId && (
-                      <p className="mt-3 text-xs font-bold text-orange-600">
-                        Vui lòng chọn kích thước trước khi mua.
-                      </p>
-                    )}
-
-                    {selectedVariant && (
-                      <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                        <p className="text-xs font-black uppercase tracking-wider text-emerald-700">
-                          Phân loại đã chọn
-                        </p>
-                        <p className="mt-1 text-sm font-bold text-slate-700">
-                          {selectedColor?.name || "Mặc định"}
-                          {productHasSizes
-                            ? ` / ${selectedSize?.name || ""}`
-                            : ""}
-                          {` · Còn ${stock} sản phẩm`}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -1437,19 +1394,16 @@ export default function ProductDetailClient({
                     </p>
 
                     <p className="mt-1 text-xs font-semibold text-slate-400">
-                      {!hasCompletedVariant
-                        ? "Chọn phân loại để xem tồn kho"
-                        : stock > 0
-                          ? `Còn ${stock} sản phẩm`
-                          : "Biến thể đã hết hàng"}
+                      {stock > 0
+                        ? `Còn ${stock} sản phẩm`
+                        : "Biến thể đã hết hàng"}
                     </p>
                   </div>
-
-                  <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
+<div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     <button
                       type="button"
                       onClick={decreaseQuantity}
-                      disabled={!canPurchase}
+                      disabled={stock <= 0}
                       className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Giảm số lượng"
                     >
@@ -1463,7 +1417,7 @@ export default function ProductDetailClient({
                     <button
                       type="button"
                       onClick={increaseQuantity}
-                      disabled={!canPurchase}
+                      disabled={stock <= 0}
                       className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Tăng số lượng"
                     >
@@ -1476,7 +1430,11 @@ export default function ProductDetailClient({
                   <button
                     type="button"
                     onClick={() => handleAdd(true)}
-                    disabled={!canPurchase}
+                    disabled={
+                      stock <= 0 ||
+                      (variants.length > 0 &&
+                        !selectedVariant)
+                    }
                     className="btn-primary flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Zap size={16} />
@@ -1486,7 +1444,11 @@ export default function ProductDetailClient({
                   <button
                     type="button"
                     onClick={() => handleAdd(false)}
-                    disabled={!canPurchase}
+                    disabled={
+                      stock <= 0 ||
+                      (variants.length > 0 &&
+                        !selectedVariant)
+                    }
                     className="btn-ghost flex items-center justify-center gap-2 rounded-2xl px-5 py-4 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ShoppingBag size={16} />
@@ -1502,8 +1464,7 @@ export default function ProductDetailClient({
                     />
                     Giao nhanh
                   </p>
-
-                  <p className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3">
+<p className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3">
                     <ShieldCheck
                       size={16}
                       className="text-orange-500"
@@ -1593,7 +1554,7 @@ export default function ProductDetailClient({
                 key={tab.id}
                 type="button"
                 onClick={() =>
-                  setActiveTab(tab.id)
+setActiveTab(tab.id)
                 }
                 className={
                   "shrink-0 pb-4 text-sm font-black uppercase tracking-wider transition " +
@@ -1659,7 +1620,7 @@ export default function ProductDetailClient({
                 </h3>
 
                 <p className="mt-3 text-sm leading-7 text-slate-300">
-                  Chọn màu và kích thước phù hợp trước khi thêm sản phẩm vào giỏ hàng.
+                  Chọn đúng màu và kích thước để hệ thống lấy chính xác giá, ảnh và tồn kho của biến thể.
                 </p>
 
                 <div className="mt-5 grid gap-3 text-sm font-bold text-slate-300">
@@ -1674,7 +1635,7 @@ export default function ProductDetailClient({
                   <p className="flex items-center gap-2">
                     <CheckCircle
                       size={16}
-                      className="text-orange-400"
+className="text-orange-400"
                     />
                     Kiểm tra tồn kho
                   </p>
@@ -1684,7 +1645,7 @@ export default function ProductDetailClient({
                       size={16}
                       className="text-orange-400"
                     />
-                    Kiểm tra đúng phân loại trước khi mua
+                    Lưu đúng SKU vào giỏ hàng
                   </p>
                 </div>
               </div>
@@ -1697,8 +1658,8 @@ export default function ProductDetailClient({
                 [
                   "Mã sản phẩm",
                   selectedVariant?.sku ||
-                  product?.sku ||
-                  `DNV-${product.id}`,
+                    product?.sku ||
+                    `DNV-${product.id}`,
                 ],
                 [
                   "Thương hiệu",
@@ -1721,12 +1682,12 @@ export default function ProductDetailClient({
                 [
                   "Màu đang chọn",
                   selectedColor?.name ||
-                  "Không có phân loại màu",
+                    "Không có phân loại màu",
                 ],
                 [
                   "Size đang chọn",
                   selectedSize?.name ||
-                  "Không có phân loại size",
+                    "Không có phân loại size",
                 ],
                 [
                   "Tồn kho",
@@ -1767,11 +1728,18 @@ export default function ProductDetailClient({
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
                   Gợi ý thêm
                 </p>
-
-                <h2 className="mt-2 text-3xl font-black tracking-[-0.03em] text-slate-950">
+<h2 className="mt-2 text-3xl font-black tracking-[-0.03em] text-slate-950">
                   Sản phẩm liên quan
                 </h2>
               </div>
+
+              <button
+                type="button"
+                onClick={returnToShop}
+                className="hidden rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 sm:inline-flex"
+              >
+                Xem tất cả
+              </button>
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
