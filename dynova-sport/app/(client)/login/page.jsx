@@ -99,7 +99,7 @@ function Field({
   );
 }
 
-<<<<<<< HEAD
+
 function resolveRedirectPath(role, redirectUrl) {
   const safeRedirect =
     typeof redirectUrl === "string" && redirectUrl.startsWith("/")
@@ -129,8 +129,7 @@ function getErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
-=======
->>>>>>> main
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -158,7 +157,7 @@ export default function LoginPage() {
     );
   }, []);
 
-<<<<<<< HEAD
+
   const redirectLabel = useMemo(() => {
     if (redirectUrl.includes("checkout")) return "thanh toán";
     if (redirectUrl.includes("profile")) return "hồ sơ";
@@ -167,8 +166,7 @@ export default function LoginPage() {
     return "tài khoản";
   }, [redirectUrl]);
 
-=======
->>>>>>> main
+
   const updateForm = (key, value) => {
     setForm((previous) => ({
       ...previous,
@@ -217,13 +215,13 @@ export default function LoginPage() {
 
       setSuccessText(
         role === "admin"
-<<<<<<< HEAD
+
           ? "Đăng nhập quản trị thành công. Đang chuyển đến Admin..."
           : "Đăng nhập thành công. Đang chuyển trang..."
-=======
+
           ? "Đăng nhập quản trị thành công."
           : "Đăng nhập thành công."
->>>>>>> main
+
       );
 
       window.setTimeout(() => {
@@ -292,16 +290,16 @@ export default function LoginPage() {
 
         <div className="mx-auto w-full max-w-[500px]">
           <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 md:p-8">
-            <div className="text-center">
+            <Link className="text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-slate-950 text-sm font-black text-white shadow-xl shadow-slate-300">
                 DNV
               </div>
 
-<<<<<<< HEAD
+
               <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-orange-500">
                 Welcome back
               </p>
-=======
+
               <div className="text-left">
                 <p className="text-xl font-black uppercase tracking-[-0.04em] text-slate-950">
                   Dynova
@@ -313,19 +311,19 @@ export default function LoginPage() {
               </div>
             </Link>
           </div>
->>>>>>> main
+
 
               <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
                 Đăng nhập tài khoản
               </h2>
 
               <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
-<<<<<<< HEAD
+
                 Đăng nhập để tiếp tục {redirectLabel}. Hệ thống sẽ tự kiểm tra
                 quyền admin hoặc customer.
-=======
+
                 Truy cập tài khoản và tiếp tục mua sắm tại Dynova Sport.
->>>>>>> main
+
               </p>
             </div>
 
@@ -375,12 +373,12 @@ export default function LoginPage() {
                 rightSlot={
                   <button
                     type="button"
-<<<<<<< HEAD
+
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-orange-500"
                     aria-label={
                       showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"
-=======
+
                     disabled={loading}
                     onClick={() =>
                       setShowPassword((previous) => !previous)
@@ -390,7 +388,7 @@ export default function LoginPage() {
                       showPassword
                         ? "Ẩn mật khẩu"
                         : "Hiện mật khẩu"
->>>>>>> main
+
                     }
                   >
                     {showPassword ? (
@@ -435,13 +433,13 @@ export default function LoginPage() {
               >
                 {loading ? (
                   <>
-<<<<<<< HEAD
+
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                     Đang kiểm tra...
-=======
+
                     <Loader2 size={17} className="animate-spin" />
                     Đang đăng nhập...
->>>>>>> main
+
                   </>
                 ) : (
                   <>
@@ -453,17 +451,17 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 rounded-3xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
-<<<<<<< HEAD
+
               <ShieldCheck className="mr-2 inline text-emerald-500" size={15} />
               Admin sẽ được chuyển đến trang quản trị. Customer sẽ vào hồ sơ
               hoặc trang đang cần đăng nhập.
-=======
+
               <ShieldCheck
                 className="mr-2 inline text-emerald-500"
                 size={15}
               />
               Tài khoản được bảo vệ trong suốt quá trình sử dụng.
->>>>>>> main
+
             </div>
 
             <p className="mt-6 text-center text-sm text-slate-500">
@@ -478,6 +476,6 @@ export default function LoginPage() {
           </div>
         </div>
       </section>
-    </main>
+    </main> 
   );
 }
