@@ -118,7 +118,7 @@ export default function ClientLayout({ children }) {
 
   const menuItems = [
     { name: "Trang chủ", href: "/" },
-    { name: "Flash Sale", href: "/sale", hot: true },
+    // { name: "Flash Sale", href: "/sale", hot: true },
     { name: "Sản phẩm", href: "/shop" },
     { name: "Bộ sưu tập", href: "/collections" },
     { name: "Tin tức", href: "/news" },
