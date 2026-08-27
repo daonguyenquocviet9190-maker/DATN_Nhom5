@@ -167,8 +167,8 @@ export default function PremiumAccordionBrands() {
         </div>
       </section>
 <footer className="p-6 md:p-8 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center text-[11px] text-gray-400 tracking-wider">
-        <p>© 2026 DYNOVA STUDIO. PREMIUM EXPERIENCE.</p>
-        <p className="font-medium text-gray-600 hidden sm:block">RÊ CHUỘT VÀO TÊN THƯƠNG HIỆU ĐỂ MỞ RỘNG BỘ SƯU TẬP</p>
+        {/* <p>© 2026 DYNOVA STUDIO. PREMIUM EXPERIENCE.</p> */}
+        {/* <p className="font-medium text-gray-600 hidden sm:block">RÊ CHUỘT VÀO TÊN THƯƠNG HIỆU ĐỂ MỞ RỘNG BỘ SƯU TẬP</p> */}
       </footer>
 
     </div>
