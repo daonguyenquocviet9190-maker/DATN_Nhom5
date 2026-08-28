@@ -12,10 +12,7 @@ import {
   Heart,
   Loader2,
   PackageCheck,
-  Search,
   ShieldCheck,
-  ShoppingBag,
-  Sparkles,
   Star,
   Truck,
 } from "lucide-react";
@@ -44,7 +41,6 @@ function encodePath(path) {
     .join("/");
 }
 
-
 function getDisplayPrice(product) {
   const directPrice = Number(
     product?.display_price ??
@@ -70,40 +66,6 @@ function getDisplayPrice(product) {
   return variantPrices.length > 0 ? Math.min(...variantPrices) : 0;
 }
 
-function getBannerImage(banner) {
-  const value =
-    banner?.image_url ||
-    banner?.imageUrl ||
-    banner?.image ||
-    banner?.thumbnail ||
-    banner?.background ||
-    "";
-
-  if (!value) return "";
-
-  const raw = String(value).trim();
-
-  if (!raw) return "";
-
-  if (raw.startsWith("http://") || raw.startsWith("https://")) {
-    return raw;
-  }
-
-  if (raw.startsWith("/storage/")) {
-    return API_ORIGIN + encodePath(raw);
-  }
-
-  if (raw.startsWith("storage/")) {
-    return API_ORIGIN + "/" + encodePath(raw);
-  }
-
-  if (raw.startsWith("/images/")) {
-    return raw;
-  }
-
-  return `${API_ORIGIN}/storage/banners/${encodePath(raw.replace(/^\/+/, ""))}`;
-}
-
 export default function HomeClient({
   products = [],
   banners = [],
@@ -115,7 +77,6 @@ export default function HomeClient({
   const router = useRouter();
 
   const [notice, setNotice] = useState("");
-  const [keyword, setKeyword] = useState("");
   const [activeBanner, setActiveBanner] = useState(0);
   const [pauseBanner, setPauseBanner] = useState(false);
   const [wishlistLoadingId, setWishlistLoadingId] = useState(null);
@@ -153,63 +114,14 @@ export default function HomeClient({
       .slice(0, 4);
   }, [safeProducts]);
 
+  // Danh sách 3 banner tĩnh lấy từ thư mục public/img/banner/
   const heroBanners = useMemo(() => {
-    const source = Array.isArray(banners) ? banners : [];
-
-    return [...source]
-      .filter((banner) => {
-        const isActive =
-          banner?.isActive !== false &&
-          banner?.is_active !== 0 &&
-          banner?.status !== "inactive" &&
-          banner?.status !== 0;
-
-        return isActive;
-      })
-      .sort(
-        (a, b) =>
-          Number(a?.sortOrder || a?.sort_order || 0) -
-          Number(b?.sortOrder || b?.sort_order || 0)
-      )
-      .map((banner, index) => ({
-        id: banner.id || index + 1,
-        title:
-          banner.title ||
-          banner.name ||
-          "Trang bị thể thao cho phong cách sống năng động",
-        subtitle:
-          banner.subtitle ||
-          banner.tagline ||
-          banner.sub_title ||
-          "Sport Collection",
-        description:
-          banner.description ||
-          banner.content ||
-          "Khám phá những sản phẩm thể thao nổi bật, phù hợp cho luyện tập, thi đấu và phong cách sống năng động.",
-        image: getBannerImage(banner),
-        buttonText:
-          banner.buttonText ||
-          banner.button_text ||
-          banner.ctaText ||
-          banner.cta_text ||
-          "Mua sắm ngay",
-        buttonLink:
-          banner.buttonLink ||
-          banner.button_link ||
-          banner.ctaLink ||
-          banner.cta_link ||
-          banner.link ||
-          "/shop",
-        secondaryText:
-          banner.secondaryText ||
-          banner.secondary_text ||
-          "Xem bộ sưu tập",
-        secondaryLink:
-          banner.secondaryLink ||
-          banner.secondary_link ||
-          "/collections",
-      }));
-  }, [banners]);
+    return [
+      { id: 1, image: "/img/banner/banner1.webp" },
+      { id: 2, image: "/img/banner/banner2.webp" },
+      { id: 3, image: "/img/banner/banner3.webp" },
+    ];
+  }, []);
 
   const currentBanner = heroBanners[activeBanner] || heroBanners[0] || null;
 
@@ -343,15 +255,6 @@ export default function HomeClient({
     } finally {
       setWishlistLoadingId(null);
     }
-  };
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-
-    const value = keyword.trim();
-    if (!value) return;
-
-    router.push("/search?q=" + encodeURIComponent(value));
   };
 
   const goPrevBanner = () => {
@@ -489,195 +392,64 @@ export default function HomeClient({
         </div>
       )}
 
+      {/* Hero Banner Section */}
       <section
-        className="home-hero-clean relative isolate overflow-hidden bg-slate-950 text-white"
+        className="relative overflow-hidden bg-slate-950"
         onMouseEnter={() => setPauseBanner(true)}
         onMouseLeave={() => setPauseBanner(false)}
       >
-        <div className="absolute inset-0">
-          {currentBanner?.image && (
+        <div className="relative h-[480px] w-full md:h-[580px]">
+          {heroBanners.map((banner, index) => (
             <div
-              key={currentBanner.id}
-              className="hero-soft-fade absolute inset-0"
+              key={banner.id}
+              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                index === activeBanner ? "opacity-100 z-10" : "opacity-0 z-0"
+              }`}
             >
               <img
-                src={currentBanner.image}
-                alt={currentBanner.title}
-                className="h-full w-full object-cover opacity-40"
+                src={banner.image}
+                alt={`Banner ${banner.id}`}
+                className="h-full w-full object-cover object-center"
               />
             </div>
-          )}
+          ))}
 
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/92 to-slate-950/58" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(249,115,22,0.18),transparent_32%),radial-gradient(circle_at_85%_18%,rgba(255,255,255,0.08),transparent_26%)]" />
-        </div>
-
-        <div className="container-page relative z-10 grid min-h-[610px] items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="max-w-3xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-orange-200 backdrop-blur">
-              <Sparkles size={14} />
-              {currentBanner?.subtitle || "Dynova Sport"}
-            </div>
-
-            <h1 className="max-w-3xl text-4xl font-black uppercase leading-[1.02] tracking-[-0.045em] md:text-6xl">
-              {currentBanner?.title || "Cửa hàng thể thao Dynova Sport"}
-            </h1>
-
-            <p className="mt-5 max-w-xl text-sm leading-7 text-slate-300 md:text-base">
-              {currentBanner?.description ||
-                "Khám phá bộ sưu tập thể thao mới nhất cùng Dynova Sport."}
-            </p>
-
-            <form
-              onSubmit={handleSearch}
-              className="mt-8 flex max-w-xl flex-col gap-2 rounded-[22px] border border-white/10 bg-white p-2 shadow-2xl shadow-slate-950/25 sm:flex-row"
-            >
-              <div className="flex flex-1 items-center gap-3 px-3 text-slate-400">
-                <Search size={18} />
-
-                <input
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  onFocus={() => setPauseBanner(true)}
-                  onBlur={() => setPauseBanner(false)}
-                  className="h-12 w-full bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-                  placeholder="Tìm sản phẩm, thương hiệu..."
-                />
-              </div>
-
-              <button className="rounded-[18px] bg-orange-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600">
-                Tìm kiếm
+          {/* Banner Controls */}
+          {heroBanners.length > 1 && (
+            <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3">
+              <button
+                onClick={goPrevBanner}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/70"
+                aria-label="Banner trước"
+              >
+                <ChevronLeft size={20} />
               </button>
-            </form>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href={currentBanner?.buttonLink || "/shop"}
-                className="btn-primary inline-flex items-center gap-2 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-wider"
-              >
-                {currentBanner?.buttonText || "Mua sắm ngay"}
-                <ArrowRight size={16} />
-              </Link>
-
-              <Link
-                href={currentBanner?.secondaryLink || "/collections"}
-                className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
-              >
-                {currentBanner?.secondaryText || "Xem bộ sưu tập"}
-              </Link>
-            </div>
-
-            <div className="mt-10 grid max-w-xl grid-cols-3 gap-3">
-              {[
-                { value: "500+", label: "Sản phẩm" },
-                { value: "30 ngày", label: "Đổi trả" },
-                { value: "24/7", label: "Hỗ trợ" },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur transition hover:bg-white/[0.14]"
-                >
-                  <p className="text-xl font-black text-white md:text-2xl">
-                    {item.value}
-                  </p>
-                  <p className="mt-1 text-xs font-bold text-slate-400">
-                    {item.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="hidden lg:block">
-            <div className="hero-product-panel relative ml-auto max-w-[460px]">
-              <div
-                key={"panel-" + (currentBanner?.id || "empty")}
-                className="hero-card-fade overflow-hidden rounded-[36px] border border-white/10 bg-white/10 p-3 shadow-2xl shadow-slate-950/30 backdrop-blur"
-              >
-                <div className="relative overflow-hidden rounded-[28px] bg-slate-900">
-                  {currentBanner?.image ? (
-                    <img
-                      src={currentBanner.image}
-                      alt={currentBanner.title}
-                      className="h-[430px] w-full object-cover"
-                    />
-                  ) : (
-                    <div className="grid h-[430px] place-items-center bg-slate-900">
-                      <div className="text-center">
-                        <Sparkles className="mx-auto text-orange-300" size={42} />
-                        <p className="mt-4 text-sm font-black uppercase tracking-[0.2em] text-slate-400">
-                          Dynova Sport
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent" />
-
-                  <div className="absolute bottom-5 left-5 right-5">
-                    <div className="rounded-[26px] border border-white/10 bg-white/95 p-5 text-slate-950 shadow-2xl backdrop-blur">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-500">
-                        Dynova Collection
-                      </p>
-
-                      <h3 className="mt-2 line-clamp-2 text-xl font-black leading-7">
-                        {currentBanner?.title || "Dynova Collection"}
-                      </h3>
-
-                      <div className="mt-4 grid grid-cols-3 gap-2">
-                        {["Chính hãng", "Dễ mua", "Dễ đổi"].map((item) => (
-                          <span
-                            key={item}
-                            className="rounded-2xl bg-slate-100 px-3 py-2 text-center text-[11px] font-black text-slate-700"
-                          >
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="flex items-center gap-2">
+                {heroBanners.map((banner, index) => (
+                  <button
+                    key={banner.id}
+                    onClick={() => setActiveBanner(index)}
+                    className={
+                      "h-2.5 rounded-full transition-all duration-300 " +
+                      (activeBanner === index
+                        ? "w-8 bg-orange-500"
+                        : "w-2.5 bg-white/50 hover:bg-white/80")
+                    }
+                    aria-label={"Chuyển banner " + (index + 1)}
+                  />
+                ))}
               </div>
 
-              {heroBanners.length > 1 && (
-                <div className="mt-5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {heroBanners.map((banner, index) => (
-                      <button
-                        key={banner.id}
-                        onClick={() => setActiveBanner(index)}
-                        className={
-                          "h-2.5 rounded-full transition-all duration-300 " +
-                          (activeBanner === index
-                            ? "w-9 bg-orange-500"
-                            : "w-2.5 bg-white/35 hover:bg-white/70")
-                        }
-                        aria-label={"Chuyển banner " + (index + 1)}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={goPrevBanner}
-                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
-                      aria-label="Banner trước"
-                    >
-                      <ChevronLeft size={21} />
-                    </button>
-
-                    <button
-                      onClick={goNextBanner}
-                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
-                      aria-label="Banner sau"
-                    >
-                      <ChevronRight size={21} />
-                    </button>
-                  </div>
-                </div>
-              )}
+              <button
+                onClick={goNextBanner}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/70"
+                aria-label="Banner sau"
+              >
+                <ChevronRight size={20} />
+              </button>
             </div>
-          </div>
+          )}
         </div>
       </section>
 
