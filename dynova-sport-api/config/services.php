@@ -66,20 +66,8 @@ return [
 
 
     'vietqr' => [
-        'environment' => strtolower((string) env('VIETQR_ENV', 'demo')),
+        'environment' => strtolower((string) env('VIETQR_ENV', 'development')),
         'image_base_url' => env('VIETQR_IMAGE_BASE_URL', 'https://img.vietqr.io/image'),
-
-        // DATN/local demo: QR encodes a signed URL. Scanning that URL simulates
-        // a provider callback and never creates a real bank transfer.
-        'demo_scan_enabled' => filter_var(
-            env('VIETQR_DEMO_SCAN_ENABLED', env('APP_ENV', 'local') !== 'production'),
-            FILTER_VALIDATE_BOOL
-        ),
-        'demo_scan_base_url' => env('VIETQR_DEMO_SCAN_BASE_URL'),
-        'demo_qr_image_url' => env('VIETQR_DEMO_QR_IMAGE_URL', 'https://quickchart.io/qr'),
-        'demo_scan_secret' => env('VIETQR_DEMO_SCAN_SECRET'),
-
-        // Keep webhook config for a future real payment-provider integration.
         'webhook_secret' => env('VIETQR_WEBHOOK_SECRET'),
     ],
 
