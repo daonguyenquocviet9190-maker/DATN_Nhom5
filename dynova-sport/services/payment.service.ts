@@ -11,10 +11,8 @@ export type VietQrPaymentState = {
   amount: number;
   transfer_content: string;
   qr_url: string;
-  payment_mode?: "demo_scan" | "bank" | string;
-  simulated?: boolean;
-  money_transfer_required?: boolean;
-  demo_scan_local_only?: boolean;
+  payment_mode?: "scan" | "bank" | string;
+  scan_local_only?: boolean;
   bank: {
     name: string;
     code: string;

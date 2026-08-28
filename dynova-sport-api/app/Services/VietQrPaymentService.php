@@ -21,7 +21,7 @@ class VietQrPaymentService
             }
 
             if (($order->payment_method ?? '') !== 'bank') {
-                throw new RuntimeException('Đơn hàng không sử dụng thanh toán QR.');
+                throw new RuntimeException('Đơn hàng không sử dụng VietQR.');
             }
 
             $existing = DB::table('payment_transactions')
@@ -34,17 +34,15 @@ class VietQrPaymentService
                 return;
             }
 
+            $settings = $this->bankSettings();
+
             $requestPayload = [
                 'order_code' => $order->order_code,
                 'transfer_content' => $order->order_code,
-                'payment_mode' => $this->isDemoScanMode() ? 'demo_scan' : 'bank',
+                'payment_mode' => 'bank',
+                'bank_code' => $settings['bank_code'],
+                'account_number' => $settings['account_number'],
             ];
-
-            if (!$this->isDemoScanMode()) {
-                $settings = $this->bankSettings();
-                $requestPayload['bank_code'] = $settings['bank_code'];
-                $requestPayload['account_number'] = $settings['account_number'];
-            }
 
             DB::table('payment_transactions')->insert([
                 'order_id' => $orderId,
@@ -84,7 +82,7 @@ class VietQrPaymentService
             }
 
             if (($order->payment_method ?? '') !== 'bank') {
-                throw new RuntimeException('Đơn hàng không sử dụng thanh toán QR.');
+                throw new RuntimeException('Đơn hàng không sử dụng VietQR.');
             }
 
             if (($order->status ?? '') === 'cancelled') {
@@ -112,60 +110,6 @@ class VietQrPaymentService
         }, 3);
 
         $this->createPendingForOrderIfMissing($orderId);
-
-        return $this->buildState($orderId);
-    }
-
-    /**
-     * Demo-only flow: scanning the QR opens a tokenized URL on the backend.
-     * The URL itself is the simulated "payment provider callback". No bank
-     * account is touched and no money is transferred.
-     */
-    public function confirmByScan(int $orderId, string $token): array
-    {
-        $this->assertReady();
-
-        if (!$this->isDemoScanMode()) {
-            throw new RuntimeException('Chế độ quét QR mô phỏng hiện không được bật.');
-        }
-
-        $order = DB::table('orders')->where('id', $orderId)->first();
-        $transaction = DB::table('payment_transactions')
-            ->where('order_id', $orderId)
-            ->where('provider', 'vietqr')
-            ->orderByDesc('id')
-            ->first();
-
-        if (!$order || !$transaction || ($order->payment_method ?? '') !== 'bank') {
-            throw new RuntimeException('Không tìm thấy giao dịch thanh toán QR.');
-        }
-
-        if (($order->status ?? '') === 'cancelled') {
-            throw new RuntimeException('Đơn hàng đã hủy.');
-        }
-
-        $expectedToken = $this->scanToken($order, $transaction);
-
-        if (!hash_equals($expectedToken, trim($token))) {
-            throw new RuntimeException('Mã thanh toán không hợp lệ hoặc đã bị thay đổi.');
-        }
-
-        if (($order->payment_status ?? '') !== 'paid') {
-            $providerTransactionNo = 'VQR-DEMO-' . strtoupper(substr(hash(
-                'sha256',
-                (string) $transaction->transaction_ref . '|' . $expectedToken
-            ), 0, 18));
-
-            $this->markPaid($orderId, $providerTransactionNo, [
-                'mode' => 'demo_scan',
-                'simulated' => true,
-                'money_transferred' => false,
-                'order_code' => (string) $order->order_code,
-                'amount' => (float) ($transaction->amount ?? $order->grand_total ?? 0),
-                'status' => 'paid',
-                'reference' => $providerTransactionNo,
-            ]);
-        }
 
         return $this->buildState($orderId);
     }
@@ -203,7 +147,7 @@ class VietQrPaymentService
         $order = DB::table('orders')->where('order_code', $orderCode)->first();
 
         if (!$order || ($order->payment_method ?? '') !== 'bank') {
-            throw new RuntimeException('Không tìm thấy đơn QR phù hợp.');
+            throw new RuntimeException('Không tìm thấy đơn VietQR phù hợp.');
         }
 
         $receivedAmount = (float) ($payload['amount'] ?? $payload['transfer_amount'] ?? 0);
@@ -259,7 +203,7 @@ class VietQrPaymentService
             $order = DB::table('orders')->where('id', $orderId)->lockForUpdate()->first();
 
             if (!$transaction || !$order) {
-                throw new RuntimeException('Không tìm thấy giao dịch QR.');
+                throw new RuntimeException('Không tìm thấy giao dịch VietQR.');
             }
 
             if (($transaction->status ?? '') === 'paid' && ($order->payment_status ?? '') === 'paid') {
@@ -318,9 +262,7 @@ class VietQrPaymentService
                     'from_status' => 'pending',
                     'to_status' => 'confirmed',
                     'source' => 'payment',
-                    'note' => $this->isDemoScanMode()
-                        ? 'Thanh toán QR mô phỏng đã được xác nhận bằng lượt quét.'
-                        : 'Thanh toán VietQR đã được xác nhận.',
+                    'note' => 'Thanh toán VietQR đã được xác nhận.',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -338,36 +280,23 @@ class VietQrPaymentService
             ->first();
 
         if (!$order || !$transaction) {
-            throw new RuntimeException('Không tìm thấy giao dịch QR.');
+            throw new RuntimeException('Không tìm thấy giao dịch VietQR.');
         }
 
         $requestPayload = $this->decodePayload($transaction->request_payload ?? null);
         $transferContent = (string) ($requestPayload['transfer_content'] ?? $order->order_code);
         $amount = (float) ($transaction->amount ?? $order->grand_total ?? 0);
-        $demoMode = $this->isDemoScanMode();
+        $settings = $this->bankSettings();
 
-        if ($demoMode) {
-            $scanUrl = $this->buildDemoScanUrl($order, $transaction);
-            $bank = [
-                'name' => 'DYNOVA PAY DEMO',
-                'code' => 'DEMO',
-                'account_number' => 'KHONG-CHUYEN-TIEN',
-                'account_name' => 'DYNOVA SPORT DEMO',
-                'branch' => 'Môi trường mô phỏng',
-            ];
-            $qrUrl = $this->buildDemoQrImageUrl($scanUrl);
-        } else {
-            $settings = $this->bankSettings();
-            $bank = [
-                'name' => $settings['bank_name'],
-                'code' => $settings['bank_code'],
-                'account_number' => $settings['account_number'],
-                'account_name' => $settings['account_name'],
-                'branch' => $settings['branch'],
-            ];
-            $qrUrl = $this->buildBankQrUrl($settings, $amount, $transferContent);
-            $scanUrl = null;
-        }
+        $bank = [
+            'name' => $settings['bank_name'],
+            'code' => $settings['bank_code'],
+            'account_number' => $settings['account_number'],
+            'account_name' => $settings['account_name'],
+            'branch' => $settings['branch'],
+        ];
+
+        $qrUrl = $this->buildBankQrUrl($settings, $amount, $transferContent);
 
         return [
             'order_id' => (int) $order->id,
@@ -380,10 +309,7 @@ class VietQrPaymentService
             'amount' => $amount,
             'transfer_content' => $transferContent,
             'qr_url' => $qrUrl,
-            'payment_mode' => $demoMode ? 'demo_scan' : 'bank',
-            'simulated' => $demoMode,
-            'money_transfer_required' => !$demoMode,
-            'demo_scan_local_only' => $demoMode ? $this->isLocalOnlyUrl($scanUrl) : false,
+            'payment_mode' => 'bank',
             'bank' => $bank,
             'paid_at' => $transaction->paid_at ?? null,
         ];
@@ -404,7 +330,7 @@ class VietQrPaymentService
         }
 
         if (($order->payment_method ?? '') !== 'bank') {
-            throw new RuntimeException('Đơn hàng không sử dụng thanh toán QR.');
+            throw new RuntimeException('Đơn hàng không sử dụng VietQR.');
         }
     }
 
@@ -451,94 +377,6 @@ class VietQrPaymentService
         ], '', '&', PHP_QUERY_RFC3986);
 
         return "{$baseUrl}/{$bankCode}-{$accountNumber}-compact2.png?{$params}";
-    }
-
-    private function buildDemoScanUrl(object $order, object $transaction): string
-    {
-        $baseUrl = $this->demoScanBaseUrl();
-        $token = $this->scanToken($order, $transaction);
-
-        return $baseUrl
-            . '/api/payments/vietqr/scan/'
-            . rawurlencode((string) $order->id)
-            . '/'
-            . rawurlencode($token);
-    }
-
-    private function buildDemoQrImageUrl(string $scanUrl): string
-    {
-        $baseUrl = rtrim((string) config('services.vietqr.demo_qr_image_url', 'https://quickchart.io/qr'), '?&');
-        $params = http_build_query([
-            'text' => $scanUrl,
-            'size' => 360,
-            'margin' => 2,
-            'ecLevel' => 'M',
-            'format' => 'png',
-        ], '', '&', PHP_QUERY_RFC3986);
-
-        return $baseUrl . '?' . $params;
-    }
-
-    private function scanToken(object $order, object $transaction): string
-    {
-        $secret = trim((string) config('services.vietqr.demo_scan_secret', ''));
-
-        if ($secret === '') {
-            $secret = (string) config('app.key', 'dynova-demo-scan-secret');
-        }
-
-        $payload = implode('|', [
-            (string) $order->id,
-            (string) $order->order_code,
-            (string) $transaction->transaction_ref,
-            number_format((float) ($transaction->amount ?? $order->grand_total ?? 0), 2, '.', ''),
-        ]);
-
-        return hash_hmac('sha256', $payload, $secret);
-    }
-
-    private function demoScanBaseUrl(): string
-    {
-        $configured = trim((string) config('services.vietqr.demo_scan_base_url', ''));
-
-        if ($configured !== '') {
-            return rtrim($configured, '/');
-        }
-
-        $appUrl = rtrim((string) config('app.url', 'http://127.0.0.1:8000'), '/');
-        $scheme = parse_url($appUrl, PHP_URL_SCHEME) ?: 'http';
-        $port = parse_url($appUrl, PHP_URL_PORT) ?: 8000;
-
-        $host = gethostbyname(gethostname());
-
-        if (
-            $host
-            && filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
-            && !str_starts_with($host, '127.')
-        ) {
-            return $scheme . '://' . $host . ':' . $port;
-        }
-
-        return $appUrl;
-    }
-
-    private function isLocalOnlyUrl(?string $url): bool
-    {
-        if (!$url) {
-            return true;
-        }
-
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-
-        return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
-    }
-
-    private function isDemoScanMode(): bool
-    {
-        $environment = strtolower((string) config('services.vietqr.environment', 'demo'));
-        $enabled = (bool) config('services.vietqr.demo_scan_enabled', false);
-
-        return $enabled && in_array($environment, ['demo', 'development', 'local', 'testing'], true);
     }
 
     private function decodePayload(mixed $value): array

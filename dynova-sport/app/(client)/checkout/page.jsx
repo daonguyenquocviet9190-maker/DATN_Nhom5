@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -80,8 +78,8 @@ const paymentMethods = [
   },
   {
     id: "BANK",
-    name: "Chuyển khoản / VietQR",
-    desc: "Quét mã VietQR để thanh toán trước khi đơn hàng được xử lý.",
+    name: "Thanh toán QR",
+    desc: "Quét mã QR bằng Camera điện thoại để hoàn tất thanh toán.",
     icon: Landmark,
   },
   {

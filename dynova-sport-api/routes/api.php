@@ -55,7 +55,7 @@ Route::get('/shipping/services', [ShippingController::class, 'services']);
 Route::post('/shipping/fee', [ShippingController::class, 'fee']);
 Route::post('/webhooks/ghn/{secret}', [ShippingController::class, 'webhook']);
 Route::post('/payments/vietqr/webhook', [PaymentController::class, 'vietQrWebhook']);
-Route::get('/payments/vietqr/scan/{id}/{token}', [PaymentController::class, 'vietQrScan'])
+Route::get('/payments/sandbox/scan/{id}/{token}', [PaymentController::class, 'sandboxScan'])
     ->whereNumber('id')
     ->where('token', '[A-Fa-f0-9]{64}');
 Route::get('/payments/vnpay/return', [PaymentController::class, 'vnpayReturn']);
