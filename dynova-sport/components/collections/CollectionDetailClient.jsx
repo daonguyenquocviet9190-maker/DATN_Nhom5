@@ -21,6 +21,7 @@ import {
 
 import { formatCurrency } from "@/data/shop";
 import { addToCart, toggleWishlist } from "@/utils/shopStorage";
+import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 
 const FALLBACK_BRAND_IMAGES = {
   nike:
@@ -38,15 +39,6 @@ const FALLBACK_BRAND_IMAGES = {
 const DEFAULT_IMAGE =
   "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=1400&auto=format&fit=crop&q=85";
 
-function getProductImage(product) {
-  return (
-    product?.image ||
-    product?.image_url ||
-    product?.imageUrl ||
-    DEFAULT_IMAGE
-  );
-}
-
 function getBrandCover(brand, products = []) {
   const slug = brand?.slug;
 
@@ -54,8 +46,7 @@ function getBrandCover(brand, products = []) {
     brand?.cover ||
     brand?.banner ||
     brand?.image ||
-    products?.[0]?.image ||
-    products?.[0]?.image_url ||
+    (products?.[0] ? getProductImage(products[0]) : null) ||
     FALLBACK_BRAND_IMAGES[slug] ||
     DEFAULT_IMAGE
   );
@@ -125,6 +116,9 @@ function ProductCard({ product, brand, onAdd, onWishlist }) {
         <img
           src={getProductImage(product)}
           alt={product.name}
+          onError={(event) => {
+            event.currentTarget.src = PRODUCT_FALLBACK;
+          }}
           className="collection-soft-img aspect-[4/4.35] w-full object-cover"
         />
 
@@ -198,28 +192,28 @@ export default function CollectionDetailClient({
   const [keyword, setKeyword] = useState("");
   const [notice, setNotice] = useState("");
 
-useEffect(() => {
-  const elements = document.querySelectorAll(".reveal-smooth");
+  useEffect(() => {
+    const elements = document.querySelectorAll(".reveal-smooth");
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    {
-      threshold: 0.14,
-      rootMargin: "0px 0px -60px 0px",
-    }
-  );
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      {
+        threshold: 0.14,
+        rootMargin: "0px 0px -60px 0px",
+      }
+    );
 
-  elements.forEach((element) => observer.observe(element));
+    elements.forEach((element) => observer.observe(element));
 
-  return () => observer.disconnect();
-}, []);
+    return () => observer.disconnect();
+  }, []);
 
   const safeProducts = Array.isArray(products) ? products : [];
 
@@ -439,13 +433,16 @@ useEffect(() => {
                 key={product.id}
                 href={"/shop/product/" + product.id}
                 className={
-  "collection-soft-button collection-soft-card reveal-smooth group relative min-h-[320px] overflow-hidden rounded-[30px] bg-slate-950 text-white shadow-sm hover:shadow-xl " +
+                  "collection-soft-button collection-soft-card reveal-smooth group relative min-h-[320px] overflow-hidden rounded-[30px] bg-slate-950 text-white shadow-sm hover:shadow-xl " +
                   (index === 0 ? "md:col-span-2" : "")
                 }
               >
                 <img
                   src={getProductImage(product)}
                   alt={product.name}
+                  onError={(event) => {
+                    event.currentTarget.src = PRODUCT_FALLBACK;
+                  }}
                   className="collection-soft-img absolute inset-0 h-full w-full object-cover opacity-75 group-hover:opacity-90"
                 />
 

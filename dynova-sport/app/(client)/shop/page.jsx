@@ -271,9 +271,13 @@ export default function ShopPage() {
 
       try {
         const [productResponse, categoryResponse] = await Promise.all([
+<<<<<<< HEAD
 
           getProducts({ per_page: 400 }),
           getProducts({ per_page: 500 }),
+=======
+          getProducts({ per_page: 400 }),
+>>>>>>> main
           getCategories(),
         ]);
 
@@ -1126,7 +1130,7 @@ export default function ShopPage() {
                       key={product.id}
                       className="product-card-shop group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white"
                     >
-                      <div className="relative overflow-hidden bg-slate-100">
+                      <div className="relative overflow-hidden bg-slate-400">
                         <Link
                           href={getProductDetailHref(product.id)}
                           onClick={() => rememberShopPosition(product.id)}

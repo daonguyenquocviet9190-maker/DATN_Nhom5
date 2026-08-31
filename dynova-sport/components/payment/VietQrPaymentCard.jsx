@@ -9,7 +9,6 @@ import {
   Loader2,
   QrCode,
   RefreshCw,
-  ShieldCheck,
 } from "lucide-react";
 import { formatCurrency } from "@/data/shop";
 import { getVietQrPayment } from "@/services/payment.service";
@@ -30,6 +29,7 @@ function InfoRow({ label, value, copyable = false, highlight = false }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-b-0">
       <span className="shrink-0 text-xs font-bold text-slate-500">{label}</span>
+
       <div className="flex min-w-0 items-center justify-end gap-2 text-right">
         <span
           className={`break-all text-sm font-black ${
@@ -149,7 +149,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
   }
 
   const paid = payment?.payment_status === "paid";
-  const demoMode = payment?.payment_mode === "demo_scan" || payment?.simulated === true;
+  const scanMode = payment?.payment_mode === "scan";
 
   if (paid) {
     return (
@@ -158,14 +158,15 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
             <CheckCircle2 size={34} />
           </span>
+
           <h3 className="mt-4 text-2xl font-black text-slate-950">
             Thanh toán thành công
           </h3>
+
           <p className="mt-2 text-sm font-semibold text-slate-500">
-            {demoMode
-              ? "Giao dịch mô phỏng đã được ghi nhận. Đang chuyển đến chi tiết đơn hàng..."
-              : "Hệ thống đã ghi nhận thanh toán. Đang chuyển đến chi tiết đơn hàng..."}
+            Đơn hàng đã được xác nhận. Đang chuyển đến chi tiết đơn hàng...
           </p>
+
           <p className="mt-4 text-3xl font-black text-emerald-600">
             {formatCurrency(Number(payment?.amount || 0))}
           </p>
@@ -174,7 +175,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
     );
   }
 
-  if (demoMode) {
+  if (scanMode) {
     return (
       <div className={`overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm ${className}`}>
         <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -182,8 +183,9 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
               <QrCode size={22} />
             </span>
+
             <div>
-              <h3 className="text-lg font-black text-slate-950">QR thanh toán mô phỏng</h3>
+              <h3 className="text-lg font-black text-slate-950">Thanh toán QR</h3>
               <p className="mt-0.5 text-xs font-semibold text-slate-500">
                 Mã đơn {payment?.order_code}
               </p>
@@ -192,7 +194,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
 
           <span className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-black text-amber-700">
             <Loader2 size={13} className="animate-spin" />
-            Chờ quét mã
+            Chờ thanh toán
           </span>
         </div>
 
@@ -202,7 +204,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
               {payment?.qr_url ? (
                 <img
                   src={payment.qr_url}
-                  alt="QR thanh toán mô phỏng Dynova Sport"
+                  alt="QR thanh toán Dynova Sport"
                   className="h-full w-full object-contain"
                 />
               ) : (
@@ -211,8 +213,9 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
                 </div>
               )}
             </div>
-            <p className="mt-3 text-center text-[11px] font-bold leading-5 text-slate-400">
-              Dùng Camera hoặc ứng dụng quét QR trên điện thoại
+
+            <p className="mt-3 text-center text-xs font-bold text-slate-500">
+              Quét bằng Camera điện thoại
             </p>
           </div>
 
@@ -220,42 +223,31 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
             <div className="rounded-2xl bg-slate-50 px-4 py-2">
               <InfoRow label="Mã đơn" value={payment?.order_code} copyable />
               <InfoRow
-                label="Giá trị đơn"
+                label="Số tiền"
                 value={formatCurrency(Number(payment?.amount || 0))}
                 highlight
               />
-              <InfoRow label="Hình thức" value="Thanh toán QR Demo" />
-              <InfoRow label="Tiền thật" value="Không phát sinh" />
+              <InfoRow label="Nội dung" value={payment?.transfer_content} copyable />
             </div>
 
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <div className="flex items-start gap-3">
-                <ShieldCheck size={20} className="mt-0.5 shrink-0 text-emerald-600" />
-                <div>
-                  <p className="text-sm font-black text-emerald-800">Demo an toàn cho DATN</p>
-                  <p className="mt-1 text-xs font-semibold leading-5 text-emerald-700">
-                    QR này chỉ mở trang xác nhận mô phỏng của Dynova Sport. Không mở ứng dụng ngân hàng,
-                    không tạo lệnh chuyển khoản và không trừ tiền thật.
-                  </p>
-                </div>
-              </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-black text-slate-900">Cách quét mã</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                Mở Camera trên điện thoại, hướng vào mã QR và mở liên kết xuất hiện trên màn hình.
+              </p>
             </div>
           </div>
         </div>
 
-        {payment?.demo_scan_local_only ? (
+        {payment?.scan_local_only ? (
           <div className="border-t border-amber-100 bg-amber-50 px-5 py-4 text-xs font-semibold leading-5 text-amber-800 md:px-6">
-            QR hiện đang trỏ về localhost nên điện thoại khác có thể không mở được. Hãy chạy Laravel với
-            <b> --host=0.0.0.0</b> và đặt <b>VIETQR_DEMO_SCAN_BASE_URL</b> bằng IPv4 của máy tính.
+            Mã QR chưa thể mở từ thiết bị khác. Hãy cấu hình địa chỉ mạng LAN của backend trước khi quét.
           </div>
         ) : (
           <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-4 md:px-6">
-            <div className="flex items-start gap-3 text-xs font-semibold leading-5 text-slate-500">
-              <Loader2 size={15} className="mt-0.5 shrink-0 animate-spin text-orange-500" />
-              <p>
-                Chưa quét thì đơn sẽ giữ nguyên trạng thái chờ. Sau khi điện thoại mở QR thành công,
-                website tự nhận trạng thái và tự chuyển sang chi tiết đơn hàng.
-              </p>
+            <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
+              <Loader2 size={15} className="shrink-0 animate-spin text-orange-500" />
+              Đang chờ xác nhận thanh toán...
             </div>
           </div>
         )}
@@ -276,9 +268,12 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
             <Landmark size={21} />
           </span>
+
           <div>
             <h3 className="text-lg font-black text-slate-950">Thanh toán VietQR</h3>
-            <p className="mt-0.5 text-xs font-semibold text-slate-500">Mã đơn {payment?.order_code}</p>
+            <p className="mt-0.5 text-xs font-semibold text-slate-500">
+              Mã đơn {payment?.order_code}
+            </p>
           </div>
         </div>
 
