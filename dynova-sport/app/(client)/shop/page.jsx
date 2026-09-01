@@ -54,6 +54,35 @@ function extractCategories(response) {
 
   return candidates.find(Array.isArray) || [];
 }
+function getColorHex(colorName) {
+  const name = String(colorName || "")
+    .trim()
+    .toLowerCase();
+
+  const colorMap = {
+  "mặc định": null,
+  "be": "#D6BFA5",
+  "vàng chanh": "#D7F205",
+  "xanh": "#2563EB",
+  "đen": "#000000",
+  "xanh dương": "#2563EB",
+  "hồng": "#EC4899",
+  "tím": "#8B5CF6",
+  "trắng": "#FFFFFF",
+  "đỏ": "#DC2626",
+  "xám": "#64748B",
+  "xanh navy": "#0F172A",
+  "cam": "#F97316",
+  "xanh lá": "#16A34A",
+  "xanh mint": "#6EE7B7",
+  "cam san hô": "#FB7185",
+  "vàng": "#EAB308",
+  "nhiều màu": null, // Cần xử lý CSS gradient riêng nếu dùng
+  "nâu": "#8B4513",
+};
+
+  return colorMap[name] || "#cbd5e1";
+}
 
 const PAGE_SIZE = 12;
 const SHOP_SCROLL_KEY = "dynova_shop_scroll_y_v2";
@@ -98,6 +127,13 @@ function buildShopUrl(pathname, state, highestPrice) {
   if (state.brand !== "all") {
     params.set("brand", state.brand);
   }
+  if (state.selectedColors?.length > 0) {
+  params.set("colors", state.selectedColors.join(","));
+}
+
+if (state.selectedSizes?.length > 0) {
+  params.set("sizes", state.selectedSizes.join(","));
+}
 
   if (
     Number(state.maxPrice) > 0 &&
@@ -147,6 +183,23 @@ export default function ShopPage() {
   const [brand, setBrand] = useState(
     () => initialRuntime?.state?.brand || "all"
   );
+  const [brandSearch, setBrandSearch] = useState("");
+  const [selectedColors, setSelectedColors] = useState([]);
+  const [selectedSizes, setSelectedSizes] = useState([]);
+  const [openSections, setOpenSections] = useState({
+  category: true,
+  brand: true,
+  color: false,
+  size: false,
+  price: false,
+});
+const toggleSection = (section) => {
+  setOpenSections((previous) => ({
+    ...previous,
+    [section]: !previous[section],
+  }));
+};
+
   const [maxPrice, setMaxPrice] = useState(
     () => initialRuntime?.state?.maxPrice || 5000000
   );
@@ -182,6 +235,16 @@ export default function ShopPage() {
     const categoryParam = params.get("category") || "all";
     const keywordParam = params.get("q") || "";
     const brandParam = params.get("brand") || "all";
+    const colorsParam = params.get("colors") || "";
+const sizesParam = params.get("sizes") || "";
+
+const selectedColorsParam = colorsParam
+  .split(",")
+  .filter(Boolean);
+
+const selectedSizesParam = sizesParam
+  .split(",")
+  .filter(Boolean);
     const rawMaxPriceParam = params.get("maxPrice");
     const maxPriceParam =
       rawMaxPriceParam !== null &&
@@ -236,10 +299,12 @@ export default function ShopPage() {
         ? Math.max(...warmPrices, 5000000)
         : 5000000;
 
-    setCategory(categoryParam);
-    setQuery(keywordParam);
-    setBrand(brandParam);
-    setSort(sortParam);
+   setCategory(categoryParam);
+setQuery(keywordParam);
+setBrand(brandParam);
+setSelectedColors(selectedColorsParam);
+setSelectedSizes(selectedSizesParam);
+setSort(sortParam);
     setCurrentPage(pageParam);
     setFilterOpen(Boolean(matchingStoredState?.filterOpen));
 
@@ -366,6 +431,20 @@ export default function ShopPage() {
   }, []);
 
   const safeCategories = Array.isArray(apiCategories) ? apiCategories : [];
+  const categoryCounts = useMemo(() => {
+  const counts = {};
+
+  items.forEach((product) => {
+    const categoryId = getProductCategoryId(product);
+
+    if (categoryId) {
+      counts[String(categoryId)] =
+        (counts[String(categoryId)] || 0) + 1;
+    }
+  });
+
+  return counts;
+}, [items]);
 
   const brands = useMemo(() => {
     return Array.from(
@@ -376,7 +455,156 @@ export default function ShopPage() {
       )
     ).sort((a, b) => a.localeCompare(b, "vi"));
   }, [items]);
+  const brandCounts = useMemo(() => {
+  const counts = {};
 
+  items.forEach((product) => {
+    const brandName = getProductBrandName(product);
+
+    if (brandName) {
+      counts[brandName] =
+        (counts[brandName] || 0) + 1;
+    }
+  });
+
+  return counts;
+}, [items]);
+const colors = useMemo(() => {
+  const colorMap = new Map();
+
+  items.forEach((product) => {
+    const variants = Array.isArray(product?.variants)
+      ? product.variants
+      : [];
+
+    variants.forEach((variant) => {
+      const colorName =
+        variant?.color_name ||
+        variant?.color?.name ||
+        variant?.colorName ||
+        "";
+
+      const colorId =
+        variant?.color_id ||
+        variant?.color?.id ||
+        variant?.colorId;
+
+      if (colorName && colorId !== undefined && colorId !== null) {
+        colorMap.set(String(colorId), {
+          id: String(colorId),
+          name: String(colorName),
+        });
+      }
+    });
+  });
+
+  return Array.from(colorMap.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "vi")
+  );
+}, [items]);
+const colorCounts = useMemo(() => {
+  const counts = {};
+
+  items.forEach((product) => {
+    const variants = Array.isArray(product?.variants)
+      ? product.variants
+      : [];
+
+    const usedColors = new Set();
+
+    variants.forEach((variant) => {
+      const colorId =
+        variant?.color_id ||
+        variant?.color?.id ||
+        variant?.colorId;
+
+      if (
+        colorId !== undefined &&
+        colorId !== null
+      ) {
+        usedColors.add(String(colorId));
+      }
+    });
+
+    usedColors.forEach((colorId) => {
+      counts[colorId] =
+        (counts[colorId] || 0) + 1;
+    });
+  });
+
+  return counts;
+}, [items]);
+const sizes = useMemo(() => {
+  const sizeMap = new Map();
+
+  items.forEach((product) => {
+    const variants = Array.isArray(product?.variants)
+      ? product.variants
+      : [];
+
+    variants.forEach((variant) => {
+      const sizeName =
+        variant?.size_name ||
+        variant?.size?.name ||
+        variant?.sizeName ||
+        "";
+
+      const sizeId =
+        variant?.size_id ||
+        variant?.size?.id ||
+        variant?.sizeId;
+
+      if (
+        sizeName &&
+        sizeId !== undefined &&
+        sizeId !== null
+      ) {
+        sizeMap.set(String(sizeId), {
+          id: String(sizeId),
+          name: String(sizeName),
+        });
+      }
+    });
+  });
+
+  return Array.from(sizeMap.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "vi", {
+      numeric: true,
+    })
+  );
+}, [items]);
+const sizeCounts = useMemo(() => {
+  const counts = {};
+
+  items.forEach((product) => {
+    const variants = Array.isArray(product?.variants)
+      ? product.variants
+      : [];
+
+    const usedSizes = new Set();
+
+    variants.forEach((variant) => {
+      const sizeId =
+        variant?.size_id ||
+        variant?.size?.id ||
+        variant?.sizeId;
+
+      if (
+        sizeId !== undefined &&
+        sizeId !== null
+      ) {
+        usedSizes.add(String(sizeId));
+      }
+    });
+
+    usedSizes.forEach((sizeId) => {
+      counts[sizeId] =
+        (counts[sizeId] || 0) + 1;
+    });
+  });
+
+  return counts;
+}, [items]);
   const highestPrice = useMemo(() => {
     const prices = items
       .map(getProductDisplayPrice)
@@ -405,25 +633,29 @@ export default function ShopPage() {
       buildShopUrl(
         pathname,
         {
-          query,
-          category,
-          brand,
-          maxPrice,
-          sort,
-          currentPage,
-        },
+  query,
+  category,
+  brand,
+  selectedColors,
+  selectedSizes,
+  maxPrice,
+  sort,
+  currentPage,
+},
         highestPrice
       ),
-    [
-      pathname,
-      query,
-      category,
-      brand,
-      maxPrice,
-      sort,
-      currentPage,
-      highestPrice,
-    ]
+   [
+  pathname,
+  query,
+  category,
+  brand,
+  selectedColors,
+  selectedSizes,
+  maxPrice,
+  sort,
+  currentPage,
+  highestPrice,
+]
   );
 
   useEffect(() => {
@@ -567,17 +799,61 @@ export default function ShopPage() {
 
     const result = items
       .filter((product) => {
-        if (category === "all") return true;
+  if (category === "all") return true;
 
-        return (
-          getProductCategoryId(product) === String(category)
-        );
-      })
+  const selectedIds = String(category)
+    .split(",")
+    .filter(Boolean);
+
+  return selectedIds.includes(
+    String(getProductCategoryId(product))
+  );
+})
       .filter((product) => {
-        if (brand === "all") return true;
+  if (brand === "all") return true;
 
-        return getProductBrandName(product) === brand;
-      })
+  const selectedBrands = String(brand)
+    .split(",")
+    .filter(Boolean);
+
+  return selectedBrands.includes(
+    getProductBrandName(product)
+  );
+})
+  .filter((product) => {
+  if (selectedColors.length === 0) return true;
+
+  const variants = Array.isArray(product?.variants)
+    ? product.variants
+    : [];
+
+  return variants.some((variant) => {
+    const colorId =
+      variant?.color_id ||
+      variant?.color?.id;
+
+    return selectedColors.includes(
+      String(colorId)
+    );
+  });
+})
+  .filter((product) => {
+  if (selectedSizes.length === 0) return true;
+
+  const variants = Array.isArray(product?.variants)
+    ? product.variants
+    : [];
+
+  return variants.some((variant) => {
+    const sizeId =
+      variant?.size_id ||
+      variant?.size?.id;
+
+    return selectedSizes.includes(
+      String(sizeId)
+    );
+  });
+})
       .filter(
         (product) =>
           getProductDisplayPrice(product) <= maxPrice
@@ -626,7 +902,7 @@ export default function ShopPage() {
           new Date(a?.created_at || 0).getTime() ||
         Number(b?.id || 0) - Number(a?.id || 0)
     );
-  }, [items, query, category, brand, maxPrice, sort]);
+  }, [items, query, category, brand, selectedColors, selectedSizes, maxPrice, sort]);
 
   useEffect(() => {
     if (!stateReady) return;
@@ -637,7 +913,7 @@ export default function ShopPage() {
     }
 
     setCurrentPage(1);
-  }, [stateReady, query, category, brand, maxPrice, sort]);
+  }, [stateReady, query, category, brand,selectedColors, selectedSizes, maxPrice, sort]);
 
   const selectedCategoryName = useMemo(() => {
     if (category === "all") return "Tất cả sản phẩm";
@@ -812,12 +1088,16 @@ export default function ShopPage() {
   };
 
   const resetFilters = () => {
-    setQuery("");
-    setCategory("all");
-    setBrand("all");
-    setMaxPrice(highestPrice);
-    setSort("newest");
-  };
+  setQuery("");
+  setCategory("all");
+  setBrand("all");
+  setBrandSearch("");
+  setSelectedColors([]);
+  setSelectedSizes([]);
+  setMaxPrice(highestPrice);
+  setSort("newest");
+  setCurrentPage(1);
+};
 
   return (
     <div className="shop-page min-h-screen bg-[#f7f8fb] pb-16">
@@ -962,71 +1242,411 @@ export default function ShopPage() {
             </div>
 
             <div className="space-y-6">
-              <div>
-                <span className="mb-3 block text-xs font-black uppercase tracking-wider text-slate-500">
-                  Danh mục
-                </span>
+           <div>
+  <button
+    type="button"
+    onClick={() => toggleSection("category")}
+    className="flex w-full items-center justify-between text-left"
+  >
+    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+      Loại sản phẩm
+    </span>
 
-                <div className="grid gap-2">
-                  <button
-                    onClick={() => setCategory("all")}
-                    className={
-                      "category-filter-btn " +
-                      (category === "all"
-                        ? "category-filter-active"
-                        : "category-filter-normal")
+    <ChevronDown
+      size={17}
+      className={
+        "text-slate-400 transition-transform duration-300 " +
+        (openSections.category ? "rotate-180" : "")
+      }
+    />
+  </button>
+
+  {openSections.category && (
+    <div className="filter-checkbox-list mt-3">
+      <label className="filter-checkbox-item">
+        <input
+          type="checkbox"
+          checked={category === "all"}
+          onChange={() => setCategory("all")}
+        />
+
+        <span className="filter-custom-checkbox" />
+
+        <span className="filter-checkbox-name">
+          Tất cả
+        </span>
+
+        <span className="filter-checkbox-count">
+          ({items.length})
+        </span>
+      </label>
+
+      {safeCategories.map((item) => {
+        const selectedIds =
+          category === "all"
+            ? []
+            : String(category)
+                .split(",")
+                .filter(Boolean);
+
+        const isChecked = selectedIds.includes(
+          String(item.id)
+        );
+
+        const productCount =
+          categoryCounts[String(item.id)] || 0;
+
+        return (
+          <label
+            key={item.id}
+            className="filter-checkbox-item"
+          >
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={() => {
+                const currentIds =
+                  category === "all"
+                    ? []
+                    : String(category)
+                        .split(",")
+                        .filter(Boolean);
+
+                let nextIds;
+
+                if (
+                  currentIds.includes(
+                    String(item.id)
+                  )
+                ) {
+                  nextIds = currentIds.filter(
+                    (id) =>
+                      id !== String(item.id)
+                  );
+                } else {
+                  nextIds = [
+                    ...currentIds,
+                    String(item.id),
+                  ];
+                }
+
+                setCategory(
+                  nextIds.length > 0
+                    ? nextIds.join(",")
+                    : "all"
+                );
+              }}
+            />
+
+            <span className="filter-custom-checkbox" />
+
+            <span className="filter-checkbox-name">
+              {item.name}
+            </span>
+
+            <span className="filter-checkbox-count">
+              ({productCount})
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  )}
+</div>
+
+  <div>
+  <button
+    type="button"
+    onClick={() => toggleSection("brand")}
+    className="flex w-full items-center justify-between text-left"
+  >
+    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+      Thương hiệu
+    </span>
+
+    <ChevronDown
+      size={17}
+      className={
+        "text-slate-400 transition-transform duration-300 " +
+        (openSections.brand ? "rotate-180" : "")
+      }
+    />
+  </button>
+
+  {openSections.brand && (
+    <div className="mt-3">
+      <div className="brand-search-wrapper">
+        <Search
+          size={17}
+          className="brand-search-icon"
+        />
+
+        <input
+          type="text"
+          value={brandSearch}
+          onChange={(event) =>
+            setBrandSearch(event.target.value)
+          }
+          placeholder="Tùy chọn tìm kiếm."
+          className="brand-search-input"
+        />
+      </div>
+
+      <div className="filter-checkbox-list brand-checkbox-list">
+        <label className="filter-checkbox-item">
+          <input
+            type="checkbox"
+            checked={brand === "all"}
+            onChange={() => setBrand("all")}
+          />
+
+          <span className="filter-custom-checkbox" />
+
+          <span className="filter-checkbox-name">
+            Tất cả thương hiệu
+          </span>
+
+          <span className="filter-checkbox-count">
+            ({items.length})
+          </span>
+        </label>
+
+        {brands
+          .filter((item) =>
+            item
+              .toLowerCase()
+              .includes(
+                brandSearch.trim().toLowerCase()
+              )
+          )
+          .map((item) => {
+            const selectedBrands =
+              brand === "all"
+                ? []
+                : String(brand)
+                    .split(",")
+                    .filter(Boolean);
+
+            const isChecked =
+              selectedBrands.includes(item);
+
+            const productCount =
+              brandCounts[item] || 0;
+
+            return (
+              <label
+                key={item}
+                className="filter-checkbox-item"
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => {
+                    const currentBrands =
+                      brand === "all"
+                        ? []
+                        : String(brand)
+                            .split(",")
+                            .filter(Boolean);
+
+                    let nextBrands;
+
+                    if (
+                      currentBrands.includes(item)
+                    ) {
+                      nextBrands =
+                        currentBrands.filter(
+                          (brandName) =>
+                            brandName !== item
+                        );
+                    } else {
+                      nextBrands = [
+                        ...currentBrands,
+                        item,
+                      ];
                     }
-                  >
-                    <span>Tất cả</span>
-                    {category === "all" && <Check size={15} />}
-                  </button>
 
-                  {safeCategories.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() =>
-                        setCategory(String(item.id))
-                      }
-                      className={
-                        "category-filter-btn " +
-                        (String(category) === String(item.id)
-                          ? "category-filter-active"
-                          : "category-filter-normal")
-                      }
-                    >
-                      <span>{item.name}</span>
-                      {String(category) === String(item.id) && (
-                        <Check size={15} />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    setBrand(
+                      nextBrands.length > 0
+                        ? nextBrands.join(",")
+                        : "all"
+                    );
+                  }}
+                />
 
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">
-                  Thương hiệu
+                <span className="filter-custom-checkbox" />
+
+                <span className="filter-checkbox-name">
+                  {item}
                 </span>
 
-                <select
-                  value={brand}
-                  onChange={(event) =>
-                    setBrand(event.target.value)
-                  }
-                  className="input-control"
-                >
-                  <option value="all">
-                    Tất cả thương hiệu
-                  </option>
-
-                  {brands.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
+                <span className="filter-checkbox-count">
+                  ({productCount})
+                </span>
               </label>
+            );
+          })}
+      </div>
+    </div>
+  )}
+</div>
+<div>
+  <button
+    type="button"
+    onClick={() => toggleSection("color")}
+    className="flex w-full items-center justify-between text-left"
+  >
+    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+      Màu sắc
+    </span>
 
+    <ChevronDown
+      size={17}
+      className={
+        "text-slate-400 transition-transform duration-300 " +
+        (openSections.color ? "rotate-180" : "")
+      }
+    />
+  </button>
+
+  {openSections.color && (
+    <div className="filter-checkbox-list mt-3">
+      {colors.length === 0 ? (
+        <p className="text-sm text-slate-400">
+          Chưa có màu sắc.
+        </p>
+      ) : (
+        colors.map((color) => {
+          const isChecked = selectedColors.includes(
+            color.id
+          );
+
+          const productCount =
+            colorCounts[color.id] || 0;
+
+          return (
+            <label
+              key={color.id}
+              className="filter-checkbox-item"
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => {
+                  setSelectedColors((previous) => {
+                    if (previous.includes(color.id)) {
+                      return previous.filter(
+                        (id) => id !== color.id
+                      );
+                    }
+
+                    return [
+                      ...previous,
+                      color.id,
+                    ];
+                  });
+                }}
+              />
+
+              <span className="filter-custom-checkbox" />
+
+              <span
+                className="color-filter-dot"
+                style={{
+                  backgroundColor: getColorHex(
+                    color.name
+                  ),
+                }}
+              />
+
+              <span className="filter-checkbox-name">
+                {color.name}
+              </span>
+
+              <span className="filter-checkbox-count">
+                ({productCount})
+              </span>
+            </label>
+          );
+        })
+      )}
+    </div>
+  )}
+</div>
+     <div>
+  <button
+    type="button"
+    onClick={() => toggleSection("size")}
+    className="flex w-full items-center justify-between text-left"
+  >
+    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+      Kích thước
+    </span>
+
+    <ChevronDown
+      size={17}
+      className={
+        "text-slate-400 transition-transform duration-300 " +
+        (openSections.size ? "rotate-180" : "")
+      }
+    />
+  </button>
+
+  {openSections.size && (
+    <div className="filter-checkbox-list mt-3">
+      {sizes.length === 0 ? (
+        <p className="text-sm text-slate-400">
+          Chưa có kích thước.
+        </p>
+      ) : (
+        sizes.map((size) => {
+          const isChecked = selectedSizes.includes(
+            size.id
+          );
+
+          const productCount =
+            sizeCounts[size.id] || 0;
+
+          return (
+            <label
+              key={size.id}
+              className="filter-checkbox-item"
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => {
+                  setSelectedSizes((previous) => {
+                    if (previous.includes(size.id)) {
+                      return previous.filter(
+                        (id) => id !== size.id
+                      );
+                    }
+
+                    return [
+                      ...previous,
+                      size.id,
+                    ];
+                  });
+                }}
+              />
+
+              <span className="filter-custom-checkbox" />
+
+              <span className="filter-checkbox-name">
+                {size.name}
+              </span>
+
+              <span className="filter-checkbox-count">
+                ({productCount})
+              </span>
+            </label>
+          );
+        })
+      )}
+    </div>
+  )}
+</div>
               <label className="block">
                 <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">
                   Giá tối đa
@@ -1049,17 +1669,21 @@ export default function ShopPage() {
                 </div>
               </label>
 
-              {(query ||
-                category !== "all" ||
-                brand !== "all") && (
-                <button
-                  onClick={resetFilters}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-                >
-                  <X size={16} />
-                  Đặt lại bộ lọc
-                </button>
-              )}
+             {(query ||
+  category !== "all" ||
+  brand !== "all" ||
+  selectedColors.length > 0 ||
+  selectedSizes.length > 0 ||
+  maxPrice < highestPrice ||
+  sort !== "newest") && (
+  <button
+    onClick={resetFilters}
+    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+  >
+    <X size={16} />
+    Đặt lại bộ lọc
+  </button>
+)}
             </div>
           </aside>
 
@@ -1197,7 +1821,7 @@ export default function ShopPage() {
                           href={getProductDetailHref(product.id)}
                           onClick={() => rememberShopPosition(product.id)}
                         >
-                          <h3 className="mt-2 line-clamp-2 min-h-11 text-base font-black leading-6 text-slate-950 transition hover:text-orange-600">
+                          <h3 className="mt-2 line-clamp-2 min-h-11 text-base font-bold leading-6 text-slate-800 transition hover:text-orange-600">
                             {product.name}
                           </h3>
                         </Link>
@@ -1210,7 +1834,7 @@ export default function ShopPage() {
 
                         <div className="mt-4 flex items-end justify-between gap-3">
                           <div>
-                            <p className="text-lg font-black text-slate-950">
+                            <p className="text-lg font-bold text-slate-900">
                               {formatCurrency(displayPrice)}
                             </p>
 
