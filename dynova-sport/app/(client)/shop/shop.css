@@ -167,3 +167,237 @@
   border-color: #fb923c;
   box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.12);
 }
+
+/* ===============================
+   PRODUCT TYPE CHECKBOX FILTER
+================================ */
+
+.filter-checkbox-list {
+  display: flex;
+  max-height: 280px;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.filter-checkbox-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.filter-checkbox-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filter-checkbox-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.filter-checkbox-item {
+  display: flex;
+  min-height: 42px;
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 8px 6px;
+  color: #334155;
+  transition: background 0.2s ease;
+}
+
+.filter-checkbox-item:hover {
+  background: #fff7ed;
+}
+
+.filter-checkbox-item input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.filter-custom-checkbox {
+  display: flex;
+  height: 18px;
+  width: 18px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+}
+
+.filter-checkbox-item input:checked
+  + .filter-custom-checkbox {
+  border-color: #f97316;
+  background: #f97316;
+}
+
+.filter-checkbox-item input:checked
+  + .filter-custom-checkbox::after {
+  content: "✓";
+  color: white;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.filter-checkbox-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.filter-checkbox-count {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ===============================
+   BRAND FILTER
+================================ */
+
+.brand-search-wrapper {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.brand-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  color: #94a3b8;
+  transform: translateY(-50%);
+}
+
+.brand-search-input {
+  width: 100%;
+  height: 46px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 0 16px 0 44px;
+  outline: none;
+  font-size: 14px;
+  color: #334155;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.brand-search-input:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px
+    rgba(249, 115, 22, 0.12);
+}
+
+.brand-checkbox-list {
+  max-height: 280px;
+}
+
+/* ===============================
+   COLOR FILTER
+================================ */
+
+.color-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.color-filter-button {
+  position: relative;
+  display: flex;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #e2e8f0;
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 4px;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.color-filter-button:hover {
+  transform: scale(1.08);
+  border-color: #f97316;
+}
+
+.color-filter-dot {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+}
+
+.color-filter-active {
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+
+.color-filter-check {
+  position: absolute;
+  color: #ffffff;
+  stroke-width: 4;
+  filter: drop-shadow(
+    0 1px 2px rgba(0, 0, 0, 0.45)
+  );
+}
+
+/* ===============================
+   SIZE FILTER
+================================ */
+
+.size-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.size-filter-button {
+  min-width: 48px;
+  min-height: 42px;
+  padding: 8px 14px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+
+  background: #ffffff;
+  color: #475569;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.size-filter-button:hover {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #ea580c;
+  transform: translateY(-1px);
+}
+
+.size-filter-button.size-filter-active {
+  border-color: #f97316;
+  background: #f97316;
+  color: #ffffff;
+
+  box-shadow:
+    0 8px 18px
+    rgba(249, 115, 22, 0.22);
+}
+
