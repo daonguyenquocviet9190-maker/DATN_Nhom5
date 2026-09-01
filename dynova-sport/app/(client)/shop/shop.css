@@ -349,3 +349,55 @@
     0 1px 2px rgba(0, 0, 0, 0.45)
   );
 }
+
+/* ===============================
+   SIZE FILTER
+================================ */
+
+.size-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.size-filter-button {
+  min-width: 48px;
+  min-height: 42px;
+  padding: 8px 14px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+
+  background: #ffffff;
+  color: #475569;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.size-filter-button:hover {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #ea580c;
+  transform: translateY(-1px);
+}
+
+.size-filter-button.size-filter-active {
+  border-color: #f97316;
+  background: #f97316;
+  color: #ffffff;
+
+  box-shadow:
+    0 8px 18px
+    rgba(249, 115, 22, 0.22);
+}
+
