@@ -12,11 +12,11 @@ const display = Be_Vietnam_Pro({
 
 export default function PremiumAccordionBrands() {
   const brands = [
-    { id: 1, name: 'Nike', slug: 'nike', slogan: 'Just Do It', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80' },
-    { id: 2, name: 'Adidas', slug: 'adidas', slogan: 'Impossible Is Nothing', image: 'https://images.unsplash.com/photo-1518002171953-a080ee817e1f?w=800&q=80' },
-    { id: 3, name: 'Puma', slug: 'puma', slogan: 'Forever Faster', image: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&q=80' },
-    { id: 4, name: 'New Balance', slug: 'new-balance', slogan: 'We Got Now', image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&q=80' },
-    { id: 5, name: 'Asics', slug: 'asics', slogan: 'Sound Mind, Sound Body', image: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&q=80' },
+    { id: 1, name: 'Nike', slug: 'nike', slogan: 'Just Do It', image: 'https://caodang.fpt.edu.vn/wp-content/uploads/2025/02/MUL1013_PC10750_HuaMinhKhang_AssignmentFinal.jpg' },
+    { id: 2, name: 'Adidas', slug: 'adidas', slogan: 'Impossible Is Nothing', image: 'https://photo.znews.vn/w660/Uploaded/rotnba/2024_10_09/Snapinsta.app_460444059_899919908289187_7755816249551616761_n_1080.jpg' },
+    { id: 3, name: 'Puma', slug: 'puma', slogan: 'Forever Faster', image: 'https://themixdalat.vn/wp-content/uploads/2025/04/492398220_721074203581431_8321158100935676815_n.jpg' },
+    { id: 4, name: 'Crocs', slug: 'crocs', slogan: 'We Got Now', image: 'https://img.vuahanghieu.com/unsafe/0x0/left/top/smart/filters:quality(90)/https://admin.vuahanghieu.com/upload/news/content/2023/06/hang-giay-dep-crocs-noi-tieng-1-jpg-1687406690-22062023110450.jpg' },
+    { id: 5, name: 'Asics', slug: 'asics', slogan: 'Sound Mind, Sound Body', image: 'https://channel.mediacdn.vn/428462621602512896/2024/2/29/photo-1-1709199360975506919052.jpg' },
   ];
 
   const seasonalCollections = [

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
+import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 
 const FALLBACK_BRAND_IMAGES = {
   nike:
@@ -69,8 +70,7 @@ function getBrandCover(brand, products = []) {
     brand?.cover ||
     brand?.banner ||
     brand?.image ||
-    firstProductImage?.image ||
-    firstProductImage?.image_url ||
+    (firstProductImage ? getProductImage(firstProductImage) : null) ||
     FALLBACK_BRAND_IMAGES[slug] ||
     DEFAULT_IMAGE
   );
@@ -97,15 +97,6 @@ function getBrandProducts(brand, products = []) {
       normalizeText(brandName) === slug
     );
   });
-}
-
-function getProductImage(product) {
-  return (
-    product?.image ||
-    product?.image_url ||
-    product?.imageUrl ||
-    DEFAULT_IMAGE
-  );
 }
 
 function BrandLogo({ brand }) {
@@ -136,27 +127,27 @@ export default function CollectionsClient({
   const [activeIndex, setActiveIndex] = useState(0);
   const [keyword, setKeyword] = useState("");
   useEffect(() => {
-  const elements = document.querySelectorAll(".reveal-smooth");
+    const elements = document.querySelectorAll(".reveal-smooth");
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    {
-      threshold: 0.14,
-      rootMargin: "0px 0px -60px 0px",
-    }
-  );
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      {
+        threshold: 0.14,
+        rootMargin: "0px 0px -60px 0px",
+      }
+    );
 
-  elements.forEach((element) => observer.observe(element));
+    elements.forEach((element) => observer.observe(element));
 
-  return () => observer.disconnect();
-}, []);
+    return () => observer.disconnect();
+  }, []);
 
   const safeBrands = Array.isArray(brands) ? brands : [];
   const safeProducts = Array.isArray(products) ? products : [];
@@ -173,18 +164,18 @@ export default function CollectionsClient({
 
   const activeBrand = visibleBrands[activeIndex] || visibleBrands[0];
   const activeBrandProducts = activeBrand
-  ? getBrandProducts(activeBrand, safeProducts)
-  : [];
+    ? getBrandProducts(activeBrand, safeProducts)
+    : [];
 
-const previewProducts = useMemo(() => {
-  const items = activeBrandProducts.slice(0, 3);
+  const previewProducts = useMemo(() => {
+    const items = activeBrandProducts.slice(0, 3);
 
-  while (items.length < 3) {
-    items.push(null);
-  }
+    while (items.length < 3) {
+      items.push(null);
+    }
 
-  return items;
-}, [activeBrandProducts]);
+    return items;
+  }, [activeBrandProducts]);
 
   return (
     <div className="collections-page min-h-screen bg-[#f7f8fb]">
@@ -302,7 +293,7 @@ const previewProducts = useMemo(() => {
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              
+
             </p>
           </div>
 
@@ -344,7 +335,7 @@ const previewProducts = useMemo(() => {
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => setActiveIndex(index)}
                     className={
-                    "collection-brand-row group flex min-h-[92px] items-center justify-between gap-4 rounded-[28px] border p-4 text-left " +
+                      "collection-brand-row group flex min-h-[92px] items-center justify-between gap-4 rounded-[28px] border p-4 text-left " +
                       (active
                         ? "border-orange-200 bg-white shadow-xl shadow-slate-200/70"
                         : "border-slate-200 bg-white/70 hover:border-orange-200 hover:bg-white")
@@ -391,9 +382,9 @@ const previewProducts = useMemo(() => {
             {activeBrand && (
               <div className="collections-preview-card relative overflow-hidden rounded-[34px] border border-slate-200 bg-slate-950 text-white shadow-xl shadow-slate-200/70">
                 <img
-                src={getBrandCover(activeBrand, safeProducts)}
-                alt={activeBrand.name}
-                className="collection-preview-bg absolute inset-0 h-full w-full object-cover opacity-45"
+                  src={getBrandCover(activeBrand, safeProducts)}
+                  alt={activeBrand.name}
+                  className="collection-preview-bg absolute inset-0 h-full w-full object-cover opacity-45"
                 />
 
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/72 to-slate-950/20" />
@@ -439,52 +430,55 @@ const previewProducts = useMemo(() => {
                       </Link>
                     </div>
 
-                   <div className="mt-7 grid min-h-[178px] gap-3 sm:grid-cols-3">
-  {previewProducts.map((product, index) => {
-    if (!product) {
-      return (
-        <div
-          key={"empty-" + index}
-          className="rounded-3xl border border-white/10 bg-white/[0.06] p-3 backdrop-blur"
-        >
-          <div className="aspect-square rounded-2xl bg-white/10" />
+                    <div className="mt-7 grid min-h-[178px] gap-3 sm:grid-cols-3">
+                      {previewProducts.map((product, index) => {
+                        if (!product) {
+                          return (
+                            <div
+                              key={"empty-" + index}
+                              className="rounded-3xl border border-white/10 bg-white/[0.06] p-3 backdrop-blur"
+                            >
+                              <div className="aspect-square rounded-2xl bg-white/10" />
 
-          <p className="mt-3 line-clamp-2 min-h-[40px] text-xs font-black leading-5 text-slate-400">
-            Chưa có sản phẩm
-          </p>
+                              <p className="mt-3 line-clamp-2 min-h-[40px] text-xs font-black leading-5 text-slate-400">
+                                Chưa có sản phẩm
+                              </p>
 
-          <p className="mt-1 text-xs font-black text-slate-500">
-            Đang cập nhật
-          </p>
-        </div>
-      );
-    }
+                              <p className="mt-1 text-xs font-black text-slate-500">
+                                Đang cập nhật
+                              </p>
+                            </div>
+                          );
+                        }
 
-    return (
-      <Link
-        key={product.id}
-        href={"/shop/product/" + product.id}
-        className="collection-preview-product group rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur"
-      >
-        <div className="overflow-hidden rounded-2xl bg-white/10">
-          <img
-            src={getProductImage(product)}
-            alt={product.name}
-            className="collection-preview-img aspect-square w-full object-cover"
-          />
-        </div>
+                        return (
+                          <Link
+                            key={product.id}
+                            href={"/shop/product/" + product.id}
+                            className="collection-preview-product group rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur"
+                          >
+                            <div className="overflow-hidden rounded-2xl bg-white/10">
+                              <img
+                                src={getProductImage(product)}
+                                alt={product.name}
+                                onError={(event) => {
+                                  event.currentTarget.src = PRODUCT_FALLBACK;
+                                }}
+                                className="collection-preview-img aspect-square w-full object-cover"
+                              />
+                            </div>
 
-        <p className="mt-3 line-clamp-2 min-h-[40px] text-xs font-black leading-5 text-white">
-          {product.name}
-        </p>
+                            <p className="mt-3 line-clamp-2 min-h-[40px] text-xs font-black leading-5 text-white">
+                              {product.name}
+                            </p>
 
-        <p className="mt-1 text-xs font-black text-orange-300">
-          {formatCurrency(product.price || 0)}
-        </p>
-      </Link>
-    );
-  })}
-</div>
+                            <p className="mt-1 text-xs font-black text-orange-300">
+                              {formatCurrency(product.price || 0)}
+                            </p>
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
