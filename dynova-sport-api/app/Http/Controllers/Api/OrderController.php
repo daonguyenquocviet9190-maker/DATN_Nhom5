@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Payments\DynovaSandboxProvider;
 use App\Services\ShippingService;
-use App\Services\VietQrPaymentService;
 use App\Services\VoucherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +17,7 @@ class OrderController extends Controller
     public function __construct(
         private VoucherService $vouchers,
         private ShippingService $shipping,
-        private VietQrPaymentService $vietQr,
+        private DynovaSandboxProvider $paymentSandbox,
     ) {}
 
     public function store(Request $request)
@@ -79,7 +79,6 @@ class OrderController extends Controller
 
         return response()->json(['success' => true, 'message' => 'Tạo đơn hàng thành công.', 'data' => $this->normalizeOrder($orderId)], 201);
     }
-
 
     private function createOrderWithinTransaction(array $validated, int $userId, string $paymentMethod, string $checkoutMode): int
     {
@@ -471,7 +470,7 @@ class OrderController extends Controller
         }
 
         if ($paymentMethod === 'bank') {
-            $this->vietQr->createPendingForOrder($orderId);
+            $this->paymentSandbox->createPendingForOrder($orderId);
         }
 
         $this->history($orderId, $userId, null, 'pending', 'customer', 'Khách hàng tạo đơn hàng.');
