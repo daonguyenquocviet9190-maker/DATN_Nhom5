@@ -393,65 +393,67 @@ export default function HomeClient({
       )}
 
       {/* Hero Banner Section */}
-      <section
-        className="relative overflow-hidden bg-slate-950"
-        onMouseEnter={() => setPauseBanner(true)}
-        onMouseLeave={() => setPauseBanner(false)}
+      {/* Hero Banner Section - Full Width */}
+<section
+  className="relative w-full overflow-hidden bg-slate-950"
+  onMouseEnter={() => setPauseBanner(true)}
+  onMouseLeave={() => setPauseBanner(false)}
+>
+  {/* Khung chứa ảnh tỉ lệ 16/6 tràn toàn bộ độ rộng màn hình */}
+  <div className="relative aspect-[16/6] w-full overflow-hidden">
+    {heroBanners.map((banner, index) => (
+      <div
+        key={banner.id}
+        className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+          index === activeBanner ? "opacity-100 z-10" : "opacity-0 z-0"
+        }`}
       >
-        <div className="relative h-[480px] w-full md:h-[580px]">
+        <img
+          src={banner.image}
+          alt={`Banner ${banner.id}`}
+          className="h-full w-full object-contain object-center"
+        />
+      </div>
+    ))}
+
+    {/* Banner Controls */}
+    {heroBanners.length > 1 && (
+      <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3">
+        <button
+          onClick={goPrevBanner}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/70"
+          aria-label="Banner trước"
+        >
+          <ChevronLeft size={18} />
+        </button>
+
+        <div className="flex items-center gap-2">
           {heroBanners.map((banner, index) => (
-            <div
+            <button
               key={banner.id}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                index === activeBanner ? "opacity-100 z-10" : "opacity-0 z-0"
-              }`}
-            >
-              <img
-                src={banner.image}
-                alt={`Banner ${banner.id}`}
-                className="h-full w-full object-cover object-center"
-              />
-            </div>
+              onClick={() => setActiveBanner(index)}
+              className={
+                "h-2 rounded-full transition-all duration-300 " +
+                (activeBanner === index
+                  ? "w-6 bg-orange-500"
+                  : "w-2 bg-white/50 hover:bg-white/80")
+              }
+              aria-label={"Chuyển banner " + (index + 1)}
+            />
           ))}
-
-          {/* Banner Controls */}
-          {heroBanners.length > 1 && (
-            <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3">
-              <button
-                onClick={goPrevBanner}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/70"
-                aria-label="Banner trước"
-              >
-                <ChevronLeft size={20} />
-              </button>
-
-              <div className="flex items-center gap-2">
-                {heroBanners.map((banner, index) => (
-                  <button
-                    key={banner.id}
-                    onClick={() => setActiveBanner(index)}
-                    className={
-                      "h-2.5 rounded-full transition-all duration-300 " +
-                      (activeBanner === index
-                        ? "w-8 bg-orange-500"
-                        : "w-2.5 bg-white/50 hover:bg-white/80")
-                    }
-                    aria-label={"Chuyển banner " + (index + 1)}
-                  />
-                ))}
-              </div>
-
-              <button
-                onClick={goNextBanner}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/70"
-                aria-label="Banner sau"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          )}
         </div>
-      </section>
+
+        <button
+          onClick={goNextBanner}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/70"
+          aria-label="Banner sau"
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+    )}
+  </div>
+</section>
 
       <section className="container-page py-10">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
