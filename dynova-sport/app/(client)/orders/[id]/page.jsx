@@ -477,12 +477,16 @@ function getPaymentLabel(method = "") {
   const clean = String(method || "COD").toUpperCase();
 
   const map = {
-    COD: "Thanh toán khi nhận hàng",
-    BANK_TRANSFER: "Chuyển khoản / VietQR",
-    BANK: "Chuyển khoản / VietQR",
-    VIETQR: "Chuyển khoản / VietQR",
-    VNPAY: "VNPAY",
-  };
+  COD: "Thanh toán khi nhận hàng",
+  BANK_TRANSFER: "Chuyển khoản ngân hàng",
+  BANK: "Chuyển khoản ngân hàng",
+  VIETQR: "Chuyển khoản ngân hàng",
+  BANKTRANSFER: "Chuyển khoản ngân hàng",
+  SEPAY: "Chuyển khoản ngân hàng",
+  SEPAY_TEST: "Chuyển khoản ngân hàng",
+  SEPAY_SANDBOX: "Chuyển khoản ngân hàng",
+  VNPAY: "VNPAY",
+};
 
   return map[clean] || method || "COD";
 }
@@ -522,11 +526,14 @@ export default function OrderDetailPage() {
     .toLowerCase();
 
   const bankPayment = [
-    "bank",
-    "bank_transfer",
-    "vietqr",
-    "banktransfer",
-  ].includes(paymentMethod);
+  "bank",
+  "bank_transfer",
+  "banktransfer",
+  "vietqr",
+  "sepay",
+  "sepay_test",
+  "sepay_sandbox",
+].includes(paymentMethod);
 
   const paymentPaid = paymentStatus === "paid";
 
@@ -707,8 +714,8 @@ export default function OrderDetailPage() {
     );
 
     const interval = running
-      ? 4000
-      : 30000;
+       ? 1000
+       : 5000;
 
     const timer = window.setInterval(
       () => loadTracking({ silent: true }),

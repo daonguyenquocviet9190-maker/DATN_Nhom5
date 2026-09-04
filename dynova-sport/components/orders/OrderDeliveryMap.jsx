@@ -15,6 +15,7 @@ const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const OSM_TILE = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const DEFAULT_CENTER = [10.8231, 106.6297];
+const DEMO_ANIMATION_MS = 900;
 
 const STATUS_PROGRESS = {
   ready_to_pick: 0,
@@ -24,6 +25,7 @@ const STATUS_PROGRESS = {
   transporting: 45,
   sorting: 62,
   delivering: 76,
+  money_collect_delivering: 82,
   delivered: 100,
 };
 
@@ -32,7 +34,10 @@ function clamp(value, min = 0, max = 100) {
 }
 
 function normalizeAddress(value) {
-  return String(value || "").replace(/\s+/g, " ").replace(/,+/g, ",").trim();
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/,+/g, ",")
+    .trim();
 }
 
 function formatDistance(meters) {
@@ -51,7 +56,10 @@ function formatDuration(seconds) {
 }
 
 function loadLeaflet() {
-  if (typeof window === "undefined") return Promise.reject(new Error("Không có trình duyệt."));
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Không có trình duyệt."));
+  }
+
   if (window.L) return Promise.resolve(window.L);
 
   return new Promise((resolve, reject) => {
@@ -65,8 +73,15 @@ function loadLeaflet() {
 
     const existing = document.querySelector(`script[src="${LEAFLET_JS}"]`);
     if (existing) {
-      existing.addEventListener("load", () => resolve(window.L), { once: true });
-      existing.addEventListener("error", reject, { once: true });
+      if (window.L) {
+        resolve(window.L);
+        return;
+      }
+      existing.addEventListener("load", () => {
+        if (window.L) resolve(window.L);
+        else reject(new Error("Không tải được Leaflet."));
+      }, { once: true });
+      existing.addEventListener("error", () => reject(new Error("Không tải được Leaflet.")), { once: true });
       return;
     }
 
@@ -74,10 +89,51 @@ function loadLeaflet() {
     script.src = LEAFLET_JS;
     script.async = true;
     script.crossOrigin = "";
-    script.onload = () => (window.L ? resolve(window.L) : reject(new Error("Không tải được Leaflet.")));
-    script.onerror = reject;
+    script.onload = () => {
+      if (window.L) resolve(window.L);
+      else reject(new Error("Không tải được Leaflet."));
+    };
+    script.onerror = () => reject(new Error("Không tải được thư viện bản đồ."));
     document.body.appendChild(script);
   });
+}
+
+function validPoint(value) {
+  const lat = Number(value?.lat ?? value?.latitude);
+  const lng = Number(value?.lng ?? value?.lon ?? value?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return {
+    lat,
+    lng,
+    displayName: value?.displayName || value?.label || value?.address || "",
+  };
+}
+
+function pointFromMapData(value) {
+  return validPoint(value) || validPoint(value?.location) || validPoint(value?.coordinates);
+}
+
+function destinationQuery(order, mapData) {
+  return normalizeAddress(
+    mapData?.destination?.address ||
+      order?.shipping_address ||
+      order?.full_address ||
+      [order?.address, order?.ward, order?.district, order?.province]
+        .filter(Boolean)
+        .join(", ") ||
+      "Việt Nam"
+  );
+}
+
+function originQuery(order, mapData) {
+  return normalizeAddress(
+    mapData?.origin?.address ||
+      order?.shop_address ||
+      order?.sender_address ||
+      order?.from_address ||
+      ""
+  );
 }
 
 async function geocode(query) {
@@ -109,13 +165,13 @@ async function geocode(query) {
   const row = Array.isArray(rows) ? rows[0] : null;
   if (!row) return null;
 
-  const point = {
+  const point = validPoint({
     lat: Number(row.lat),
     lng: Number(row.lon),
     displayName: row.display_name || text,
-  };
+  });
 
-  if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return null;
+  if (!point) return null;
 
   try {
     sessionStorage.setItem(key, JSON.stringify(point));
@@ -125,7 +181,9 @@ async function geocode(query) {
 }
 
 async function geocodeWithFallback(primary, fallbacks = []) {
-  const queries = [primary, ...fallbacks].map(normalizeAddress).filter(Boolean);
+  const queries = [primary, ...fallbacks]
+    .map(normalizeAddress)
+    .filter(Boolean);
 
   for (const query of [...new Set(queries)]) {
     try {
@@ -135,6 +193,68 @@ async function geocodeWithFallback(primary, fallbacks = []) {
   }
 
   return null;
+}
+
+function demoPoint(seed = 0) {
+  return {
+    lat: DEFAULT_CENTER[0] + seed * 0.025,
+    lng: DEFAULT_CENTER[1] + seed * 0.035,
+    displayName: seed < 0 ? "Điểm gửi hàng (demo)" : "Địa chỉ nhận hàng (demo)",
+  };
+}
+
+function syntheticOrigin(destination) {
+  const lat = Number(destination?.lat ?? DEFAULT_CENTER[0]);
+  const lng = Number(destination?.lng ?? DEFAULT_CENTER[1]);
+
+  return {
+    lat: lat - 0.08,
+    lng: lng - 0.09,
+    displayName: "Dynova Sport (điểm gửi demo)",
+  };
+}
+
+async function resolveDestination(order, mapData) {
+  const fromData =
+    pointFromMapData(mapData?.destination) ||
+    pointFromMapData(mapData?.destination_point) ||
+    pointFromMapData(mapData?.receiver) ||
+    pointFromMapData(trackingPoint(mapData?.destination));
+
+  if (fromData) return fromData;
+
+  const result = await geocodeWithFallback(destinationQuery(order, mapData), [
+    [order?.ward, order?.district, order?.province].filter(Boolean).join(", "),
+    [order?.district, order?.province].filter(Boolean).join(", "),
+    order?.province,
+    "Hồ Chí Minh, Việt Nam",
+  ]);
+
+  return result || demoPoint(0);
+}
+
+function trackingPoint(value) {
+  if (!value) return null;
+  if (Array.isArray(value) && value.length >= 2) {
+    return { lat: Number(value[0]), lng: Number(value[1]) };
+  }
+  return validPoint(value);
+}
+
+async function resolveOrigin(order, mapData, destination) {
+  const fromData =
+    pointFromMapData(mapData?.origin) ||
+    pointFromMapData(mapData?.origin_point) ||
+    pointFromMapData(mapData?.sender);
+
+  if (fromData) return fromData;
+
+  const result = await geocodeWithFallback(originQuery(order, mapData), [
+    mapData?.origin?.label,
+    "Hồ Chí Minh, Việt Nam",
+  ]);
+
+  return result || syntheticOrigin(destination);
 }
 
 async function roadRoute(origin, destination) {
@@ -170,21 +290,13 @@ async function roadRoute(origin, destination) {
   }
 }
 
-function syntheticOrigin(destination) {
-  return {
-    lat: destination.lat - 0.085,
-    lng: destination.lng - 0.105,
-    displayName: "Dynova Sport",
-  };
-}
-
 function pointAlongRoute(points, progress) {
   if (!points?.length) return DEFAULT_CENTER;
   if (points.length === 1) return points[0];
 
   const position = clamp(progress) / 100;
   const rawIndex = position * (points.length - 1);
-  const index = Math.floor(rawIndex);
+  const index = Math.min(points.length - 1, Math.floor(rawIndex));
   const nextIndex = Math.min(points.length - 1, index + 1);
   const ratio = rawIndex - index;
 
@@ -209,12 +321,14 @@ function splitRoute(points, progress) {
 
 function bearing(points, progress) {
   if (!points?.length || points.length < 2) return 0;
+
   const p = clamp(progress);
   const a = pointAlongRoute(points, Math.max(0, p - 0.15));
   const b = pointAlongRoute(points, Math.min(100, p + 0.15));
   const lat = ((a[0] + b[0]) / 2) * (Math.PI / 180);
   const x = (b[1] - a[1]) * Math.cos(lat);
   const y = b[0] - a[0];
+
   return (Math.atan2(x, y) * 180) / Math.PI;
 }
 
@@ -240,28 +354,33 @@ function markerHtml(type) {
     </div>`;
 }
 
-function destinationQuery(order, mapData) {
-  return normalizeAddress(
-    mapData?.destination?.address ||
-      order?.shipping_address ||
-      [order?.ward, order?.district, order?.province].filter(Boolean).join(", ") ||
-      "Việt Nam"
-  );
-}
-
-function originQuery(order, mapData) {
-  return normalizeAddress(
-    mapData?.origin?.address || order?.shop_address || order?.sender_address || order?.from_address || ""
-  );
-}
-
 export default function OrderDeliveryMap({ order, tracking, compact = false }) {
   const mapData = useMemo(() => tracking?.delivery_map || {}, [tracking]);
   const simulation = mapData?.simulation || null;
-  const status = String(
-    simulation?.current_status || tracking?.status || mapData?.status || order?.ghn_status || "ready_to_pick"
+
+  const serverProgress = clamp(
+    mapData?.progress ??
+      simulation?.progress ??
+      STATUS_PROGRESS[
+        String(
+          simulation?.current_status ||
+            tracking?.status ||
+            mapData?.status ||
+            order?.ghn_status ||
+            "ready_to_pick"
+        ).toLowerCase()
+      ] ??
+      0
+  );
+
+  const currentStatus = String(
+    simulation?.current_status ||
+      tracking?.status ||
+      mapData?.status ||
+      order?.ghn_status ||
+      "ready_to_pick"
   ).toLowerCase();
-  const initialProgress = clamp(mapData?.progress ?? simulation?.progress ?? STATUS_PROGRESS[status] ?? 0);
+
   const destination = destinationQuery(order, mapData);
   const origin = originQuery(order, mapData);
   const mapElementRef = useRef(null);
@@ -271,8 +390,10 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
   const activeLineRef = useRef(null);
   const remainingLineRef = useRef(null);
   const animationFrameRef = useRef(null);
-  const [displayProgress, setDisplayProgress] = useState(initialProgress);
-  const [routeVersion, setRouteVersion] = useState(0);
+  const resizeObserverRef = useRef(null);
+  const lastProgressRef = useRef(serverProgress);
+
+  const [displayProgress, setDisplayProgress] = useState(serverProgress);
   const [mapState, setMapState] = useState({
     loading: true,
     error: "",
@@ -287,18 +408,21 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
     const activeLine = activeLineRef.current;
     const remainingLine = remainingLineRef.current;
 
-    if (!points?.length || !marker || !activeLine || !remainingLine) return;
+    if (!points?.length || !marker) return;
 
     const progress = clamp(value);
     const point = pointAlongRoute(points, progress);
     const split = splitRoute(points, progress);
 
     marker.setLatLng(point);
-    activeLine.setLatLngs(split.active);
-    remainingLine.setLatLngs(split.remaining);
+
+    if (activeLine) activeLine.setLatLngs(split.active);
+    if (remainingLine) remainingLine.setLatLngs(split.remaining);
 
     const node = marker.getElement()?.querySelector?.("[data-dynova-truck]");
-    if (node) node.style.transform = `rotate(${bearing(points, progress)}deg)`;
+    if (node) {
+      node.style.transform = `rotate(${bearing(points, progress)}deg)`;
+    }
   };
 
   useEffect(() => {
@@ -313,16 +437,15 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
         const L = await loadLeaflet();
         if (cancelled || !mapElementRef.current) return;
 
-        const destinationPoint = await geocodeWithFallback(destination, [
-          [order?.ward, order?.district, order?.province].filter(Boolean).join(", "),
-          [order?.district, order?.province].filter(Boolean).join(", "),
-          order?.province,
-        ]);
+        const destinationPoint = await resolveDestination(order, mapData);
+        if (cancelled) return;
 
-        if (!destinationPoint) throw new Error("Không định vị được địa chỉ nhận hàng.");
-
-        let originPoint = await geocodeWithFallback(origin, [mapData?.origin?.label]);
-        if (!originPoint) originPoint = syntheticOrigin(destinationPoint);
+        const originPoint = await resolveOrigin(
+          order,
+          mapData,
+          destinationPoint
+        );
+        if (cancelled) return;
 
         const route = await roadRoute(originPoint, destinationPoint);
         if (cancelled || !mapElementRef.current) return;
@@ -336,6 +459,7 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
           zoomControl: true,
           attributionControl: true,
           scrollWheelZoom: false,
+          dragging: true,
         });
 
         L.tileLayer(OSM_TILE, {
@@ -365,11 +489,22 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
         });
 
         L.marker([originPoint.lat, originPoint.lng], { icon: shopIcon })
-          .bindPopup(`<strong>${mapData?.origin?.label || "Dynova Sport"}</strong><br>${originPoint.displayName || origin}`)
+          .bindPopup(
+            `<strong>${mapData?.origin?.label || "Dynova Sport"}</strong><br>${
+              originPoint.displayName || origin || "Điểm gửi hàng"
+            }`
+          )
           .addTo(leafletMap);
 
-        L.marker([destinationPoint.lat, destinationPoint.lng], { icon: receiverIcon })
-          .bindPopup(`<strong>Địa chỉ nhận hàng</strong><br>${destinationPoint.displayName || destination}`)
+        L.marker(
+          [destinationPoint.lat, destinationPoint.lng],
+          { icon: receiverIcon }
+        )
+          .bindPopup(
+            `<strong>Địa chỉ nhận hàng</strong><br>${
+              destinationPoint.displayName || destination || "Địa chỉ nhận hàng"
+            }`
+          )
           .addTo(leafletMap);
 
         remainingLineRef.current = L.polyline(route.coordinates, {
@@ -386,33 +521,53 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
           lineCap: "round",
         }).addTo(leafletMap);
 
-        truckMarkerRef.current = L.marker(pointAlongRoute(route.coordinates, initialProgress), {
-          icon: truckIcon,
-          zIndexOffset: 1000,
-        })
-          .bindPopup(`<strong>${simulation?.current_status_label || tracking?.status_label || "Đang vận chuyển"}</strong>`)
+        truckMarkerRef.current = L.marker(
+          pointAlongRoute(route.coordinates, serverProgress),
+          {
+            icon: truckIcon,
+            zIndexOffset: 1000,
+          }
+        )
+          .bindPopup(
+            `<strong>${
+              simulation?.current_status_label ||
+              tracking?.status_label ||
+              "Đang vận chuyển"
+            }</strong>`
+          )
           .addTo(leafletMap);
 
         routeRef.current = route.coordinates;
         leafletMapRef.current = leafletMap;
 
-        const bounds = L.latLngBounds([
-          [originPoint.lat, originPoint.lng],
-          [destinationPoint.lat, destinationPoint.lng],
-          ...route.coordinates,
-        ]);
+        const bounds = L.latLngBounds(route.coordinates);
+        leafletMap.fitBounds(bounds, {
+          padding: [48, 48],
+          maxZoom: 14,
+        });
 
-        leafletMap.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 });
-        window.setTimeout(() => leafletMap.invalidateSize(), 80);
+        window.setTimeout(() => leafletMap.invalidateSize(), 50);
+        window.setTimeout(() => leafletMap.invalidateSize(), 350);
 
+        if (typeof ResizeObserver !== "undefined" && mapElementRef.current) {
+          resizeObserverRef.current = new ResizeObserver(() => {
+            leafletMap.invalidateSize();
+          });
+          resizeObserverRef.current.observe(mapElementRef.current);
+        }
+
+        updateVehicle(serverProgress);
+        lastProgressRef.current = serverProgress;
+
+        setDisplayProgress(serverProgress);
         setMapState({
           loading: false,
           error: "",
           distance: route.distance,
           duration: route.duration,
-          destinationName: destinationPoint.displayName || destination,
+          destinationName:
+            destinationPoint.displayName || destination || "Địa chỉ nhận hàng",
         });
-        setRouteVersion((value) => value + 1);
       } catch (error) {
         if (!cancelled) {
           setMapState((current) => ({
@@ -428,60 +583,90 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
 
     return () => {
       cancelled = true;
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    };
-  }, [destination, origin, order?.tracking_code]);
 
-  useEffect(() => {
-    if (!routeVersion) return undefined;
-
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-
-    const baseProgress = clamp(mapData?.progress ?? simulation?.progress ?? initialProgress);
-    const durationSeconds = Math.max(60, Number(simulation?.duration_seconds || 240));
-    const speed = Math.max(0.5, Number(simulation?.speed || 1));
-    const running = Boolean(simulation?.running);
-    const started = performance.now();
-    let lastUi = 0;
-
-    setDisplayProgress(baseProgress);
-    updateVehicle(baseProgress);
-
-    if (!running || baseProgress >= 100) return undefined;
-
-    const frame = (now) => {
-      const elapsedRealSeconds = (now - started) / 1000;
-      const next = Math.min(100, baseProgress + (elapsedRealSeconds * speed * 100) / durationSeconds);
-      updateVehicle(next);
-
-      if (now - lastUi > 250 || next >= 100) {
-        lastUi = now;
-        setDisplayProgress(next);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
 
-      if (next < 100) animationFrameRef.current = requestAnimationFrame(frame);
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
+    };
+    // Chỉ khởi tạo lại bản đồ khi đơn/tracking code hoặc điểm đi/đến thực sự đổi.
+  }, [order?.tracking_code, tracking?.order_code]);
+
+  useEffect(() => {
+    if (!routeRef.current.length || !truckMarkerRef.current) {
+      setDisplayProgress(serverProgress);
+      lastProgressRef.current = serverProgress;
+      return undefined;
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const from = clamp(lastProgressRef.current);
+    const to = clamp(serverProgress);
+
+    if (Math.abs(to - from) < 0.01) {
+      updateVehicle(to);
+      setDisplayProgress(to);
+      lastProgressRef.current = to;
+      return undefined;
+    }
+
+    const started = performance.now();
+    const delta = to - from;
+
+    const frame = (now) => {
+      const ratio = Math.min(1, (now - started) / DEMO_ANIMATION_MS);
+      const eased = ratio < 0.5
+        ? 2 * ratio * ratio
+        : 1 - Math.pow(-2 * ratio + 2, 2) / 2;
+      const next = from + delta * eased;
+
+      updateVehicle(next);
+      setDisplayProgress(next);
+
+      if (ratio < 1) {
+        animationFrameRef.current = requestAnimationFrame(frame);
+      } else {
+        animationFrameRef.current = null;
+        lastProgressRef.current = to;
+        setDisplayProgress(to);
+      }
     };
 
     animationFrameRef.current = requestAnimationFrame(frame);
 
     return () => {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
-  }, [
-    routeVersion,
-    mapData?.progress,
-    simulation?.progress,
-    simulation?.running,
-    simulation?.speed,
-    simulation?.duration_seconds,
-    simulation?.server_time,
-  ]);
+  }, [serverProgress]);
 
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      if (leafletMapRef.current) leafletMapRef.current.remove();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+      }
       leafletMapRef.current = null;
+      routeRef.current = [];
+      truckMarkerRef.current = null;
+      activeLineRef.current = null;
+      remainingLineRef.current = null;
     };
   }, []);
 
@@ -489,12 +674,20 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
 
   const distanceText = formatDistance(mapState.distance);
   const durationText = formatDuration(mapState.duration);
-  const statusLabel = simulation?.current_status_label || tracking?.status_label || mapData?.status_label || "Đang vận chuyển";
+  const statusLabel =
+    simulation?.current_status_label ||
+    tracking?.status_label ||
+    mapData?.status_label ||
+    "Đang vận chuyển";
   const running = Boolean(simulation?.running);
-  const completed = displayProgress >= 100 || Boolean(simulation?.completed);
+  const completed = displayProgress >= 100 || currentStatus === "delivered" || Boolean(simulation?.completed);
 
   return (
-    <section className={`${compact ? "mt-4" : "mt-6"} overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,.10)]`}>
+    <section
+      className={`${
+        compact ? "mt-4" : "mt-6"
+      } overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,.10)]`}
+    >
       <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -509,28 +702,50 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
               </span>
             )}
           </div>
-          <h4 className="mt-1 truncate text-lg font-black text-slate-950">{statusLabel}</h4>
-          <p className="mt-1 text-xs font-semibold text-slate-500">Mã vận đơn: {order?.tracking_code || tracking?.order_code || "—"}</p>
+          <h4 className="mt-1 truncate text-lg font-black text-slate-950">
+            {statusLabel}
+          </h4>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            Mã vận đơn: {order?.tracking_code || tracking?.order_code || "—"}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {distanceText && <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">{distanceText}</span>}
-          {durationText && <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">~ {durationText}</span>}
-          <span className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black text-white ${completed ? "bg-emerald-600" : "bg-blue-600"}`}>
+          {distanceText && (
+            <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">
+              {distanceText}
+            </span>
+          )}
+          {durationText && (
+            <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700">
+              ~ {durationText}
+            </span>
+          )}
+          <span
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black text-white ${
+              completed ? "bg-emerald-600" : "bg-blue-600"
+            }`}
+          >
             {completed ? <CheckCircle2 size={15} /> : <Navigation size={15} />}
             {Math.round(displayProgress)}%
           </span>
         </div>
       </div>
 
-      <div className={`relative bg-slate-100 ${compact ? "h-[320px]" : "h-[440px] md:h-[500px]"}`}>
+      <div
+        className={`relative bg-slate-100 ${
+          compact ? "h-[320px]" : "h-[440px] md:h-[500px]"
+        }`}
+      >
         <div ref={mapElementRef} className="absolute inset-0 z-0 h-full w-full" />
 
         {mapState.loading && (
           <div className="absolute inset-0 z-20 grid place-items-center bg-slate-100">
             <div className="text-center">
               <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-              <p className="mt-3 text-sm font-black text-slate-700">Đang tải bản đồ...</p>
+              <p className="mt-3 text-sm font-black text-slate-700">
+                Đang tải bản đồ...
+              </p>
             </div>
           </div>
         )}
@@ -539,8 +754,12 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
           <div className="absolute inset-0 z-20 grid place-items-center bg-slate-100 px-6">
             <div className="max-w-md rounded-2xl border border-amber-200 bg-white p-5 text-center shadow-lg">
               <AlertTriangle className="mx-auto text-amber-500" size={28} />
-              <p className="mt-2 text-sm font-black text-slate-900">Chưa tải được bản đồ</p>
-              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{mapState.error}</p>
+              <p className="mt-2 text-sm font-black text-slate-900">
+                Chưa tải được bản đồ
+              </p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                {mapState.error}
+              </p>
             </div>
           </div>
         )}
@@ -549,29 +768,51 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
           <>
             <div className="pointer-events-none absolute left-4 top-4 z-[500] max-w-[calc(100%-2rem)] rounded-2xl border border-white/80 bg-white/95 px-4 py-3 shadow-xl backdrop-blur">
               <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${completed ? "bg-emerald-500" : "animate-pulse bg-blue-600"}`} />
-                <p className="text-xs font-black text-slate-900">{statusLabel}</p>
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    completed
+                      ? "bg-emerald-500"
+                      : "animate-pulse bg-blue-600"
+                  }`}
+                />
+                <p className="text-xs font-black text-slate-900">
+                  {statusLabel}
+                </p>
               </div>
-              <p className="mt-1 max-w-[340px] truncate text-[10px] font-semibold text-slate-500">{mapState.destinationName || destination}</p>
+              <p className="mt-1 max-w-[340px] truncate text-[10px] font-semibold text-slate-500">
+                {mapState.destinationName || destination}
+              </p>
             </div>
 
             <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-[500] grid gap-2 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/80 bg-white/95 p-3 shadow-xl backdrop-blur">
                 <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-slate-900 p-1.5 text-white"><Truck size={13} /></div>
+                  <div className="rounded-lg bg-slate-900 p-1.5 text-white">
+                    <Truck size={13} />
+                  </div>
                   <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Điểm lấy hàng</p>
-                    <p className="truncate text-xs font-black text-slate-800">{mapData?.origin?.label || "Dynova Sport"}</p>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      Điểm lấy hàng
+                    </p>
+                    <p className="truncate text-xs font-black text-slate-800">
+                      {mapData?.origin?.label || "Dynova Sport"}
+                    </p>
                   </div>
                 </div>
               </div>
 
               <div className="rounded-2xl border border-white/80 bg-white/95 p-3 shadow-xl backdrop-blur">
                 <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-rose-600 p-1.5 text-white"><MapPin size={13} /></div>
+                  <div className="rounded-lg bg-rose-600 p-1.5 text-white">
+                    <MapPin size={13} />
+                  </div>
                   <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Điểm nhận</p>
-                    <p className="truncate text-xs font-black text-slate-800">{destination}</p>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      Điểm nhận
+                    </p>
+                    <p className="truncate text-xs font-black text-slate-800">
+                      {destination}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -581,11 +822,23 @@ export default function OrderDeliveryMap({ order, tracking, compact = false }) {
       </div>
 
       <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3">
-        {completed ? <PackageCheck size={15} className="text-emerald-500" /> : <Navigation size={15} className="text-slate-400" />}
+        {completed ? (
+          <PackageCheck size={15} className="text-emerald-500" />
+        ) : (
+          <Navigation size={15} className="text-slate-400" />
+        )}
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
-          <div className="h-full rounded-full bg-blue-600 transition-[width] duration-300" style={{ width: `${displayProgress}%` }} />
+          <div
+            className="h-full rounded-full bg-blue-600"
+            style={{
+              width: `${displayProgress}%`,
+              transition: "width 700ms cubic-bezier(.22,1,.36,1)",
+            }}
+          />
         </div>
-        <span className="text-[11px] font-black text-slate-500">{Math.round(displayProgress)}%</span>
+        <span className="text-[11px] font-black text-slate-500">
+          {Math.round(displayProgress)}%
+        </span>
       </div>
 
       <style jsx global>{`
