@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Ban,
@@ -162,16 +162,11 @@ function encodePath(value) {
 
 function toStorageProductImage(value) {
   const raw = String(value || "").trim();
-
   if (!raw || raw.includes("product-placeholder")) {
     return FALLBACK_IMAGE;
   }
 
-  if (
-    /^(https?:)?\/\//i.test(raw) ||
-    raw.startsWith("data:") ||
-    raw.startsWith("blob:")
-  ) {
+  if (/^(https?:)?\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
     return raw;
   }
 
@@ -235,9 +230,7 @@ function getAuthHeaders() {
 
   return {
     Accept: "application/json",
-    ...(token
-      ? { Authorization: `Bearer ${token}` }
-      : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
 
@@ -271,9 +264,7 @@ function getProductVariants(product) {
     product?.children ||
     [];
 
-  return Array.isArray(variants)
-    ? variants
-    : [];
+  return Array.isArray(variants) ? variants : [];
 }
 
 function getProductRawImage(product) {
@@ -309,113 +300,64 @@ async function loadCatalogMaps() {
       }
     );
 
-    const data =
-      await response.json().catch(
-        () => ({})
-      );
-
-    const products = extractItems(
-      data,
-      ["products", "items"]
-    );
-
+    const data = await response.json().catch(() => ({}));
+    const products = extractItems(data, ["products", "items"]);
     const productMap = {};
     const variantMap = {};
 
     products.forEach((product) => {
-      const productId =
-        product?.id ??
-        product?.product_id ??
-        product?.productId;
+      const productId = product?.id ?? product?.product_id ?? product?.productId;
 
-      if (
-        productId !== undefined &&
-        productId !== null
-      ) {
-        productMap[String(productId)] =
-          product;
+      if (productId !== undefined && productId !== null) {
+        productMap[String(productId)] = product;
       }
 
-      getProductVariants(product).forEach(
-        (variant) => {
-          const variantId =
-            variant?.id ??
-            variant?.variant_id ??
-            variant?.product_variant_id ??
-            variant?.productVariantId;
+      getProductVariants(product).forEach((variant) => {
+        const variantId =
+          variant?.id ??
+          variant?.variant_id ??
+          variant?.product_variant_id ??
+          variant?.productVariantId;
 
-          if (
-            variantId !== undefined &&
-            variantId !== null
-          ) {
-            variantMap[String(variantId)] =
-              {
-                ...variant,
-                product,
-              };
-          }
+        if (variantId !== undefined && variantId !== null) {
+          variantMap[String(variantId)] = {
+            ...variant,
+            product,
+          };
         }
-      );
+      });
     });
 
-    return {
-      productMap,
-      variantMap,
-    };
+    return { productMap, variantMap };
   } catch {
-    return {
-      productMap: {},
-      variantMap: {},
-    };
+    return { productMap: {}, variantMap: {} };
   }
 }
 
-function getCatalogRawImage(
-  item,
-  catalogMaps = {}
-) {
-  const productMap =
-    catalogMaps?.productMap || {};
-
-  const variantMap =
-    catalogMaps?.variantMap || {};
-
-  const variantId =
-    getVariantIdFromItem(item);
-
-  const productId =
-    getProductIdFromItem(item);
+function getCatalogRawImage(item, catalogMaps = {}) {
+  const productMap = catalogMaps?.productMap || {};
+  const variantMap = catalogMaps?.variantMap || {};
+  const variantId = getVariantIdFromItem(item);
+  const productId = getProductIdFromItem(item);
 
   const variant =
-    variantId !== undefined &&
-    variantId !== null
+    variantId !== undefined && variantId !== null
       ? variantMap[String(variantId)]
       : null;
 
   const product =
-    (productId !== undefined &&
-    productId !== null
+    (productId !== undefined && productId !== null
       ? productMap[String(productId)]
       : null) ||
     variant?.product ||
     null;
 
-  return (
-    getVariantRawImage(variant) ||
-    getProductRawImage(product) ||
-    ""
-  );
+  return getVariantRawImage(variant) || getProductRawImage(product) || "";
 }
 
-function getOrderItemImage(
-  item,
-  catalogMaps = {}
-) {
+function getOrderItemImage(item, catalogMaps = {}) {
   const raw =
-    getCatalogRawImage(
-      item,
-      catalogMaps
-    ) ||
+    getCatalogRawImage(item, catalogMaps) ||
     item?.variant_image ||
     item?.product_variant?.image ||
     item?.productVariant?.image ||
@@ -432,21 +374,13 @@ function getOrderItemImage(
 }
 
 function handleImageError(event) {
-  if (
-    event.currentTarget.src !==
-    FALLBACK_IMAGE
-  ) {
-    event.currentTarget.src =
-      FALLBACK_IMAGE;
+  if (event.currentTarget.src !== FALLBACK_IMAGE) {
+    event.currentTarget.src = FALLBACK_IMAGE;
   }
 }
 
-function normalizeStatus(
-  status = ""
-) {
-  const clean = String(status || "")
-    .trim()
-    .toLowerCase();
+function normalizeStatus(status = "") {
+  const clean = String(status || "").trim().toLowerCase();
 
   if (
     [
@@ -460,54 +394,23 @@ function normalizeStatus(
     return "waiting_bank_transfer";
   }
 
-  if (
-    [
-      "processing",
-      "packing",
-      "đang xử lý",
-    ].includes(clean)
-  ) {
+  if (["processing", "packing", "đang xử lý"].includes(clean)) {
     return "processing";
   }
 
-  if (
-    [
-      "confirmed",
-      "đã xác nhận",
-    ].includes(clean)
-  ) {
+  if (["confirmed", "đã xác nhận"].includes(clean)) {
     return "confirmed";
   }
 
-  if (
-    [
-      "shipping",
-      "delivering",
-      "đang giao",
-    ].includes(clean)
-  ) {
+  if (["shipping", "delivering", "đang giao"].includes(clean)) {
     return "shipping";
   }
 
-  if (
-    [
-      "completed",
-      "success",
-      "done",
-      "hoàn thành",
-    ].includes(clean)
-  ) {
+  if (["completed", "success", "done", "hoàn thành"].includes(clean)) {
     return "completed";
   }
 
-  if (
-    [
-      "cancelled",
-      "canceled",
-      "cancel",
-      "đã hủy",
-    ].includes(clean)
-  ) {
+  if (["cancelled", "canceled", "cancel", "đã hủy"].includes(clean)) {
     return "cancelled";
   }
 
@@ -527,79 +430,39 @@ function extractOrder(response) {
 }
 
 function getOrderItems(order) {
-  return (
-    order?.items ||
-    order?.order_items ||
-    order?.details ||
-    []
-  );
+  return order?.items || order?.order_items || order?.details || [];
 }
 
 function getItemName(item) {
-  return (
-    item?.product_name ||
-    item?.name ||
-    item?.product?.name ||
-    "Sản phẩm"
-  );
+  return item?.product_name || item?.name || item?.product?.name || "Sản phẩm";
 }
 
 function getItemPrice(item) {
-  return Number(
-    item?.unit_price ||
-      item?.price ||
-      item?.sale_price ||
-      0
-  );
+  return Number(item?.unit_price || item?.price || item?.sale_price || 0);
 }
 
 function getItemQuantity(item) {
-  return Number(
-    item?.quantity ||
-      item?.qty ||
-      1
-  );
+  return Number(item?.quantity || item?.qty || 1);
 }
 
 function getItemSize(item) {
-  return (
-    item?.size ||
-    item?.size_name ||
-    item?.product_variant?.size ||
-    item?.productVariant?.size ||
-    null
-  );
+  return item?.size || item?.size_name || item?.product_variant?.size || item?.productVariant?.size || null;
 }
 
 function getItemColor(item) {
-  return (
-    item?.color ||
-    item?.color_name ||
-    item?.product_variant?.color ||
-    item?.productVariant?.color ||
-    null
-  );
+  return item?.color || item?.color_name || item?.product_variant?.color || item?.productVariant?.color || null;
 }
 
-function normalizeCartItem(
-  item,
-  catalogMaps = {}
-) {
-  const productId =
-    getProductIdFromItem(item);
-
-  const variantId =
-    getVariantIdFromItem(item);
+function normalizeCartItem(item, catalogMaps = {}) {
+  const productId = getProductIdFromItem(item);
+  const variantId = getVariantIdFromItem(item);
 
   return {
     id: productId,
     product_id: productId,
     variant_id: variantId,
     name: getItemName(item),
-    image: getOrderItemImage(
-      item,
-      catalogMaps
-    ),
+    image: getOrderItemImage(item, catalogMaps),
     price: getItemPrice(item),
     size: getItemSize(item),
     color: getItemColor(item),
@@ -607,99 +470,56 @@ function normalizeCartItem(
 }
 
 function getOrderCode(order) {
-  return (
-    order?.order_code ||
-    order?.code ||
-    `DH${String(
-      order?.id || ""
-    ).padStart(6, "0")}`
-  );
+  return order?.order_code || order?.code || `DH${String(order?.id || "").padStart(6, "0")}`;
 }
 
-function getPaymentLabel(
-  method = ""
-) {
-  const clean =
-    String(
-      method || "COD"
-    ).toUpperCase();
+function getPaymentLabel(method = "") {
+  const clean = String(method || "COD").toUpperCase();
 
   const map = {
     COD: "Thanh toán khi nhận hàng",
-    BANK_TRANSFER:
-      "Chuyển khoản / VietQR",
-    BANK:
-      "Chuyển khoản / VietQR",
-    VIETQR:
-      "Chuyển khoản / VietQR",
-    VNPAY:
-      "VNPAY",
+    BANK_TRANSFER: "Chuyển khoản / VietQR",
+    BANK: "Chuyển khoản / VietQR",
+    VIETQR: "Chuyển khoản / VietQR",
+    VNPAY: "VNPAY",
   };
 
-  return (
-    map[clean] ||
-    method ||
-    "COD"
-  );
+  return map[clean] || method || "COD";
 }
 
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
-
   const orderId = params?.id;
 
-  const [order, setOrder] =
-    useState(null);
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState("");
+  const [trackingRefreshing, setTrackingRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [catalogMaps, setCatalogMaps] = useState({
+    productMap: {},
+    variantMap: {},
+  });
 
-  const [loading, setLoading] =
-    useState(true);
+  const items = useMemo(() => getOrderItems(order), [order]);
 
-  const [actionLoading, setActionLoading] =
-    useState("");
+  const paymentMethod = String(
+    order?.payment_method ??
+      order?.paymentMethod ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
 
-  const [
-    trackingRefreshing,
-    setTrackingRefreshing,
-  ] = useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [notice, setNotice] =
-    useState("");
-
-  const [catalogMaps, setCatalogMaps] =
-    useState({
-      productMap: {},
-      variantMap: {},
-    });
-
-  const orderLoadRunning =
-    useRef(false);
-
-  const items = useMemo(
-    () => getOrderItems(order),
-    [order]
-  );
-
-  const paymentMethod =
-    String(
-      order?.payment_method ??
-        order?.paymentMethod ??
-        ""
-    )
-      .trim()
-      .toLowerCase();
-
-  const paymentStatus =
-    String(
-      order?.payment_status ??
-        order?.paymentStatus ??
-        "unpaid"
-    )
-      .trim()
-      .toLowerCase();
+  const paymentStatus = String(
+    order?.payment_status ??
+      order?.paymentStatus ??
+      "unpaid"
+  )
+    .trim()
+    .toLowerCase();
 
   const bankPayment = [
     "bank",
@@ -708,14 +528,9 @@ export default function OrderDetailPage() {
     "banktransfer",
   ].includes(paymentMethod);
 
-  const paymentPaid =
-    paymentStatus === "paid";
+  const paymentPaid = paymentStatus === "paid";
 
-  const baseStatus =
-    normalizeStatus(
-      order?.status ||
-        "pending"
-    );
+  const baseStatus = normalizeStatus(order?.status || "pending");
 
   const bankUnpaid =
     bankPayment &&
@@ -727,23 +542,20 @@ export default function OrderDetailPage() {
     : baseStatus;
 
   const statusInfo =
-    statusMap[status] ||
-    statusMap.pending;
+    statusMap[status] || statusMap.pending;
 
   const currentStepIndex =
     status === "cancelled"
       ? -1
       : statusIndex[status] ?? 0;
 
-  const statusHistory =
-    Array.isArray(
-      order?.status_history
-    )
-      ? order.status_history
-      : [];
+  const statusHistory = Array.isArray(
+    order?.status_history
+  )
+    ? order.status_history
+    : [];
 
-  const tracking =
-    order?.tracking || null;
+  const tracking = order?.tracking || null;
 
   const total = Number(
     order?.grand_total ??
@@ -755,8 +567,8 @@ export default function OrderDetailPage() {
   );
 
   const subtotal = Number(
-    order?.subtotal ??
-      order?.total_price ??
+    order?.subtotal ||
+      order?.total_price ||
       0
   );
 
@@ -770,64 +582,33 @@ export default function OrderDetailPage() {
       0
   );
 
-  const showNotice = useCallback(
-    (message) => {
-      setNotice(message);
-
-      window.setTimeout(
-        () => setNotice(""),
-        1800
-      );
-    },
-    []
-  );
+  const showNotice = useCallback((message) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 1800);
+  }, []);
 
   const loadOrder = useCallback(
     async ({ silent = false } = {}) => {
-      if (
-        !orderId ||
-        orderLoadRunning.current
-      ) {
-        return;
-      }
-
-      orderLoadRunning.current =
-        true;
+      if (!orderId) return;
 
       try {
-        if (!silent) {
-          setLoading(true);
-        }
-
+        if (!silent) setLoading(true);
         setError("");
 
-        const response =
-          await getOrderById(
-            orderId
-          );
+        const [response, nextCatalogMaps] = await Promise.all([
+          getOrderById(orderId),
+          silent ? Promise.resolve(null) : loadCatalogMaps(),
+        ]);
 
-        const data =
-          extractOrder(response);
+        const data = extractOrder(response);
 
-        if (
-          data &&
-          typeof data === "object"
-        ) {
-          setOrder(data);
+        if (!silent && nextCatalogMaps) {
+          setCatalogMaps(nextCatalogMaps);
         }
 
-        if (!silent) {
-          const nextCatalogMaps =
-            await loadCatalogMaps();
-
-          setCatalogMaps(
-            nextCatalogMaps
-          );
-        }
+        setOrder(data);
       } catch (err) {
-        if (
-          err?.status === 401
-        ) {
+        if (err?.status === 401) {
           router.push(
             `/login?redirect=${encodeURIComponent(
               `/orders/${orderId}`
@@ -843,102 +624,71 @@ export default function OrderDetailPage() {
           );
         }
       } finally {
-        orderLoadRunning.current =
-          false;
-
-        if (!silent) {
-          setLoading(false);
-        }
+        if (!silent) setLoading(false);
       }
     },
     [orderId, router]
   );
 
-  const loadTracking =
-    useCallback(
-      async ({
-        silent = false,
-      } = {}) => {
-        if (
-          !orderId ||
-          !order?.tracking_code
-        ) {
-          return;
+  const loadTracking = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!orderId || !order?.tracking_code) return;
+
+      try {
+        if (!silent) {
+          setTrackingRefreshing(true);
         }
 
-        try {
-          if (!silent) {
-            setTrackingRefreshing(
-              true
-            );
-          }
+        const data = await getOrderTracking(orderId);
 
-          const data =
-            await getOrderTracking(
-              orderId
-            );
-
-          setOrder(
-            (current) => ({
-              ...current,
-              status:
-                data?.order_status ??
-                current?.status,
-
-              payment_status:
-                data?.payment_status ??
-                current?.payment_status,
-
-              shipping_provider:
-                data?.shipping_provider ??
-                current?.shipping_provider,
-
-              tracking_code:
-                data?.tracking_code ??
-                current?.tracking_code,
-
-              ghn_status:
-                data?.ghn_status ??
-                current?.ghn_status,
-
-              ghn_expected_delivery_at:
-                data?.ghn_expected_delivery_at ??
-                current?.ghn_expected_delivery_at,
-
-              ghn_last_synced_at:
-                data?.ghn_last_synced_at ??
-                current?.ghn_last_synced_at,
-
-              tracking:
-                data?.tracking ??
-                current?.tracking,
-
-              shipping_status_history:
-                data?.shipping_status_history ??
-                current?.shipping_status_history,
-
-              status_history:
-                data?.status_history ??
-                current?.status_history,
-            })
+        setOrder((current) => ({
+          ...current,
+          status:
+            data?.order_status ??
+            current?.status,
+          payment_status:
+            data?.payment_status ??
+            current?.payment_status,
+          shipping_provider:
+            data?.shipping_provider ??
+            current?.shipping_provider,
+          tracking_code:
+            data?.tracking_code ??
+            current?.tracking_code,
+          ghn_status:
+            data?.ghn_status ??
+            current?.ghn_status,
+          ghn_expected_delivery_at:
+            data?.ghn_expected_delivery_at ??
+            current?.ghn_expected_delivery_at,
+          ghn_last_synced_at:
+            data?.ghn_last_synced_at ??
+            current?.ghn_last_synced_at,
+          tracking:
+            data?.tracking ??
+            current?.tracking,
+          shipping_status_history:
+            data?.shipping_status_history ??
+            current?.shipping_status_history,
+          status_history:
+            data?.status_history ??
+            current?.status_history,
+        }));
+      } catch (err) {
+        if (!silent) {
+          setError(
+            err?.message ||
+              "Không thể cập nhật hành trình giao hàng."
           );
-        } catch (err) {
-          if (!silent) {
-            setError(
-              err?.message ||
-                "Không thể cập nhật hành trình giao hàng."
-            );
-          }
-        } finally {
-          if (!silent) {
-            setTrackingRefreshing(
-              false
-            );
-          }
         }
-      },
-      [orderId, order?.tracking_code]
-    );
+      } finally {
+        if (!silent) {
+          setTrackingRefreshing(false);
+        }
+      }
+    },
+    [orderId, order?.tracking_code]
+  );
 
   useEffect(() => {
     loadOrder();
@@ -952,185 +702,129 @@ export default function OrderDetailPage() {
       return undefined;
     }
 
-    const running =
-      Boolean(
-        order?.tracking?.delivery_map
-          ?.simulation?.running
-      );
+    const running = Boolean(
+      order?.tracking?.delivery_map?.simulation?.running
+    );
 
-    const interval =
-      running ? 4000 : 30000;
+    const interval = running
+      ? 4000
+      : 30000;
 
-    const timer =
-      window.setInterval(
-        () =>
-          loadTracking({
-            silent: true,
-          }),
-        interval
-      );
+    const timer = window.setInterval(
+      () => loadTracking({ silent: true }),
+      interval
+    );
 
     return () =>
-      window.clearInterval(
-        timer
-      );
+      window.clearInterval(timer);
   }, [
     status,
     order?.tracking_code,
-    order?.tracking?.delivery_map
-      ?.simulation?.running,
+    order?.tracking?.delivery_map?.simulation?.running,
     loadTracking,
   ]);
 
-  const handleCancel =
-    async () => {
-      if (!order?.id) {
-        return;
-      }
+  const handleCancel = async () => {
+    if (!order?.id) return;
 
-      const confirmCancel =
-        window.confirm(
-          "Bạn chắc chắn muốn hủy đơn hàng này?"
-        );
+    const confirmCancel = window.confirm(
+      "Bạn chắc chắn muốn hủy đơn hàng này?"
+    );
 
-      if (!confirmCancel) {
-        return;
-      }
+    if (!confirmCancel) return;
 
-      try {
-        setActionLoading(
-          "cancel"
-        );
+    try {
+      setActionLoading("cancel");
+      const response = await cancelOrder(order.id);
+      const data = extractOrder(response) || {
+        ...order,
+        status: "cancelled",
+      };
 
-        const response =
-          await cancelOrder(
-            order.id
-          );
+      setOrder({
+        ...order,
+        ...data,
+        status: data.status || "cancelled",
+      });
 
-        const data =
-          extractOrder(
-            response
-          ) || {
-            ...order,
-            status: "cancelled",
-          };
+      showNotice("Hủy đơn hàng thành công.");
+    } catch (err) {
+      showNotice(
+        err?.message ||
+          "Không thể hủy đơn hàng."
+      );
+    } finally {
+      setActionLoading("");
+    }
+  };
 
-        setOrder({
-          ...order,
-          ...data,
-          status:
-            data.status ||
-            "cancelled",
-        });
+  const handleReorder = async () => {
+    if (!order?.id) return;
 
-        showNotice(
-          "Hủy đơn hàng thành công."
-        );
-      } catch (err) {
-        showNotice(
-          err?.message ||
-            "Không thể hủy đơn hàng."
-        );
-      } finally {
-        setActionLoading("");
-      }
-    };
+    try {
+      setActionLoading("reorder");
 
-  const handleReorder =
-    async () => {
-      if (!order?.id) {
-        return;
-      }
+      let reorderItems = items;
 
       try {
-        setActionLoading(
-          "reorder"
+        const response = await reorderOrder(
+          order.id
         );
+        const data = extractOrder(response);
+        reorderItems = getOrderItems(data);
+      } catch {
+        reorderItems = items;
+      }
 
-        let reorderItems =
-          items;
-
-        try {
-          const response =
-            await reorderOrder(
-              order.id
-            );
-
-          const data =
-            extractOrder(
-              response
-            );
-
-          reorderItems =
-            getOrderItems(
-              data
-            );
-        } catch {
-          reorderItems = items;
-        }
-
-        reorderItems.forEach(
-          (item) => {
-            addToCart(
-              normalizeCartItem(
-                item,
-                catalogMaps
+      reorderItems.forEach((item) => {
+        addToCart(
+          normalizeCartItem(
+            item,
+            catalogMaps
+          ),
+          {
+            quantity:
+              Math.max(
+                1,
+                Number(
+                  item?.quantity ??
+                    item?.qty ??
+                    1
+                )
               ),
-              {
-                quantity:
-                  Math.max(
-                    1,
-                    Number(
-                      item?.quantity ??
-                        item?.qty ??
-                        1
-                    )
-                  ),
-              }
-            );
           }
         );
+      });
 
-        if (
-          typeof window !==
-          "undefined"
-        ) {
-          window.dispatchEvent(
-            new Event(
-              "dynova:storage"
-            )
-          );
-        }
+      window.dispatchEvent(
+        new Event("dynova:storage")
+      );
 
-        showNotice(
-          "Đã thêm sản phẩm vào giỏ hàng."
-        );
+      showNotice(
+        "Đã thêm sản phẩm vào giỏ hàng."
+      );
 
-        window.setTimeout(
-          () => router.push("/cart"),
-          700
-        );
-      } catch (err) {
-        showNotice(
-          err?.message ||
-            "Không thể mua lại đơn hàng."
-        );
-      } finally {
-        setActionLoading("");
-      }
-    };
+      window.setTimeout(
+        () => router.push("/cart"),
+        700
+      );
+    } catch (err) {
+      showNotice(
+        err?.message ||
+          "Không thể mua lại đơn hàng."
+      );
+    } finally {
+      setActionLoading("");
+    }
+  };
 
-  const canCancel =
-    [
-      "pending",
-      "waiting_bank_transfer",
-      "confirmed",
-      "processing",
-    ].includes(status) &&
-    !(
-      bankPayment &&
-      paymentPaid
-    );
+  const canCancel = [
+    "pending",
+    "waiting_bank_transfer",
+    "confirmed",
+    "processing",
+  ].includes(status) &&
+    !(bankPayment && paymentPaid);
 
   if (loading) {
     return (
@@ -1141,7 +835,6 @@ export default function OrderDetailPage() {
               className="mx-auto animate-spin text-orange-500"
               size={34}
             />
-
             <p className="mt-4 text-sm font-bold text-slate-500">
               Đang tải chi tiết đơn hàng...
             </p>
@@ -1160,16 +853,13 @@ export default function OrderDetailPage() {
               className="mx-auto text-rose-500"
               size={42}
             />
-
             <h1 className="mt-4 text-xl font-black text-slate-950">
               Không thể tải đơn hàng
             </h1>
-
             <p className="mt-2 text-sm text-slate-500">
               {error ||
                 "Đơn hàng không tồn tại hoặc bạn không có quyền xem."}
             </p>
-
             <Link
               href="/orders"
               className="btn-primary mt-6 inline-flex rounded-2xl px-5 py-3 text-sm font-black"
@@ -1205,19 +895,14 @@ export default function OrderDetailPage() {
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-300">
                 Chi tiết đơn hàng
               </p>
-
               <h1 className="mt-2 text-3xl font-black uppercase tracking-[-0.04em] md:text-5xl">
                 {getOrderCode(order)}
               </h1>
-
               <p className="mt-3 text-sm text-slate-300">
-                Ngày đặt:{" "}
-                {order.created_at
+                Ngày đặt: {order.created_at
                   ? new Date(
                       order.created_at
-                    ).toLocaleString(
-                      "vi-VN"
-                    )
+                    ).toLocaleString("vi-VN")
                   : "Chưa cập nhật"}
               </p>
             </div>
@@ -1225,15 +910,11 @@ export default function OrderDetailPage() {
             <div
               className={`inline-flex w-fit items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black ${statusInfo.bg} ${statusInfo.text} ${statusInfo.border}`}
             >
-              {status ===
-              "cancelled" ? (
+              {status === "cancelled" ? (
                 <Ban size={18} />
               ) : (
-                <CheckCircle2
-                  size={18}
-                />
+                <CheckCircle2 size={18} />
               )}
-
               {statusInfo.label}
             </div>
           </div>
@@ -1248,31 +929,26 @@ export default function OrderDetailPage() {
                 <h2 className="text-lg font-black text-slate-950">
                   Tiến trình đơn hàng
                 </h2>
-
                 <p className="mt-1 text-sm text-slate-500">
                   Theo dõi trạng thái xử lý và giao hàng.
                 </p>
               </div>
-
               <Truck
                 className="text-orange-500"
                 size={26}
               />
             </div>
 
-            {status ===
-            "cancelled" ? (
+            {status === "cancelled" ? (
               <div className="rounded-3xl border border-rose-100 bg-rose-50 p-5">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500 text-white">
                     <Ban size={22} />
                   </div>
-
                   <div>
                     <p className="font-black text-rose-700">
                       Đơn hàng đã được hủy
                     </p>
-
                     <p className="mt-1 text-sm text-rose-500">
                       Đơn hàng này không còn được tiếp tục xử lý.
                     </p>
@@ -1281,161 +957,115 @@ export default function OrderDetailPage() {
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-4">
-                {timelineSteps.map(
-                  (
-                    step,
-                    index
-                  ) => {
-                    const Icon =
-                      step.icon;
+                {timelineSteps.map((step, index) => {
+                  const Icon = step.icon;
+                  const active =
+                    index <= currentStepIndex;
 
-                    const active =
-                      index <=
-                      currentStepIndex;
-
-                    return (
+                  return (
+                    <div
+                      key={step.key}
+                      className={
+                        "relative rounded-3xl border p-4 transition " +
+                        (active
+                          ? "border-orange-200 bg-orange-50"
+                          : "border-slate-200 bg-slate-50")
+                      }
+                    >
                       <div
-                        key={
-                          step.key
-                        }
                         className={
-                          "relative rounded-3xl border p-4 transition " +
+                          "flex h-11 w-11 items-center justify-center rounded-2xl " +
                           (active
-                            ? "border-orange-200 bg-orange-50"
-                            : "border-slate-200 bg-slate-50")
+                            ? "bg-orange-500 text-white"
+                            : "bg-white text-slate-400")
                         }
                       >
-                        <div
-                          className={
-                            "flex h-11 w-11 items-center justify-center rounded-2xl " +
-                            (active
-                              ? "bg-orange-500 text-white"
-                              : "bg-white text-slate-400")
-                          }
-                        >
-                          <Icon
-                            size={20}
-                          />
-                        </div>
-
-                        <p
-                          className={
-                            "mt-4 text-sm font-black " +
-                            (active
-                              ? "text-orange-700"
-                              : "text-slate-500")
-                          }
-                        >
-                          {
-                            step.title
-                          }
-                        </p>
-
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {
-                            step.desc
-                          }
-                        </p>
+                        <Icon size={20} />
                       </div>
-                    );
-                  }
-                )}
+                      <p
+                        className={
+                          "mt-4 text-sm font-black " +
+                          (active
+                            ? "text-orange-700"
+                            : "text-slate-500")
+                        }
+                      >
+                        {step.title}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        {step.desc}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
-            {statusHistory.length >
-              0 && (
+            {statusHistory.length > 0 && (
               <div className="mt-6 border-t border-slate-100 pt-5">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
                   Lịch sử trạng thái
                 </p>
-
                 <div className="mt-3 space-y-3">
-                  {statusHistory.map(
-                    (
-                      entry,
-                      index
-                    ) => {
-                      const target =
-                        normalizeStatus(
-                          entry?.to_status ||
-                            "pending"
-                        );
+                  {statusHistory.map((entry, index) => {
+                    const target = normalizeStatus(
+                      entry?.to_status ||
+                        "pending"
+                    );
+                    const meta =
+                      statusMap[target] ||
+                      statusMap.pending;
 
-                      const meta =
-                        statusMap[
-                          target
-                        ] ||
-                        statusMap.pending;
-
-                      return (
-                        <div
-                          key={
-                            entry?.id ||
-                            index
-                          }
-                          className="flex gap-3 rounded-2xl bg-slate-50 p-3"
-                        >
-                          <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p
-                                className={`text-sm font-black ${meta.text}`}
-                              >
-                                {
-                                  meta.label
-                                }
-                              </p>
-
-                              <span className="text-[11px] font-bold text-slate-400">
-                                {entry?.created_at
-                                  ? new Date(
-                                      entry.created_at
-                                    ).toLocaleString(
-                                      "vi-VN"
-                                    )
-                                  : ""}
-                              </span>
-                            </div>
-
-                            {entry?.note && (
-                              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                                {
-                                  entry.note
-                                }
-                              </p>
-                            )}
+                    return (
+                      <div
+                        key={entry?.id || index}
+                        className="flex gap-3 rounded-2xl bg-slate-50 p-3"
+                      >
+                        <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p
+                              className={`text-sm font-black ${meta.text}`}
+                            >
+                              {meta.label}
+                            </p>
+                            <span className="text-[11px] font-bold text-slate-400">
+                              {entry?.created_at
+                                ? new Date(
+                                    entry.created_at
+                                  ).toLocaleString("vi-VN")
+                                : ""}
+                            </span>
                           </div>
+                          {entry?.note && (
+                            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                              {entry.note}
+                            </p>
+                          )}
                         </div>
-                      );
-                    }
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
+            {/* QUAN TRỌNG: đơn BANK chưa trả tiền luôn được render QR. */}
             {bankUnpaid ? (
               <VietQrPaymentCard
                 key={`payment-${order.id}-${paymentStatus}`}
-                orderId={Number(
-                  order.id
-                )}
+                orderId={Number(order.id)}
                 className="mt-6"
-                onPaid={async (
-                  payment
-                ) => {
-                  setOrder(
-                    (current) => ({
-                      ...current,
-                      payment_status:
-                        payment?.payment_status ||
-                        "paid",
-                      status:
-                        payment?.order_status ||
-                        "confirmed",
-                    })
-                  );
+                onPaid={async (payment) => {
+                  setOrder((current) => ({
+                    ...current,
+                    payment_status:
+                      payment?.payment_status ||
+                      "paid",
+                    status:
+                      payment?.order_status ||
+                      "confirmed",
+                  }));
 
                   await loadOrder({
                     silent: true,
@@ -1451,12 +1081,8 @@ export default function OrderDetailPage() {
             <OrderTrackingTimeline
               order={order}
               tracking={tracking}
-              refreshing={
-                trackingRefreshing
-              }
-              onRefresh={() =>
-                loadTracking()
-              }
+              refreshing={trackingRefreshing}
+              onRefresh={() => loadTracking()}
             />
           </section>
 
@@ -1466,14 +1092,10 @@ export default function OrderDetailPage() {
                 <h2 className="text-lg font-black text-slate-950">
                   Sản phẩm trong đơn
                 </h2>
-
                 <p className="mt-1 text-sm text-slate-500">
-                  Tổng cộng{" "}
-                  {items.length}{" "}
-                  sản phẩm.
+                  Tổng cộng {items.length} sản phẩm.
                 </p>
               </div>
-
               <ShoppingBag
                 className="text-orange-500"
                 size={25}
@@ -1481,106 +1103,69 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="space-y-3">
-              {items.length ===
-              0 ? (
+              {items.length === 0 ? (
                 <div className="rounded-3xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
                   Chưa có sản phẩm trong đơn hàng.
                 </div>
               ) : (
-                items.map(
-                  (
-                    item,
-                    index
-                  ) => {
-                    const price =
-                      getItemPrice(
-                        item
-                      );
+                items.map((item, index) => {
+                  const price = getItemPrice(item);
+                  const quantity = getItemQuantity(item);
+                  const size = getItemSize(item);
+                  const color = getItemColor(item);
 
-                    const quantity =
-                      getItemQuantity(
-                        item
-                      );
+                  return (
+                    <div
+                      key={item.id || index}
+                      className="flex gap-4 rounded-3xl border border-slate-100 bg-white p-3 transition hover:border-orange-100 hover:bg-orange-50/30"
+                    >
+                      <img
+                        src={getOrderItemImage(
+                          item,
+                          catalogMaps
+                        )}
+                        alt={getItemName(item)}
+                        onError={handleImageError}
+                        className="h-24 w-24 rounded-2xl object-cover"
+                      />
 
-                    const size =
-                      getItemSize(
-                        item
-                      );
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-2 font-black text-slate-950">
+                          {getItemName(item)}
+                        </p>
 
-                    const color =
-                      getItemColor(
-                        item
-                      );
-
-                    return (
-                      <div
-                        key={
-                          item.id ||
-                          index
-                        }
-                        className="flex gap-4 rounded-3xl border border-slate-100 bg-white p-3 transition hover:border-orange-100 hover:bg-orange-50/30"
-                      >
-                        <img
-                          src={getOrderItemImage(
-                            item,
-                            catalogMaps
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                          {size && (
+                            <span className="rounded-full bg-slate-100 px-3 py-1">
+                              Size: {size}
+                            </span>
                           )}
-                          alt={getItemName(
-                            item
-                          )}
-                          onError={
-                            handleImageError
-                          }
-                          className="h-24 w-24 rounded-2xl object-cover"
-                        />
 
-                        <div className="min-w-0 flex-1">
-                          <p className="line-clamp-2 font-black text-slate-950">
-                            {getItemName(
-                              item
+                          {color && (
+                            <span className="rounded-full bg-slate-100 px-3 py-1">
+                              Màu: {color}
+                            </span>
+                          )}
+
+                          <span className="rounded-full bg-slate-100 px-3 py-1">
+                            SL: {quantity}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex items-end justify-between gap-3">
+                          <p className="text-sm font-black text-orange-600">
+                            {formatCurrency(price)}
+                          </p>
+                          <p className="text-base font-black text-slate-950">
+                            {formatCurrency(
+                              price * quantity
                             )}
                           </p>
-
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                            {size && (
-                              <span className="rounded-full bg-slate-100 px-3 py-1">
-                                Size:{" "}
-                                {size}
-                              </span>
-                            )}
-
-                            {color && (
-                              <span className="rounded-full bg-slate-100 px-3 py-1">
-                                Màu:{" "}
-                                {color}
-                              </span>
-                            )}
-
-                            <span className="rounded-full bg-slate-100 px-3 py-1">
-                              SL:{" "}
-                              {quantity}
-                            </span>
-                          </div>
-
-                          <div className="mt-3 flex items-end justify-between gap-3">
-                            <p className="text-sm font-black text-orange-600">
-                              {formatCurrency(
-                                price
-                              )}
-                            </p>
-
-                            <p className="text-base font-black text-slate-950">
-                              {formatCurrency(
-                                price *
-                                  quantity
-                              )}
-                            </p>
-                          </div>
                         </div>
                       </div>
-                    );
-                  }
-                )
+                    </div>
+                  );
+                })
               )}
             </div>
           </section>
@@ -1598,14 +1183,12 @@ export default function OrderDetailPage() {
                   className="mt-0.5 text-orange-500"
                   size={18}
                 />
-
                 <div>
                   <p className="font-black text-slate-950">
                     {order.customer_name ||
                       order.name ||
                       "Khách hàng"}
                   </p>
-
                   <p className="text-slate-500">
                     Người nhận
                   </p>
@@ -1617,14 +1200,12 @@ export default function OrderDetailPage() {
                   className="mt-0.5 text-orange-500"
                   size={18}
                 />
-
                 <div>
                   <p className="font-black text-slate-950">
                     {order.customer_phone ||
                       order.phone ||
                       "Chưa cập nhật"}
                   </p>
-
                   <p className="text-slate-500">
                     Số điện thoại
                   </p>
@@ -1636,7 +1217,6 @@ export default function OrderDetailPage() {
                   className="mt-0.5 text-orange-500"
                   size={18}
                 />
-
                 <div>
                   <p className="font-black leading-6 text-slate-950">
                     {order.shipping_address ||
@@ -1644,7 +1224,6 @@ export default function OrderDetailPage() {
                       order.address ||
                       "Chưa cập nhật địa chỉ"}
                   </p>
-
                   <p className="text-slate-500">
                     Địa chỉ giao hàng
                   </p>
@@ -1656,7 +1235,6 @@ export default function OrderDetailPage() {
                   <p className="text-xs font-black uppercase tracking-wider text-slate-400">
                     Ghi chú
                   </p>
-
                   <p className="mt-1 font-semibold text-slate-700">
                     {order.note}
                   </p>
@@ -1675,7 +1253,6 @@ export default function OrderDetailPage() {
                 <span className="text-slate-500">
                   Phương thức
                 </span>
-
                 <span className="font-black text-slate-950">
                   {getPaymentLabel(
                     paymentMethod
@@ -1687,13 +1264,14 @@ export default function OrderDetailPage() {
                 <span className="text-slate-500">
                   Trạng thái
                 </span>
-
                 <span
-                  className={`font-black ${
-                    paymentPaid
-                      ? "text-emerald-600"
-                      : "text-orange-600"
-                  }`}
+                  className={
+                    `font-black ${
+                      paymentPaid
+                        ? "text-emerald-600"
+                        : "text-orange-600"
+                    }`
+                  }
                 >
                   {paymentPaid
                     ? "Đã thanh toán"
@@ -1709,11 +1287,8 @@ export default function OrderDetailPage() {
                 <span className="text-slate-500">
                   Tạm tính
                 </span>
-
                 <span className="font-bold text-slate-700">
-                  {formatCurrency(
-                    subtotal
-                  )}
+                  {formatCurrency(subtotal)}
                 </span>
               </div>
 
@@ -1721,11 +1296,8 @@ export default function OrderDetailPage() {
                 <span className="text-slate-500">
                   Phí vận chuyển
                 </span>
-
                 <span className="font-bold text-slate-700">
-                  {formatCurrency(
-                    shippingFee
-                  )}
+                  {formatCurrency(shippingFee)}
                 </span>
               </div>
 
@@ -1733,12 +1305,8 @@ export default function OrderDetailPage() {
                 <span className="text-slate-500">
                   Giảm giá
                 </span>
-
                 <span className="font-bold text-emerald-600">
-                  -
-                  {formatCurrency(
-                    discount
-                  )}
+                  -{formatCurrency(discount)}
                 </span>
               </div>
 
@@ -1747,11 +1315,8 @@ export default function OrderDetailPage() {
                   <span className="font-bold text-slate-300">
                     Tổng tiền
                   </span>
-
                   <span className="text-xl font-black text-orange-300">
-                    {formatCurrency(
-                      total
-                    )}
+                    {formatCurrency(total)}
                   </span>
                 </div>
               </div>
@@ -1760,9 +1325,7 @@ export default function OrderDetailPage() {
                 {canCancel && (
                   <button
                     type="button"
-                    onClick={
-                      handleCancel
-                    }
+                    onClick={handleCancel}
                     disabled={
                       actionLoading ===
                       "cancel"
@@ -1776,25 +1339,19 @@ export default function OrderDetailPage() {
                         className="animate-spin"
                       />
                     ) : (
-                      <Ban
-                        size={17}
-                      />
+                      <Ban size={17} />
                     )}
-
                     Hủy đơn hàng
                   </button>
                 )}
 
                 <button
                   type="button"
-                  onClick={
-                    handleReorder
-                  }
+                  onClick={handleReorder}
                   disabled={
                     actionLoading ===
                       "reorder" ||
-                    items.length ===
-                      0
+                    items.length === 0
                   }
                   className="btn-primary flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-70"
                 >
@@ -1809,7 +1366,6 @@ export default function OrderDetailPage() {
                       size={17}
                     />
                   )}
-
                   Mua lại đơn hàng
                 </button>
 
@@ -1830,12 +1386,10 @@ export default function OrderDetailPage() {
                 className="mt-0.5 text-orange-600"
                 size={20}
               />
-
               <div>
                 <p className="font-black text-orange-700">
                   Cần hỗ trợ đơn hàng?
                 </p>
-
                 <p className="mt-1 text-sm leading-6 text-orange-600/80">
                   Liên hệ hotline hoặc chat Dynova để được hỗ trợ đổi trả, giao hàng và thanh toán.
                 </p>

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\Payments\DynovaSandboxProvider;
+use App\Services\VietQrPaymentService;
 use App\Services\ShippingService;
 use App\Services\VoucherService;
 use Illuminate\Http\Request;
@@ -17,7 +17,7 @@ class OrderController extends Controller
     public function __construct(
         private VoucherService $vouchers,
         private ShippingService $shipping,
-        private DynovaSandboxProvider $paymentSandbox,
+        private VietQrPaymentService $vietQrPayment,
     ) {}
 
     public function store(Request $request)
@@ -29,7 +29,9 @@ class OrderController extends Controller
             'customer.phone' => ['required', 'string', 'max:30'],
             'shippingAddress.province' => ['required', 'string', 'max:120'],
             'shippingAddress.provinceCode' => ['required'],
-            'shippingAddress.district' => ['required', 'string', 'max:120'],
+            // Quận/Huyện không còn hiển thị ở checkout 2 cấp. districtCode vẫn được
+            // lưu ẩn để GHN hiện tại có thể tính phí/tạo vận đơn.
+            'shippingAddress.district' => ['nullable', 'string', 'max:120'],
             'shippingAddress.districtCode' => ['required', 'integer'],
             'shippingAddress.ward' => ['required', 'string', 'max:120'],
             'shippingAddress.wardCode' => ['required', 'string', 'max:40'],
@@ -388,7 +390,7 @@ class OrderController extends Controller
             'customer_phone' => $validated['customer']['phone'],
             'shipping_address' => $fullAddress,
             'province' => $address['province'],
-            'district' => $address['district'] ?? null,
+            'district' => null,
             'ward' => $address['ward'],
             'note' => $address['note'] ?? null,
             'subtotal' => (float) $charges['subtotal'],
@@ -442,10 +444,10 @@ class OrderController extends Controller
 
     private function buildFullShippingAddress(array $address): string
     {
+        // Địa chỉ hiển thị theo mô hình hành chính 2 cấp: số nhà + phường/xã + tỉnh/thành.
         $parts = [
             $address['address'] ?? null,
             $address['ward'] ?? null,
-            $address['district'] ?? null,
             $address['province'] ?? null,
         ];
 
@@ -470,7 +472,7 @@ class OrderController extends Controller
         }
 
         if ($paymentMethod === 'bank') {
-            $this->paymentSandbox->createPendingForOrder($orderId);
+            $this->vietQrPayment->createPendingForOrder($orderId);
         }
 
         $this->history($orderId, $userId, null, 'pending', 'customer', 'Khách hàng tạo đơn hàng.');
@@ -566,7 +568,7 @@ class OrderController extends Controller
             if (!$order) abort(404, 'Không tìm thấy đơn hàng.');
             if (!in_array($order->status, ['pending', 'confirmed'], true)) throw ValidationException::withMessages(['status' => 'Đơn hàng ở trạng thái hiện tại không thể hủy.']);
             if (($order->payment_method ?? '') === 'bank' && ($order->payment_status ?? '') === 'paid') {
-                throw ValidationException::withMessages(['status' => 'Đơn VietQR đã thanh toán không thể hủy trực tiếp.']);
+                throw ValidationException::withMessages(['status' => 'Đơn SePay Test đã thanh toán không thể hủy trực tiếp.']);
             }
 
             $this->restoreStockOnce($order);
@@ -671,7 +673,7 @@ class OrderController extends Controller
             'id' => $o->id, 'order_code' => $o->order_code, 'status' => $o->status,
             'payment_method' => $o->payment_method, 'payment_status' => $o->payment_status,
             'customer_name' => $o->customer_name, 'customer_email' => $o->customer_email, 'customer_phone' => $o->customer_phone,
-            'shipping_address' => $o->shipping_address, 'province' => $o->province, 'district' => $o->district, 'ward' => $o->ward, 'note' => $o->note,
+            'shipping_address' => $o->shipping_address, 'province' => $o->province, 'district' => null, 'ward' => $o->ward, 'note' => $o->note,
             'subtotal' => (float) $o->subtotal, 'discount' => (float) $o->discount_amount, 'discount_amount' => (float) $o->discount_amount,
             'shipping_fee' => (float) $o->shipping_fee, 'total' => (float) $o->grand_total, 'grand_total' => (float) $o->grand_total,
             'shipping_provider' => $o->shipping_provider ?? null, 'tracking_code' => $o->tracking_code ?? null, 'tracking' => $tracking,

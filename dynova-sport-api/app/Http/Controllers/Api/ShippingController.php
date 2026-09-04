@@ -24,7 +24,8 @@ class ShippingController extends Controller
         $validated = $request->validate([
             'province' => ['required', 'string', 'max:120'],
             'provinceCode' => ['required'],
-            'district' => ['required', 'string', 'max:120'],
+            // district là dữ liệu tương thích nội bộ GHN, không còn hiển thị trên UI.
+            'district' => ['nullable', 'string', 'max:120'],
             'districtCode' => ['required', 'integer'],
             'ward' => ['required', 'string', 'max:120'],
             'wardCode' => ['required', 'string', 'max:40'],
@@ -59,48 +60,132 @@ class ShippingController extends Controller
     public function provinces()
     {
         try {
-            return response()->json(['success' => true, 'data' => $this->shipping->provinces()]);
+            return response()->json([
+                'success' => true,
+                'data' => $this->shipping->provinces(),
+            ]);
         } catch (RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ], 503);
         }
     }
 
+    /**
+     * Tương thích API cũ: vẫn cho phép lấy district nếu màn admin hoặc
+     * endpoint khác còn dùng. Checkout mới không gọi endpoint này.
+     */
     public function districts(Request $request)
     {
-        $validated = $request->validate(['province_id' => ['required', 'integer']]);
+        $validated = $request->validate([
+            'province_id' => ['required', 'integer'],
+        ]);
+
         try {
             return response()->json([
                 'success' => true,
                 'data' => $this->shipping->districts((int) $validated['province_id']),
             ]);
         } catch (RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ], 503);
         }
     }
 
+    /**
+     * Checkout 2 cấp: nhận province_id, backend tự gom toàn bộ ward của
+     * các district thuộc province và đính kèm DistrictID ẩn cho GHN.
+     *
+     * GET /api/shipping/wards?province_id=...
+     * GET /api/shipping/wards?district_id=... vẫn được giữ cho tương thích cũ.
+     */
     public function wards(Request $request)
     {
-        $validated = $request->validate(['district_id' => ['required', 'integer']]);
+        $validated = $request->validate([
+            'province_id' => ['nullable', 'integer'],
+            'district_id' => ['nullable', 'integer'],
+        ]);
+
+        if (!empty($validated['province_id'])) {
+            try {
+                $provinceId = (int) $validated['province_id'];
+                $districts = $this->shipping->districts($provinceId);
+                $result = [];
+
+                foreach ($districts as $district) {
+                    $districtId = (int) ($district['DistrictID'] ?? $district['DistrictId'] ?? $district['id'] ?? 0);
+                    if ($districtId <= 0) {
+                        continue;
+                    }
+
+                    $districtName = (string) ($district['DistrictName'] ?? $district['District_Name'] ?? $district['name'] ?? '');
+                    $wards = $this->shipping->wards($districtId);
+
+                    foreach ($wards as $ward) {
+                        $result[] = array_merge(
+                            $ward,
+                            [
+                                'DistrictID' => $districtId,
+                                'DistrictName' => $districtName,
+                                'ProvinceID' => $provinceId,
+                            ]
+                        );
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $result,
+                ]);
+            } catch (RuntimeException $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'data' => [],
+                ], 503);
+            }
+        }
+
+        $request->validate([
+            'district_id' => ['required', 'integer'],
+        ]);
+
         try {
             return response()->json([
                 'success' => true,
                 'data' => $this->shipping->wards((int) $validated['district_id']),
             ]);
         } catch (RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ], 503);
         }
     }
 
     public function services(Request $request)
     {
-        $validated = $request->validate(['district_id' => ['required', 'integer']]);
+        $validated = $request->validate([
+            'district_id' => ['required', 'integer'],
+        ]);
+
         try {
             return response()->json([
                 'success' => true,
                 'data' => $this->shipping->availableServices((int) $validated['district_id']),
             ]);
         } catch (RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => []], 503);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ], 503);
         }
     }
 
@@ -108,7 +193,10 @@ class ShippingController extends Controller
     {
         $configuredSecret = (string) config('services.ghn.webhook_secret');
         if ($configuredSecret === '' || !hash_equals($configuredSecret, $secret)) {
-            return response()->json(['success' => false, 'message' => 'Webhook không hợp lệ.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'Webhook không hợp lệ.',
+            ], 403);
         }
 
         $result = $this->shipping->handleWebhook($request->all());
