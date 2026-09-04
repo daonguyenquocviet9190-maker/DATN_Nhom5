@@ -7,14 +7,12 @@ import {
   Banknote,
   CheckCircle2,
   Clock3,
-  CreditCard,
   Landmark,
   Loader2,
   MapPin,
   PackageCheck,
   Phone,
   ShieldCheck,
-  Tag,
   Truck,
   User,
 } from "lucide-react";
@@ -25,10 +23,8 @@ import { apiFetch } from "@/services/api";
 import {
   calculateShippingFee,
   createCheckoutOrder,
-  createPaymentSession,
 } from "@/services/checkout.service";
 import {
-  getShippingDistricts,
   getShippingProvinces,
   getShippingStatus,
   getShippingWards,
@@ -79,15 +75,9 @@ const paymentMethods = [
   },
   {
     id: "BANK",
-    name: "Thanh toán QR",
-    desc: "Quét mã QR bằng Camera điện thoại để hoàn tất thanh toán.",
+    name: "Chuyển khoản ngân hàng",
+    desc: "Quét mã QR hoặc chuyển khoản theo thông tin thanh toán.",
     icon: Landmark,
-  },
-  {
-    id: "VNPAY",
-    name: "VNPAY",
-    desc: "Thanh toán trực tuyến qua cổng VNPAY.",
-    icon: CreditCard,
   },
 ];
 
@@ -124,7 +114,6 @@ function CheckoutContent() {
   const [settings, setSettings] = useState(getDefaultPublicSettings());
 
   const [provinces, setProvinces] = useState([]);
-  const [districts, setDistricts] = useState([]);
   const [wards, setWards] = useState([]);
   const [addressLoading, setAddressLoading] = useState(true);
   const [shippingSetupError, setShippingSetupError] = useState("");
@@ -135,6 +124,10 @@ function CheckoutContent() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [couponMessage, setCouponMessage] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+
+  // Danh sách voucher khả dụng
+  const [availableVouchers, setAvailableVouchers] = useState([]);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
 
   const [shippingFee, setShippingFee] = useState(null);
   const [shippingMessage, setShippingMessage] = useState("");
@@ -226,6 +219,30 @@ function CheckoutContent() {
       .catch(() => setSettings(getDefaultPublicSettings()));
   }, []);
 
+  // Fetch danh sách mã giảm giá khả dụng
+  useEffect(() => {
+    let isMounted = true;
+    const fetchVouchers = async () => {
+      setVouchersLoading(true);
+      try {
+        const response = await apiFetch("/vouchers");
+        const list = response?.data || response || [];
+        if (isMounted && Array.isArray(list)) {
+          setAvailableVouchers(list);
+        }
+      } catch (err) {
+        console.error("Không tải được danh sách mã giảm giá:", err);
+      } finally {
+        if (isMounted) setVouchersLoading(false);
+      }
+    };
+
+    fetchVouchers();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (paymentMethod === "BANK" && !bankConfigured) {
       setPaymentMethod("COD");
@@ -272,6 +289,7 @@ function CheckoutContent() {
   const handleProvince = async (event) => {
     const id = event.target.value;
     const province = provinces.find((x) => String(x.id) === String(id));
+
     setForm((prev) => ({
       ...prev,
       provinceCode: id,
@@ -281,32 +299,20 @@ function CheckoutContent() {
       wardCode: "",
       ward: "",
     }));
-    setDistricts([]);
-    setWards([]);
-    setShippingFee(null);
-    if (!province) return;
-    try {
-      setAddressLoading(true);
-      setDistricts(await getShippingDistricts(province));
-    } catch (error) {
-      setErrors((prev) => ({ ...prev, province: error?.message || "Không tải được quận/huyện." }));
-    } finally {
-      setAddressLoading(false);
-    }
-  };
 
-  const handleDistrict = async (event) => {
-    const id = event.target.value;
-    const district = districts.find((x) => String(x.id) === String(id));
-    setForm((prev) => ({ ...prev, districtCode: id, district: district?.name || "", wardCode: "", ward: "" }));
     setWards([]);
     setShippingFee(null);
-    if (!district) return;
+
+    if (!province) return;
+
     try {
       setAddressLoading(true);
-      setWards(await getShippingWards(district));
+      setWards(await getShippingWards(province));
     } catch (error) {
-      setErrors((prev) => ({ ...prev, district: error?.message || "Không tải được phường/xã." }));
+      setErrors((prev) => ({
+        ...prev,
+        province: error?.message || "Không tải được phường/xã.",
+      }));
     } finally {
       setAddressLoading(false);
     }
@@ -315,8 +321,17 @@ function CheckoutContent() {
   const handleWard = (event) => {
     const id = event.target.value;
     const ward = wards.find((x) => String(x.id) === String(id));
-    setForm((prev) => ({ ...prev, wardCode: id, ward: ward?.name || "" }));
+
+    setForm((prev) => ({
+      ...prev,
+      wardCode: id,
+      ward: ward?.name || "",
+      // GHN vẫn cần districtCode ở phía server; người dùng không nhìn thấy quận/huyện.
+      districtCode: String(ward?.districtId || ward?.raw?.DistrictID || ""),
+    }));
+
     setShippingFee(null);
+    setErrors((prev) => ({ ...prev, ward: "", submit: "" }));
   };
 
   const validate = () => {
@@ -327,15 +342,15 @@ function CheckoutContent() {
     if (!isEmail(form.email)) next.email = "Email chưa đúng định dạng.";
     if (shippingSetupError) next.shipping = shippingSetupError;
     if (!form.provinceCode) next.province = "Vui lòng chọn tỉnh/thành.";
-    if (!form.districtCode) next.district = "Vui lòng chọn quận/huyện.";
+    if (!form.districtCode) next.ward = "Vui lòng chọn phường/xã từ danh sách.";
     if (!form.wardCode) next.ward = "Vui lòng chọn phường/xã.";
     if (!form.address.trim()) next.address = "Vui lòng nhập số nhà, tên đường.";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
-  const applyCoupon = async () => {
-    const code = couponInput.trim().toUpperCase();
+  const applyCouponCode = async (codeOverride) => {
+    const code = (codeOverride || couponInput).trim().toUpperCase();
     if (!code || subtotal <= 0) return;
     setCouponLoading(true);
     setCouponMessage("");
@@ -354,6 +369,12 @@ function CheckoutContent() {
     } finally {
       setCouponLoading(false);
     }
+  };
+
+  const handleSelectCoupon = (code) => {
+    const upperCode = code.toUpperCase();
+    setCouponInput(upperCode);
+    applyCouponCode(upperCode);
   };
 
   const calculateShipping = async () => {
@@ -479,14 +500,6 @@ function CheckoutContent() {
         clearCart();
       }
 
-      if (paymentMethod === "VNPAY") {
-        const payment = await createPaymentSession({ orderId: order.id, provider: "VNPAY" });
-        const paymentUrl = payment?.data?.paymentUrl || payment?.data?.payment_url || payment?.payment_url;
-        if (!paymentUrl) throw new Error("Không tạo được liên kết thanh toán VNPAY.");
-        window.location.assign(paymentUrl);
-        return;
-      }
-
       setItems([]);
       setSuccessOrder(order);
     } catch (error) {
@@ -565,7 +578,7 @@ function CheckoutContent() {
     <main className="min-h-screen bg-slate-50 py-10">
       <div className="container-page">
         <div className="mb-8">
-          <p className="text-xs font-black uppercase tracking-[.22em] text-orange-500">Checkout</p>
+          <p className="text-xs font-black uppercase tracking-[.22em] text-orange-500">Thanh toán</p>
           <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-950">Đặt hàng & thanh toán</h1>
           <p className="mt-2 text-sm text-slate-500">Kiểm tra thông tin nhận hàng và phương thức thanh toán trước khi đặt đơn.</p>
         </div>
@@ -599,14 +612,11 @@ function CheckoutContent() {
                     <span>{shippingSetupError}</span>
                   </div>
                 )}
-                <div className="mt-5 grid gap-4 md:grid-cols-3">
-                  <>
-                    <Select label="Tỉnh/Thành *" value={form.provinceCode} onChange={handleProvince} error={errors.province} disabled={addressLoading || !!shippingSetupError} options={provinces} />
-                    <Select label="Quận/Huyện *" value={form.districtCode} onChange={handleDistrict} error={errors.district} disabled={!districts.length || addressLoading || !!shippingSetupError} options={districts} />
-                    <Select label="Phường/Xã *" value={form.wardCode} onChange={handleWard} error={errors.ward} disabled={!wards.length || addressLoading || !!shippingSetupError} options={wards} />
-                  </>
-                  <div className="md:col-span-3"><Input label="Số nhà, tên đường *" name="address" value={form.address} onChange={updateField} error={errors.address} /></div>
-                  <div className="md:col-span-3">
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <Select label="Tỉnh/Thành phố *" value={form.provinceCode} onChange={handleProvince} error={errors.province} disabled={addressLoading || !!shippingSetupError} options={provinces} />
+                  <Select label="Phường/Xã *" value={form.wardCode} onChange={handleWard} error={errors.ward} disabled={!wards.length || addressLoading || !!shippingSetupError} options={wards} />
+                  <div className="md:col-span-2"><Input label="Số nhà, tên đường *" name="address" value={form.address} onChange={updateField} error={errors.address} /></div>
+                  <div className="md:col-span-2">
                     <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Ghi chú giao hàng</label>
                     <textarea name="note" value={form.note} onChange={updateField} rows={3} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-orange-400 focus:bg-white" placeholder="Ví dụ: gọi trước khi giao..." />
                   </div>
@@ -676,10 +686,83 @@ function CheckoutContent() {
                 ))}
               </div>
 
+              {/* KHỐI MÃ GIẢM GIÁ */}
               <div className="mt-5 border-t border-slate-200 pt-5">
-                <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Mã giảm giá</label>
-                <div className="flex gap-2"><input value={couponInput ?? ""} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-orange-400" placeholder="VD: DYNOVA10" /><button type="button" onClick={applyCoupon} disabled={couponLoading} className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white">{couponLoading ? "..." : "Áp dụng"}</button></div>
-                {couponMessage && <p className="mt-2 text-xs font-bold text-slate-500">{couponMessage}</p>}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
+                    Mã giảm giá
+                  </label>
+                  {appliedCoupon && (
+                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                      Đã dùng: {appliedCoupon}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput ?? ""}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-orange-400"
+                    placeholder="VD: DYNOVA10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyCouponCode()}
+                    disabled={couponLoading}
+                    className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white hover:bg-orange-500 disabled:opacity-60 transition"
+                  >
+                    {couponLoading ? "..." : "Áp dụng"}
+                  </button>
+                </div>
+
+                {couponMessage && (
+                  <p className={`mt-2 text-xs font-bold ${appliedCoupon ? "text-emerald-600" : "text-rose-500"}`}>
+                    {couponMessage}
+                  </p>
+                )}
+
+                {/* Danh sách chọn mã giảm giá */}
+                <div className="mt-3">
+                  <p className="text-[11px] font-bold text-slate-400 mb-2 flex items-center gap-1">
+                    <Tag size={12} /> Mã giảm giá dành cho bạn:
+                  </p>
+                  
+                  {vouchersLoading ? (
+                    <p className="text-xs text-slate-400 italic">Đang tải mã giảm giá...</p>
+                  ) : availableVouchers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                      {availableVouchers.map((v) => {
+                        const code = v.code || v.voucher_code;
+                        const isSelected = appliedCoupon === code;
+                        const discountText = v.discount_percent 
+                          ? `Giảm ${v.discount_percent}%` 
+                          : v.discount_amount 
+                            ? `Giảm ${formatCurrency(v.discount_amount)}` 
+                            : code;
+
+                        return (
+                          <button
+                            key={v.id || code}
+                            type="button"
+                            onClick={() => handleSelectCoupon(code)}
+                            className={`group flex items-center gap-1 rounded-xl border border-dashed px-2.5 py-1.5 text-xs font-extrabold transition ${
+                              isSelected
+                                ? "border-orange-500 bg-orange-50 text-orange-600 ring-2 ring-orange-400/20"
+                                : "border-slate-300 bg-slate-50 text-slate-700 hover:border-orange-400 hover:bg-orange-50/50"
+                            }`}
+                          >
+                            <Tag size={12} className={isSelected ? "text-orange-500" : "text-slate-400 group-hover:text-orange-500"} />
+                            <span>{code}</span>
+                            <span className="text-[10px] opacity-75">({discountText})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Hiện chưa có mã giảm giá khả dụng.</p>
+                  )}
+                </div>
               </div>
 
               <div className="mt-5 space-y-3 border-t border-slate-200 pt-5 text-sm">
@@ -691,8 +774,7 @@ function CheckoutContent() {
 
               {errors.submit && <div className="mt-4 flex gap-2 rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-600"><AlertCircle size={18} className="shrink-0" />{errors.submit}</div>}
 
-              <button type="submit" disabled={submitLoading || !!shippingSetupError} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black uppercase tracking-wider text-white hover:bg-orange-600 disabled:opacity-60">{submitLoading ? <Loader2 className="animate-spin" size={18} /> : <PackageCheck size={18} />} {paymentMethod === "VNPAY" ? "Đặt hàng & sang VNPAY" : paymentMethod === "BANK" ? "Đặt hàng & thanh toán" : "Xác nhận đặt hàng"}</button>
-              <p className="mt-3 text-center text-[11px] font-semibold leading-5 text-slate-400">Đơn hàng sẽ được xác nhận sau khi hệ thống kiểm tra tồn kho và thanh toán.</p>
+              <button type="submit" disabled={submitLoading || !!shippingSetupError} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-4 text-sm font-black uppercase tracking-wider text-white hover:bg-orange-600 disabled:opacity-60">{submitLoading ? <Loader2 className="animate-spin" size={18} /> : <PackageCheck size={18} />} {paymentMethod === "BANK" ? "Đặt hàng & thanh toán" : "Xác nhận đặt hàng"}</button>
             </aside>
           </form>
         )}

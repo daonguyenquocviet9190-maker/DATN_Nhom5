@@ -11,7 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { formatCurrency } from "@/data/shop";
-import { getVietQrPayment } from "@/services/payment.service";
+import { getSePayPayment } from "@/services/payment.service";
 
 function InfoRow({ label, value, copyable = false, highlight = false }) {
   const [copied, setCopied] = useState(false);
@@ -79,7 +79,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
       try {
         if (!silent) setLoading(true);
 
-        const data = await getVietQrPayment(orderId);
+        const data = await getSePayPayment(orderId);
         setPayment(data);
         setError("");
         notifyPaid(data);
@@ -270,7 +270,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           </span>
 
           <div>
-            <h3 className="text-lg font-black text-slate-950">Thanh toán VietQR</h3>
+            <h3 className="text-lg font-black text-slate-950">Chuyển khoản ngân hàng</h3>
             <p className="mt-0.5 text-xs font-semibold text-slate-500">
               Mã đơn {payment?.order_code}
             </p>

@@ -30,14 +30,23 @@ const TRENDING_KEYWORDS = [
   "Best seller",
 ];
 
+function removeVietnameseTones(str = "") {
+  return String(str)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .trim();
+}
+
 function extractProducts(response) {
   return (
     response?.data?.products ||
     response?.data?.data ||
     response?.data ||
     response?.products ||
-    response ||
-    []
+    (Array.isArray(response) ? response : [])
   );
 }
 
@@ -66,7 +75,7 @@ function getProductBrand(product) {
 }
 
 function getProductText(product) {
-  return [
+  const textRaw = [
     product?.name,
     product?.slug,
     product?.sku,
@@ -76,8 +85,9 @@ function getProductText(product) {
     getProductCategory(product),
   ]
     .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+    .join(" ");
+
+  return removeVietnameseTones(textRaw);
 }
 
 export default function HeaderSearchPopup({ open, onClose }) {
@@ -92,7 +102,7 @@ export default function HeaderSearchPopup({ open, onClose }) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedKeyword(keyword.trim().toLowerCase());
+      setDebouncedKeyword(removeVietnameseTones(keyword));
     }, 220);
 
     return () => clearTimeout(timer);
@@ -136,7 +146,7 @@ export default function HeaderSearchPopup({ open, onClose }) {
           setProducts(Array.isArray(list) ? list : []);
         }
       } catch (error) {
-        console.log("Header search products error:", error);
+        console.error("Header search products error:", error);
 
         if (!ignore) {
           setProducts([]);
@@ -181,8 +191,8 @@ export default function HeaderSearchPopup({ open, onClose }) {
     return products
       .filter((product) => getProductText(product).includes(debouncedKeyword))
       .sort((a, b) => {
-        const aName = String(a?.name || "").toLowerCase();
-        const bName = String(b?.name || "").toLowerCase();
+        const aName = removeVietnameseTones(a?.name || "");
+        const bName = removeVietnameseTones(b?.name || "");
 
         const aStarts = aName.startsWith(debouncedKeyword) ? 1 : 0;
         const bStarts = bName.startsWith(debouncedKeyword) ? 1 : 0;
@@ -228,7 +238,7 @@ export default function HeaderSearchPopup({ open, onClose }) {
   };
 
   const handleSearch = (event) => {
-    event.preventDefault();
+    if (event) event.preventDefault();
     goSearch(keyword);
   };
 
@@ -302,7 +312,10 @@ export default function HeaderSearchPopup({ open, onClose }) {
               )}
             </div>
 
-            <button className="inline-flex items-center justify-center gap-2 rounded-[20px] bg-orange-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-600">
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center gap-2 rounded-[20px] bg-orange-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
+            >
               Tìm kiếm
               <ArrowRight size={16} />
             </button>
@@ -429,14 +442,14 @@ export default function HeaderSearchPopup({ open, onClose }) {
                         {(product.compare_price ||
                           product.old_price ||
                           product.oldPrice) && (
-                            <p className="text-xs font-bold text-slate-400 line-through">
-                              {formatCurrency(
-                                product.compare_price ||
+                          <p className="text-xs font-bold text-slate-400 line-through">
+                            {formatCurrency(
+                              product.compare_price ||
                                 product.old_price ||
                                 product.oldPrice
-                              )}
-                            </p>
-                          )}
+                            )}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -455,9 +468,10 @@ export default function HeaderSearchPopup({ open, onClose }) {
                 ))}
               </div>
 
+              {/* Đã sửa onClick chính xác thành handleSearch */}
               <button
                 type="button"
-                onClick={hFandleSearch}
+                onClick={handleSearch}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-500 sm:hidden"
               >
                 Xem tất cả kết quả
