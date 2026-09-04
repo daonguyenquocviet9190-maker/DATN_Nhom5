@@ -13,6 +13,7 @@ import {
   PackageCheck,
   Phone,
   ShieldCheck,
+  Tag,
   Truck,
   User,
 } from "lucide-react";
