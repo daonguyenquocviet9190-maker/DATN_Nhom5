@@ -14,6 +14,8 @@ import {
   Trash2,
   Truck,
   X,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
@@ -26,6 +28,13 @@ import {
 const FREE_SHIPPING_TARGET = 799000;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
+// Danh sách voucher dự phòng nếu API backend chưa trả về dữ liệu
+const DEFAULT_VOUCHERS = [
+  { code: "DYNOVA10", discount_percent: 10, min_subtotal: 0, description: "Giảm 10% cho mọi đơn hàng" },
+  { code: "DYNOVA20", discount_percent: 20, min_subtotal: 500000, description: "Giảm 20% cho đơn từ 500k" },
+  { code: "SUMMER50K", discount_amount: 50000, min_subtotal: 300000, description: "Giảm 50.000đ cho đơn từ 300k" },
+];
+
 export default function CartPage() {
   const [items, setItems] = useState([]);
   const [coupon, setCoupon] = useState("");
@@ -36,6 +45,11 @@ export default function CartPage() {
   const [isErrorCoupon, setIsErrorCoupon] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
+  // States quản lý Modal Mã Giảm Giá
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [vouchers, setVouchers] = useState(DEFAULT_VOUCHERS);
+  const [isLoadingVouchers, setIsLoadingVouchers] = useState(false);
+
   const [notice, setNotice] = useState("");
 
   const syncCart = () => {
@@ -45,7 +59,24 @@ export default function CartPage() {
 
   useEffect(() => {
     syncCart();
+    fetchAvailableVouchers();
   }, []);
+
+  // Lấy danh sách Voucher từ Backend API
+  const fetchAvailableVouchers = async () => {
+    setIsLoadingVouchers(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/vouchers`);
+      const data = await res.json();
+      if (res.ok && data.data && Array.isArray(data.data)) {
+        setVouchers(data.data);
+      }
+    } catch (error) {
+      console.warn("Không thể tải danh sách voucher từ server, sử dụng danh sách mặc định.", error);
+    } finally {
+      setIsLoadingVouchers(false);
+    }
+  };
 
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -70,18 +101,35 @@ export default function CartPage() {
     setTimeout(() => setNotice(""), 2000);
   };
 
+  // Cập nhật số lượng và re-validate lại mã giảm giá dựa trên subtotal mới
   const updateQty = (key, qty) => {
-    updateCartItem(key, Math.max(1, qty));
-    syncCart();
+    const updatedQty = Math.max(1, qty);
+    updateCartItem(key, updatedQty);
+    
+    // Lấy lại danh sách giỏ hàng mới nhất để tính chính xác newSubtotal
+    const updatedCart = getCart();
+    setItems(updatedCart);
+    window.dispatchEvent(new Event("dynova:storage"));
+
+    const newSubtotal = updatedCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
     if (appliedCoupon) {
-      reValidateCoupon(appliedCoupon, subtotal);
+      reValidateCoupon(appliedCoupon, newSubtotal);
     }
   };
 
   const remove = (key) => {
     removeCartItem(key);
-    syncCart();
+    const updatedCart = getCart();
+    setItems(updatedCart);
+    window.dispatchEvent(new Event("dynova:storage"));
+    
+    const newSubtotal = updatedCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     showNotice("Đã xóa sản phẩm khỏi giỏ hàng.");
+
+    if (appliedCoupon) {
+      reValidateCoupon(appliedCoupon, newSubtotal);
+    }
   };
 
   const handleApplyCoupon = async (codeToApply) => {
@@ -114,6 +162,7 @@ export default function CartPage() {
 
       if (res.ok && data.success) {
         setAppliedCoupon(data.data.code);
+        setCoupon(data.data.code);
         setDiscountAmount(data.data.discount_amount);
         setCouponMessage(data.message || "Áp dụng mã giảm giá thành công!");
         setIsErrorCoupon(false);
@@ -151,7 +200,7 @@ export default function CartPage() {
           setDiscountAmount(data.data.discount_amount);
         } else {
           removeAppliedCoupon();
-          setCouponMessage(data.message || "Mã không còn đủ điều kiện.");
+          setCouponMessage(data.message || "Đơn hàng không còn đủ điều kiện dùng mã.");
           setIsErrorCoupon(true);
         }
       })
@@ -164,6 +213,12 @@ export default function CartPage() {
     setDiscountAmount(0);
     setCouponMessage("");
     setIsErrorCoupon(false);
+  };
+
+  const handleSelectVoucherFromModal = (code) => {
+    setCoupon(code);
+    setIsModalOpen(false);
+    handleApplyCoupon(code);
   };
 
   return (
@@ -189,7 +244,7 @@ export default function CartPage() {
             </h1>
 
             <p className="mt-2 text-sm leading-7 text-slate-500">
-              Kiểm tra sản phẩm, số lượng và mã giảm giá trước khi thanh toán.
+              Kiểm tra sản phẩm, số lượng và chọn mã giảm giá trước khi thanh toán.
             </p>
           </div>
 
@@ -213,8 +268,7 @@ export default function CartPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-7 text-slate-500">
-              Bạn có thể quay lại cửa hàng để thêm sản phẩm và trải nghiệm luồng
-              checkout đầy đủ.
+              Bạn có thể quay lại cửa hàng để thêm sản phẩm và trải nghiệm luồng checkout đầy đủ.
             </p>
 
             <Link
@@ -304,9 +358,7 @@ export default function CartPage() {
                     <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
                       <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
                         <button
-                          onClick={() =>
-                            updateQty(item.key, item.quantity - 1)
-                          }
+                          onClick={() => updateQty(item.key, item.quantity - 1)}
                           className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
                         >
                           <Minus size={13} />
@@ -317,9 +369,7 @@ export default function CartPage() {
                         </span>
 
                         <button
-                          onClick={() =>
-                            updateQty(item.key, item.quantity + 1)
-                          }
+                          onClick={() => updateQty(item.key, item.quantity + 1)}
                           className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
                         >
                           <Plus size={13} />
@@ -349,33 +399,43 @@ export default function CartPage() {
               </h2>
 
               <div className="mt-5 rounded-3xl bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-700">
-                  <Ticket size={16} className="text-orange-500" />
-                  Mã giảm giá
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-black text-slate-700">
+                    <Ticket size={16} className="text-orange-500" />
+                    Mã giảm giá
+                  </div>
+
+                  {/* Nút mở Pop-up Chọn Mã Giảm Giá */}
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center gap-1 text-xs font-black text-orange-600 transition hover:text-orange-700 hover:underline"
+                  >
+                    Chọn mã có sẵn
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
 
                 <div className="flex gap-2">
                   <input
                     value={coupon}
-                    onChange={(e) =>
-                      setCoupon(e.target.value.toUpperCase())
-                    }
-                    className="h-[46px] min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black uppercase text-slate-950 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10"
-                    placeholder="SPORT10"
-                    disabled={isApplying}
+                    onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+                    onClick={() => setIsModalOpen(true)}
+                    readOnly
+                    className="h-[46px] min-w-0 flex-1 cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black uppercase text-slate-950 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-500/10"
+                    placeholder="Bấm để chọn mã..."
                   />
 
                   <button
                     onClick={() => handleApplyCoupon(coupon)}
-                    disabled={isApplying}
+                    disabled={isApplying || !coupon}
                     className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white transition hover:bg-orange-500 disabled:opacity-50"
                   >
-                    {isApplying ? "Đang xử lý..." : "Áp dụng"}
+                    {isApplying ? <Loader2 size={16} className="animate-spin" /> : "Áp dụng"}
                   </button>
                 </div>
 
                 {appliedCoupon && (
-                  <div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-black text-emerald-700">
+                  <div className="mt-3 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
                     <span>Đang áp dụng: {appliedCoupon}</span>
                     <button
                       onClick={removeAppliedCoupon}
@@ -414,7 +474,7 @@ export default function CartPage() {
                 </div>
 
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-rose-600 font-bold">
+                  <div className="flex justify-between font-bold text-rose-600">
                     <span>Giảm giá ({appliedCoupon})</span>
                     <span>-{formatCurrency(discountAmount)}</span>
                   </div>
@@ -448,6 +508,90 @@ export default function CartPage() {
           </div>
         )}
       </div>
+
+      {/* MODAL CHỌN MÃ GIẢM GIÁ */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-[32px] border border-slate-100 bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-orange-500">
+                  <Ticket size={18} />
+                </div>
+                <h3 className="text-lg font-black text-slate-950">
+                  Chọn Dynova Voucher
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-[380px] space-y-3 overflow-y-auto pr-1">
+              {isLoadingVouchers ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <Loader2 size={28} className="animate-spin text-orange-500" />
+                  <p className="mt-2 text-xs font-bold">Đang tải danh sách voucher...</p>
+                </div>
+              ) : (
+                vouchers.map((v) => {
+                  const minSpend = v.min_subtotal || v.min_order_value || 0;
+                  const isEligible = subtotal >= minSpend;
+
+                  return (
+                    <div
+                      key={v.code}
+                      className={`flex items-center justify-between rounded-2xl border p-4 transition ${
+                        isEligible
+                          ? "border-orange-200 bg-orange-50/30 hover:border-orange-400 hover:bg-orange-50"
+                          : "border-slate-200 bg-slate-50/50 opacity-60"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-orange-500 px-2 py-0.5 text-xs font-black text-white">
+                            {v.code}
+                          </span>
+                          {!isEligible && (
+                            <span className="text-[10px] font-bold text-rose-500">
+                              Cần thêm {formatCurrency(minSpend - subtotal)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">
+                          {v.description || v.desc || `Giảm giá cho đơn hàng từ ${formatCurrency(minSpend)}`}
+                        </p>
+                      </div>
+
+                      <button
+                        disabled={!isEligible}
+                        onClick={() => handleSelectVoucherFromModal(v.code)}
+                        className={`rounded-xl px-4 py-2 text-xs font-black uppercase transition ${
+                          isEligible
+                            ? "bg-slate-950 text-white hover:bg-orange-500"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {appliedCoupon === v.code ? "Đang dùng" : "Áp dụng"}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="mt-5 w-full rounded-2xl bg-slate-100 py-3 text-xs font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-200"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

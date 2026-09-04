@@ -125,6 +125,10 @@ function CheckoutContent() {
   const [couponMessage, setCouponMessage] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
 
+  // Danh sách voucher khả dụng
+  const [availableVouchers, setAvailableVouchers] = useState([]);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
+
   const [shippingFee, setShippingFee] = useState(null);
   const [shippingMessage, setShippingMessage] = useState("");
   const [shippingInfo, setShippingInfo] = useState(null);
@@ -213,6 +217,30 @@ function CheckoutContent() {
     getPublicSettings()
       .then((r) => setSettings(r.settings || getDefaultPublicSettings()))
       .catch(() => setSettings(getDefaultPublicSettings()));
+  }, []);
+
+  // Fetch danh sách mã giảm giá khả dụng
+  useEffect(() => {
+    let isMounted = true;
+    const fetchVouchers = async () => {
+      setVouchersLoading(true);
+      try {
+        const response = await apiFetch("/vouchers");
+        const list = response?.data || response || [];
+        if (isMounted && Array.isArray(list)) {
+          setAvailableVouchers(list);
+        }
+      } catch (err) {
+        console.error("Không tải được danh sách mã giảm giá:", err);
+      } finally {
+        if (isMounted) setVouchersLoading(false);
+      }
+    };
+
+    fetchVouchers();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -321,8 +349,8 @@ function CheckoutContent() {
     return Object.keys(next).length === 0;
   };
 
-  const applyCoupon = async () => {
-    const code = couponInput.trim().toUpperCase();
+  const applyCouponCode = async (codeOverride) => {
+    const code = (codeOverride || couponInput).trim().toUpperCase();
     if (!code || subtotal <= 0) return;
     setCouponLoading(true);
     setCouponMessage("");
@@ -341,6 +369,12 @@ function CheckoutContent() {
     } finally {
       setCouponLoading(false);
     }
+  };
+
+  const handleSelectCoupon = (code) => {
+    const upperCode = code.toUpperCase();
+    setCouponInput(upperCode);
+    applyCouponCode(upperCode);
   };
 
   const calculateShipping = async () => {
@@ -652,10 +686,83 @@ function CheckoutContent() {
                 ))}
               </div>
 
+              {/* KHỐI MÃ GIẢM GIÁ */}
               <div className="mt-5 border-t border-slate-200 pt-5">
-                <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">Mã giảm giá</label>
-                <div className="flex gap-2"><input value={couponInput ?? ""} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-orange-400" placeholder="VD: DYNOVA10" /><button type="button" onClick={applyCoupon} disabled={couponLoading} className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white">{couponLoading ? "..." : "Áp dụng"}</button></div>
-                {couponMessage && <p className="mt-2 text-xs font-bold text-slate-500">{couponMessage}</p>}
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
+                    Mã giảm giá
+                  </label>
+                  {appliedCoupon && (
+                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                      Đã dùng: {appliedCoupon}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput ?? ""}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-orange-400"
+                    placeholder="VD: DYNOVA10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyCouponCode()}
+                    disabled={couponLoading}
+                    className="rounded-2xl bg-slate-950 px-4 text-xs font-black uppercase text-white hover:bg-orange-500 disabled:opacity-60 transition"
+                  >
+                    {couponLoading ? "..." : "Áp dụng"}
+                  </button>
+                </div>
+
+                {couponMessage && (
+                  <p className={`mt-2 text-xs font-bold ${appliedCoupon ? "text-emerald-600" : "text-rose-500"}`}>
+                    {couponMessage}
+                  </p>
+                )}
+
+                {/* Danh sách chọn mã giảm giá */}
+                <div className="mt-3">
+                  <p className="text-[11px] font-bold text-slate-400 mb-2 flex items-center gap-1">
+                    <Tag size={12} /> Mã giảm giá dành cho bạn:
+                  </p>
+                  
+                  {vouchersLoading ? (
+                    <p className="text-xs text-slate-400 italic">Đang tải mã giảm giá...</p>
+                  ) : availableVouchers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                      {availableVouchers.map((v) => {
+                        const code = v.code || v.voucher_code;
+                        const isSelected = appliedCoupon === code;
+                        const discountText = v.discount_percent 
+                          ? `Giảm ${v.discount_percent}%` 
+                          : v.discount_amount 
+                            ? `Giảm ${formatCurrency(v.discount_amount)}` 
+                            : code;
+
+                        return (
+                          <button
+                            key={v.id || code}
+                            type="button"
+                            onClick={() => handleSelectCoupon(code)}
+                            className={`group flex items-center gap-1 rounded-xl border border-dashed px-2.5 py-1.5 text-xs font-extrabold transition ${
+                              isSelected
+                                ? "border-orange-500 bg-orange-50 text-orange-600 ring-2 ring-orange-400/20"
+                                : "border-slate-300 bg-slate-50 text-slate-700 hover:border-orange-400 hover:bg-orange-50/50"
+                            }`}
+                          >
+                            <Tag size={12} className={isSelected ? "text-orange-500" : "text-slate-400 group-hover:text-orange-500"} />
+                            <span>{code}</span>
+                            <span className="text-[10px] opacity-75">({discountText})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Hiện chưa có mã giảm giá khả dụng.</p>
+                  )}
+                </div>
               </div>
 
               <div className="mt-5 space-y-3 border-t border-slate-200 pt-5 text-sm">
