@@ -456,7 +456,7 @@ export default function HomeClient({
 </section>
 
       <section className="container-page py-10">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[
             {
               icon: Truck,
@@ -500,7 +500,7 @@ export default function HomeClient({
               </div>
             );
           })}
-        </div>
+        </div> */}
       </section>
 
       {safeBrands.length > 0 && (
