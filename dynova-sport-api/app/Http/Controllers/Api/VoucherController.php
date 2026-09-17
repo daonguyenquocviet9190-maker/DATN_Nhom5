@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class VoucherController extends Controller
 {
@@ -33,33 +34,37 @@ class VoucherController extends Controller
             ?? '';
 
         $subtotal = (float) ($validated['cart_total'] ?? $validated['subtotal'] ?? 0);
-        $result = $this->vouchers->validateAndCalculate($code, $subtotal, $request->user()?->id);
-        $voucher = $result['voucher'];
 
-        if (!$voucher) {
+        try {
+            $result = $this->vouchers->validateAndCalculate($code, $subtotal, $request->user()?->id);
+            $voucher = $result['voucher'];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Áp dụng mã giảm giá thành công.',
+                'data' => [
+                    'id' => $voucher->id,
+                    'code' => $voucher->code,
+                    'title' => $voucher->title ?? $voucher->code,
+                    'discount_type' => $voucher->discount_type ?? 'fixed',
+                    'discount_value' => (float) ($voucher->discount_value ?? 0),
+                    'discount_amount' => $result['discount'],
+                    'min_order_value' => (float) ($voucher->min_order_value ?? 0),
+                    'max_discount' => $voucher->max_discount !== null ? (float) $voucher->max_discount : null,
+                    'per_user_limit' => property_exists($voucher, 'per_user_limit') ? $voucher->per_user_limit : null,
+                ],
+                'discount' => $result['discount'],
+                'discount_amount' => $result['discount'],
+            ]);
+        } catch (ValidationException $e) {
+            $errors = $e->errors();
+            $message = reset($errors)[0] ?? 'Mã giảm giá không hợp lệ.';
+
             return response()->json([
                 'success' => false,
-                'message' => 'Vui lòng nhập mã giảm giá.',
+                'message' => $message,
             ], 422);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Áp dụng mã giảm giá thành công.',
-            'data' => [
-                'id' => $voucher->id,
-                'code' => $voucher->code,
-                'title' => $voucher->title ?? $voucher->code,
-                'discount_type' => $voucher->discount_type ?? 'fixed',
-                'discount_value' => (float) ($voucher->discount_value ?? 0),
-                'discount_amount' => $result['discount'],
-                'min_order_value' => (float) ($voucher->min_order_value ?? 0),
-                'max_discount' => $voucher->max_discount !== null ? (float) $voucher->max_discount : null,
-                'per_user_limit' => property_exists($voucher, 'per_user_limit') ? $voucher->per_user_limit : null,
-            ],
-            'discount' => $result['discount'],
-            'discount_amount' => $result['discount'],
-        ]);
     }
 
     public function index(): JsonResponse
