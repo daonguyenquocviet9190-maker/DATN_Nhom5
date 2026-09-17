@@ -117,9 +117,9 @@ export default function HomeClient({
   // Danh sách 3 banner tĩnh lấy từ thư mục public/img/banner/
   const heroBanners = useMemo(() => {
     return [
-      { id: 1, image: "/img/banner/banner1.webp" },
-      { id: 2, image: "/img/banner/banner2.webp" },
-      { id: 3, image: "/img/banner/banner3.webp" },
+      { id: 1, image: "/img/banner/banner1.png" },
+      { id: 2, image: "/img/banner/banner2.png" },
+      { id: 3, image: "/img/banner/banner3.png" },
     ];
   }, []);
 
