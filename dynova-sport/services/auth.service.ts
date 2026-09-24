@@ -322,6 +322,15 @@ export function clearAuthSession() {
   window.dispatchEvent(new Event("dynova:cart"));
 }
 
+export function hasExplicitLogout() {
+  if (typeof window === "undefined") return false;
+
+  return (
+    localStorage.getItem(LOGOUT_MARKER_KEY) === "1" ||
+    sessionStorage.getItem(LOGOUT_MARKER_KEY) === "1"
+  );
+}
+
 export async function loginWithApi(payload: LoginPayload): Promise<LoginResult> {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: "POST",

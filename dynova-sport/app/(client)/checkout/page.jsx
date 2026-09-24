@@ -1,26 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Banknote,
   CheckCircle2,
-  CreditCard,
   Landmark,
   Loader2,
   PackageCheck,
   Phone,
   ShieldCheck,
-  Smartphone,
   Tag,
   Truck,
   User,
   X,
 } from "lucide-react";
 
-import { bankAccount, formatCurrency } from "@/data/shop";
+import { formatCurrency } from "@/data/shop";
 import {
   clearCart,
   getCart,
@@ -30,18 +28,17 @@ import {
 import {
   calculateShippingFee,
   createCheckoutOrder,
-  createPaymentSession,
 } from "@/services/checkout.service";
 
 import {
-  getMergedProvinces,
-  getProvinceWards,
+  getShippingProvinces,
+  getShippingDistricts,
+  getShippingWards,
 } from "@/services/address.service";
 
 import { getProfile } from "@/services/profile.service";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-
 const paymentMethods = [
   {
     id: "COD",
@@ -53,19 +50,7 @@ const paymentMethods = [
     id: "BANK",
     name: "Chuyển khoản ngân hàng",
     icon: Landmark,
-    desc: "Hiển thị thông tin tài khoản và nội dung chuyển khoản.",
-  },
-  {
-    id: "VNPAY",
-    name: "VNPAY",
-    icon: CreditCard,
-    desc: "Backend tạo link thanh toán và chuyển sang cổng VNPAY.",
-  },
-  {
-    id: "MOMO",
-    name: "MoMo",
-    icon: Smartphone,
-    desc: "Backend tạo payment session và redirect sang MoMo.",
+    desc: "Tạo đơn trước, sau đó chuyển sang trang QR để thanh toán.",
   },
 ];
 
@@ -76,17 +61,6 @@ function isEmail(value) {
 
 function isPhone(value) {
   return /^(0|\+84)[0-9]{8,10}$/.test(value.replace(/\s/g, ""));
-}
-
-function createVietQrUrl({ amount, orderCode, phone }) {
-  const bankCode = bankAccount.bankCode || "MB";
-  const accountNumber = String(bankAccount.accountNumber || "").replace(/\s/g, "");
-  const accountName = encodeURIComponent(bankAccount.accountName || "");
-  const addInfo = encodeURIComponent(`${orderCode || "DYNOVA"} ${phone || ""}`.trim());
-
-  return `https://img.vietqr.io/image/${bankCode}-${accountNumber}-compact2.png?amount=${Math.round(
-    amount
-  )}&addInfo=${addInfo}&accountName=${accountName}`;
 }
 
 function normalizeText(value = "") {
@@ -135,9 +109,11 @@ function CheckoutContent() {
   const [currentUser, setCurrentUser] = useState(null);
 
   const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
   const [wards, setWards] = useState([]);
   const [addressLoading, setAddressLoading] = useState(true);
   const [addressError, setAddressError] = useState("");
+  const addressRequestId = useRef(0);
 
   const [shippingFee, setShippingFee] = useState(null);
   const [shippingMessage, setShippingMessage] = useState("");
@@ -153,6 +129,8 @@ function CheckoutContent() {
     phone: "",
     provinceCode: "",
     province: "",
+    districtCode: "",
+    district: "",
     wardCode: "",
     ward: "",
     address: "",
@@ -167,11 +145,13 @@ function CheckoutContent() {
   }, [items]);
 
   useEffect(() => {
+    const syncCart = () => setItems(getCart());
     const cart = getCart();
     const user = getCurrentUser();
 
     setItems(cart);
     setCurrentUser(user || null);
+    window.addEventListener("dynova:cart", syncCart);
 
     if (user) {
       setForm((prev) => ({
@@ -189,6 +169,7 @@ function CheckoutContent() {
     if (savedCoupon) {
       setCouponInput(savedCoupon);
     }
+    return () => window.removeEventListener("dynova:cart", syncCart);
   }, [searchParams]);
 
   useEffect(() => {
@@ -271,7 +252,7 @@ function CheckoutContent() {
         setAddressLoading(true);
         setAddressError("");
 
-        const data = await getMergedProvinces();
+        const data = await getShippingProvinces();
         if (!mounted) return;
 
         setProvinces(data);
@@ -290,18 +271,12 @@ function CheckoutContent() {
           ? savedProfile.recent_orders[0] || null
           : null;
 
-        const savedProvinceName =
-          latestOrder?.province ||
-          profileUser?.province ||
-          "";
-        const savedWardName =
-          latestOrder?.ward ||
-          profileUser?.ward ||
-          "";
-        const savedAddress =
-          latestOrder?.address ||
-          profileUser?.address ||
-          "";
+        // Ưu tiên địa chỉ giao hàng của đơn gần nhất.
+        // Nếu chưa có đơn thì mới dùng profile.
+        const savedProvinceName = latestOrder?.province || profileUser?.province || "";
+        const savedDistrictName = latestOrder?.district || profileUser?.district || "";
+        const savedWardName = latestOrder?.ward || profileUser?.ward || "";
+        const savedAddress = latestOrder?.address || profileUser?.address || "";
 
         const savedProvinceNormalized = normalizeText(savedProvinceName);
         const selectedProvince =
@@ -313,53 +288,74 @@ function CheckoutContent() {
                 candidate.includes(savedProvinceNormalized) ||
                 savedProvinceNormalized.includes(candidate))
             );
-          }) ||
-          data.find((item) =>
-            normalizeText(item.name || "").includes("ho chi minh")
-          ) ||
-          data[0];
+          }) || null;
 
-        if (selectedProvince) {
-          const provinceWards = getProvinceWards(selectedProvince);
-          const savedWardNormalized = normalizeText(savedWardName);
-          const selectedWard =
-            provinceWards.find((item) => {
-              const candidate = normalizeText(item.name || "");
-              return (
-                savedWardNormalized &&
-                (candidate === savedWardNormalized ||
-                  candidate.includes(savedWardNormalized) ||
-                  savedWardNormalized.includes(candidate))
-              );
-            }) || provinceWards[0];
+        const provinceDistricts = selectedProvince
+          ? await getShippingDistricts(selectedProvince)
+          : [];
+        if (!mounted) return;
+        const savedDistrictNormalized = normalizeText(savedDistrictName);
+        const savedWardNormalized = normalizeText(savedWardName);
 
-          setWards(provinceWards);
+        const selectedDistrict =
+          provinceDistricts.find((item) => {
+            const candidate = normalizeText(item.name || "");
+            return (
+              savedDistrictNormalized &&
+              (candidate === savedDistrictNormalized ||
+                candidate.includes(savedDistrictNormalized) ||
+                savedDistrictNormalized.includes(candidate))
+            );
+          }) || null;
 
-          setForm((prev) => ({
-            ...prev,
-            fullName:
-              latestOrder?.customer_name ||
-              profileUser?.fullName ||
-              profileUser?.full_name ||
-              profileUser?.name ||
-              prev.fullName,
-            email:
-              latestOrder?.customer_email ||
-              profileUser?.email ||
-              prev.email,
-            phone:
-              latestOrder?.customer_phone ||
-              profileUser?.phone ||
-              prev.phone,
-            provinceCode: String(selectedProvince.code || ""),
-            province: selectedProvince.name || "",
-            wardCode: selectedWard?.code ? String(selectedWard.code) : "",
-            ward: selectedWard?.name || savedWardName || "",
-            address: savedAddress || prev.address,
-          }));
-        }
+        const districtWards = selectedDistrict
+          ? await getShippingWards(selectedDistrict)
+          : [];
+        if (!mounted) return;
+        const selectedWard =
+          districtWards.find((item) => {
+            const candidate = normalizeText(item.name || "");
+            return (
+              savedWardNormalized &&
+              (candidate === savedWardNormalized ||
+                candidate.includes(savedWardNormalized) ||
+                savedWardNormalized.includes(candidate))
+            );
+          }) || null;
+
+        setDistricts(provinceDistricts);
+        setWards(districtWards);
+
+        setForm((prev) => ({
+          ...prev,
+          fullName:
+            latestOrder?.customer_name ||
+            profileUser?.fullName ||
+            profileUser?.full_name ||
+            profileUser?.name ||
+            prev.fullName,
+          email:
+            latestOrder?.customer_email ||
+            latestOrder?.email ||
+            profileUser?.email ||
+            prev.email,
+          phone:
+            latestOrder?.customer_phone ||
+            latestOrder?.phone ||
+            profileUser?.phone ||
+            prev.phone,
+          provinceCode: selectedProvince ? String(selectedProvince.code) : "",
+          province: selectedProvince?.name || "",
+          districtCode: selectedDistrict?.code
+            ? String(selectedDistrict.code)
+            : "",
+          district: selectedDistrict?.name || "",
+          wardCode: selectedWard?.code ? String(selectedWard.code) : "",
+          ward: selectedWard?.name || "",
+          address: savedAddress || prev.address,
+        }));
       } catch {
-        setAddressError("Không tải được dữ liệu địa chỉ.");
+        setAddressError("Không tải được dữ liệu địa chỉ cũ.");
       } finally {
         if (mounted) setAddressLoading(false);
       }
@@ -378,40 +374,98 @@ function CheckoutContent() {
     }, 0);
   }, [items]);
 
-  const defaultShipping = subtotal >= 799000 || subtotal === 0 ? 0 : 30000;
-  const finalShipping = shippingFee !== null ? Number(shippingFee) : defaultShipping;
+  // Không cộng phí mặc định vào tổng tiền trước khi API vận chuyển trả kết quả.
+  // Nếu API backend phải fallback thì chính backend sẽ trả fee fallback.
+  const finalShipping =
+    subtotal === 0 || shippingFee === null
+      ? 0
+      : Number(shippingFee);
   const finalTotal = Math.max(0, subtotal - discountAmount) + finalShipping;
 
-  const bankQrUrl = useMemo(() => {
-    return createVietQrUrl({
-      amount: finalTotal,
-      orderCode: "DYNOVA",
-      phone: form.phone,
-    });
-  }, [finalTotal, form.phone]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-    setErrors((prev) => ({ ...prev, [name]: "" }));
+    setErrors((prev) => ({ ...prev, [name]: "", submit: "" }));
   };
 
-  const handleProvinceChange = (event) => {
+  const handleProvinceChange = async (event) => {
+    const requestId = ++addressRequestId.current;
     const provinceCode = event.target.value;
-    const province = provinces.find((item) => String(item.code) === String(provinceCode));
-    const nextWards = getProvinceWards(province);
+    const province = provinces.find(
+      (item) => String(item.code) === String(provinceCode)
+    );
 
-    setWards(nextWards);
+    setDistricts([]);
+    setWards([]);
     setForm((prev) => ({
       ...prev,
       provinceCode,
       province: province?.name || "",
-      wardCode: nextWards[0]?.code ? String(nextWards[0].code) : "",
-      ward: nextWards[0]?.name || "",
+      districtCode: "",
+      district: "",
+      wardCode: "",
+      ward: "",
     }));
 
     setShippingFee(null);
     setShippingMessage("");
+    setAddressError("");
+    setErrors((prev) => ({ ...prev, province: "", district: "", ward: "", submit: "" }));
+    if (!province) {
+      setAddressLoading(false);
+      return;
+    }
+
+    setAddressLoading(true);
+    try {
+      const nextDistricts = await getShippingDistricts(province);
+      if (addressRequestId.current === requestId) setDistricts(nextDistricts);
+    } catch (error) {
+      if (addressRequestId.current === requestId) {
+        setAddressError(error?.message || "Không tải được danh sách quận/huyện.");
+      }
+    } finally {
+      if (addressRequestId.current === requestId) setAddressLoading(false);
+    }
+  };
+
+  const handleDistrictChange = async (event) => {
+    const requestId = ++addressRequestId.current;
+    const districtCode = event.target.value;
+    const district = districts.find(
+      (item) => String(item.code) === String(districtCode)
+    );
+
+    setWards([]);
+    setForm((prev) => ({
+      ...prev,
+      districtCode,
+      district: district?.name || "",
+      wardCode: "",
+      ward: "",
+    }));
+
+    setShippingFee(null);
+    setShippingMessage("");
+    setAddressError("");
+    setErrors((prev) => ({ ...prev, district: "", ward: "", submit: "" }));
+    if (!district) {
+      setAddressLoading(false);
+      return;
+    }
+
+    setAddressLoading(true);
+    try {
+      const nextWards = await getShippingWards(district);
+      if (addressRequestId.current === requestId) setWards(nextWards);
+    } catch (error) {
+      if (addressRequestId.current === requestId) {
+        setAddressError(error?.message || "Không tải được danh sách phường/xã.");
+      }
+    } finally {
+      if (addressRequestId.current === requestId) setAddressLoading(false);
+    }
   };
 
   const handleWardChange = (event) => {
@@ -426,6 +480,7 @@ function CheckoutContent() {
 
     setShippingFee(null);
     setShippingMessage("");
+    setErrors((prev) => ({ ...prev, ward: "", submit: "" }));
   };
 
   const validate = () => {
@@ -439,63 +494,112 @@ function CheckoutContent() {
     }
     if (form.email && !isEmail(form.email)) nextErrors.email = "Email chưa đúng định dạng.";
     if (!form.province.trim()) nextErrors.province = "Vui lòng chọn tỉnh/thành phố.";
+    if (!form.district.trim()) nextErrors.district = "Vui lòng chọn quận/huyện.";
     if (!form.ward.trim()) nextErrors.ward = "Vui lòng chọn phường/xã.";
     if (!form.address.trim()) nextErrors.address = "Vui lòng nhập địa chỉ nhận hàng.";
 
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    const valid = Object.keys(nextErrors).length === 0;
+    setErrors(
+      valid
+        ? {}
+        : {
+            ...nextErrors,
+            submit: "Vui lòng kiểm tra các thông tin nhận hàng được đánh dấu.",
+          }
+    );
+    return valid;
   };
 
-  const handleCalculateShipping = async () => {
-  // 1. Nếu đơn hàng >= 500k -> Tự động tính là 0đ (Freeship)
-  if (subtotal >= 500000) {
-    setShippingFee(0);
-    setShippingMessage("Đơn hàng trên 500.000 đ - Bạn được MIỄN PHÍ vận chuyển!");
-    return;
-  }
-
-  // 2. Nếu đơn < 500k mới bắt buộc kiểm tra địa chỉ
-  if (!form.province || !form.ward || !form.address?.trim()) {
-    setShippingMessage("Vui lòng chọn Tỉnh/Thành, Phường/Xã và nhập Địa chỉ cụ thể.");
-    return;
-  }
-
-  setShippingLoading(true);
-  setShippingMessage("");
-
-  try {
-    const response = await fetch("http://localhost:8000/api/shipping/fee", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        province: form.province,
-        district: form.ward,
-        ward: form.ward,
-        address: form.address,
-        weight: totalWeight || 600,
-        value: subtotal,
-      }),
-    });
-
-    const resData = await response.json();
-
-    if (resData.success) {
-      const feeVal = Number(resData.fee ?? resData.data?.fee ?? 0);
-      setShippingFee(feeVal);
-      setShippingMessage(resData.message || "Đã tính phí giao hàng thành công!");
-    } else {
-      setShippingMessage(resData.message || "Không thể tính phí vận chuyển.");
+  const resolveShippingFee = async ({ showValidationMessage = true } = {}) => {
+    if (subtotal <= 0) {
+      setShippingFee(0);
+      setShippingMessage("");
+      return 0;
     }
-  } catch (error) {
-    setShippingFee(30000); // Phí dự phòng
-    setShippingMessage("Áp dụng phí giao hàng tiêu chuẩn (30.000 đ).");
-  } finally {
-    setShippingLoading(false);
-  }
-};
+
+    if (!form.province || !form.district || !form.ward || !form.address?.trim()) {
+      if (showValidationMessage) {
+        setShippingMessage(
+          "Vui lòng chọn Tỉnh/Thành, Quận/Huyện, Phường/Xã và nhập Địa chỉ cụ thể."
+        );
+      }
+      return null;
+    }
+
+    setShippingLoading(true);
+    setShippingMessage("");
+
+    try {
+      const response = await calculateShippingFee({
+        province: form.province,
+        provinceCode: form.provinceCode,
+        district: form.district,
+        districtCode: form.districtCode,
+        ward: form.ward,
+        wardCode: form.wardCode,
+        address: form.address.trim(),
+        weight: totalWeight || 500,
+        value: subtotal,
+        items,
+      });
+
+      const rawFee = response?.data?.fee ?? response?.fee;
+      const feeVal = Number(rawFee);
+
+      if (!Number.isFinite(feeVal) || feeVal < 0) {
+        throw new Error("Dịch vụ vận chuyển không trả về phí hợp lệ.");
+      }
+
+      setShippingFee(feeVal);
+      setShippingMessage(
+        response?.message || "Đã tính phí giao hàng thành công!"
+      );
+      return feeVal;
+    } catch (error) {
+      setShippingFee(null);
+      setShippingMessage(
+        error?.message ||
+          "Không thể lấy phí vận chuyển. Vui lòng kiểm tra địa chỉ và thử lại."
+      );
+      return null;
+    } finally {
+      setShippingLoading(false);
+    }
+  };
+
+  // Khi đã nạp được địa chỉ cũ đầy đủ, tự tính lại phí để tổng tiền hiển thị
+  // luôn khớp với địa chỉ giao hàng hiện tại. Người dùng vẫn có thể bấm
+  // nút "Tính phí" để kiểm tra lại thủ công.
+  useEffect(() => {
+    if (
+      addressLoading ||
+      subtotal <= 0 ||
+      !form.province ||
+      !form.district ||
+      !form.ward ||
+      !form.address?.trim()
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      resolveShippingFee({ showValidationMessage: false });
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    addressLoading,
+    form.province,
+    form.district,
+    form.ward,
+    form.address,
+    subtotal,
+    totalWeight,
+  ]);
+
+  const handleCalculateShipping = async () => {
+    await resolveShippingFee();
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -512,58 +616,76 @@ function CheckoutContent() {
 
     setSubmitLoading(true);
 
-    const payload = {
-      customer: {
-        fullName: form.fullName,
-        email: form.email,
-        phone: form.phone,
-      },
-      shippingAddress: {
-        province: form.province,
-        provinceCode: form.provinceCode,
-        district: form.ward,
-        ward: form.ward,
-        wardCode: form.wardCode,
-        address: form.address,
-        note: form.note,
-      },
-      items,
-      coupon: appliedCoupon,
-      paymentMethod,
-      subtotal,
-      discount: discountAmount,
-      shippingFee: finalShipping,
-      total: finalTotal,
-      weight: totalWeight,
-    };
-
     try {
+      const checkedShippingFee = await resolveShippingFee({
+        showValidationMessage: false,
+      });
+
+      if (checkedShippingFee === null) {
+        setErrors({ submit: "Vui lòng kiểm tra lại địa chỉ nhận hàng." });
+        return;
+      }
+
+      const checkedTotal =
+        Math.max(0, subtotal - discountAmount) + Number(checkedShippingFee || 0);
+
+      const payload = {
+        customer: {
+          fullName: form.fullName,
+          email: form.email,
+          phone: form.phone,
+        },
+        shippingAddress: {
+          province: form.province,
+          provinceCode: form.provinceCode,
+          district: form.district,
+          districtCode: form.districtCode,
+          ward: form.ward,
+          wardCode: form.wardCode,
+          address: form.address.trim(),
+          note: form.note,
+        },
+        items: items.map((item) => ({
+          product_id:
+            item.product_id ??
+            item.productId ??
+            item.product?.id ??
+            (item.source === "server" ? null : item.id),
+          product_variant_id:
+            item.product_variant_id ??
+            item.variant_id ??
+            item.variantId ??
+            item.variant?.id ??
+            null,
+          quantity: Number(item.quantity || 1),
+          name: item.name || item.product_name || item.product?.name || "Sản phẩm",
+          image: item.image || item.image_url || item.product_image || item.product?.image || "",
+          size: item.size || item.size_name || null,
+          color: item.color || item.color_name || null,
+        })),
+        coupon: appliedCoupon,
+        paymentMethod,
+        subtotal,
+        discount: discountAmount,
+        shippingFee: checkedShippingFee,
+        total: checkedTotal,
+        weight: totalWeight,
+      };
+
       const orderResponse = await createCheckoutOrder(payload);
       const order = orderResponse?.data || orderResponse?.order || orderResponse;
-
-      if (["VNPAY", "MOMO"].includes(paymentMethod)) {
-        const paymentResponse = await createPaymentSession({
-          orderId: order.id,
-          provider: paymentMethod,
-          amount: finalTotal,
-          returnUrl: window.location.origin + "/orders",
-        });
-
-        const paymentUrl =
-          paymentResponse?.data?.payment_url ||
-          paymentResponse?.payment_url ||
-          paymentResponse?.payUrl;
-
-        if (paymentUrl) {
-          window.location.href = paymentUrl;
-          return;
-        }
-      }
+      if (!order?.id) throw new Error("Máy chủ chưa trả về mã đơn hàng.");
 
       clearCart();
       removeCouponState();
       window.dispatchEvent(new Event("dynova:storage"));
       setItems([]);
+
+      if (paymentMethod === "BANK") {
+        router.push(`/payment/bank/${order.id}`);
+        return;
+      }
+
       setSuccessOrder(order);
     } catch (error) {
       setErrors({
@@ -657,46 +779,138 @@ function CheckoutContent() {
           <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_420px]">
             <section className="space-y-6">
               <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-    <div>
-      <h2 className="text-xl font-black text-slate-950">Phí vận chuyển</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Tính theo địa chỉ, trọng lượng và giá trị đơn hàng.
-      </p>
-    </div>
+                <div className="mb-5">
+                  <h2 className="text-xl font-black text-slate-950">
+                    Thông tin nhận hàng
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Kiểm tra lại thông tin người nhận và địa chỉ giao hàng.
+                  </p>
+                </div>
 
-    <button
-      type="button"
-      onClick={handleCalculateShipping}
-      disabled={shippingLoading}
-      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:opacity-70"
-    >
-      {shippingLoading ? "Đang tính..." : "Tính phí"}
-    </button>
-  </div>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <Field label="Họ và tên" icon={User} error={errors.fullName}>
+                    <input
+                      type="text"
+                      name="fullName"
+                      value={form.fullName}
+                      onChange={handleChange}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
+                      placeholder="Nhập họ và tên"
+                    />
+                  </Field>
 
-  <div className="rounded-3xl bg-slate-50 p-5">
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <p className="text-sm font-black text-slate-950">Giao hàng tiết kiệm / Chuẩn</p>
-        <p className="mt-1 text-xs font-bold text-slate-400">
-          Trọng lượng tạm tính: {totalWeight || 500}g
-        </p>
-      </div>
+                  <Field label="Số điện thoại" icon={Phone} error={errors.phone}>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={form.phone}
+                      onChange={handleChange}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
+                      placeholder="Nhập số điện thoại"
+                    />
+                  </Field>
 
-      <p className="text-xl font-black text-orange-600">
-        {shippingFee === 0 ? "MIỄN PHÍ" : `${shippingFee?.toLocaleString("vi-VN")} đ`}
-      </p>
-    </div>
+                  <Field label="Email" error={errors.email}>
+                    <input
+                      type="email"
+                      name="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
+                      placeholder="Email (không bắt buộc)"
+                    />
+                  </Field>
 
-    {shippingMessage && (
-      <p className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-600">
-        <span className="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-        {shippingMessage}
-      </p>
-    )}
-  </div>
-</div>
+                  <Field label="Tỉnh / Thành phố" error={errors.province}>
+                    <select
+                      name="provinceCode"
+                      value={form.provinceCode}
+                      onChange={handleProvinceChange}
+                      disabled={addressLoading}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="">
+                        {addressLoading ? "Đang tải địa chỉ..." : "Chọn Tỉnh / Thành phố"}
+                      </option>
+                      {provinces.map((province) => (
+                        <option key={province.code} value={String(province.code)}>
+                          {province.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Quận / Huyện" error={errors.district}>
+                    <select
+                      name="districtCode"
+                      value={form.districtCode}
+                      onChange={handleDistrictChange}
+                      disabled={addressLoading || !form.provinceCode}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="">Chọn Quận / Huyện</option>
+                      {districts.map((district) => (
+                        <option key={district.code} value={String(district.code)}>
+                          {district.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Phường / Xã" error={errors.ward}>
+                    <select
+                      name="wardCode"
+                      value={form.wardCode}
+                      onChange={handleWardChange}
+                      disabled={addressLoading || !form.districtCode}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="">Chọn Phường / Xã</option>
+                      {wards.map((ward) => (
+                        <option key={ward.code} value={String(ward.code)}>
+                          {ward.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Địa chỉ cụ thể" error={errors.address}>
+                    <input
+                      type="text"
+                      name="address"
+                      value={form.address}
+                      onChange={(event) => {
+                        handleChange(event);
+                        setShippingFee(null);
+                        setShippingMessage("");
+                      }}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
+                      placeholder="Số nhà, tên đường..."
+                    />
+                  </Field>
+                </div>
+
+                <div className="mt-5">
+                  <Field label="Ghi chú đơn hàng">
+                    <textarea
+                      name="note"
+                      value={form.note}
+                      onChange={handleChange}
+                      rows={3}
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
+                      placeholder="Ghi chú cho người giao hàng (không bắt buộc)"
+                    />
+                  </Field>
+                </div>
+
+                {addressError && (
+                  <p className="mt-4 flex items-center gap-2 text-xs font-bold text-rose-500">
+                    <AlertCircle size={14} className="shrink-0" />
+                    {addressError}
+                  </p>
+                )}
+              </div>
 
               <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -727,12 +941,16 @@ function CheckoutContent() {
                     <div>
                       <p className="text-sm font-black text-slate-950">Giao hàng tiết kiệm</p>
                       <p className="mt-1 text-xs font-bold text-slate-400">
-                        Trọng lượng tạm tính: {totalWeight}g
+                        Trọng lượng tạm tính: {totalWeight || 500}g
                       </p>
                     </div>
 
                     <p className="text-xl font-black text-orange-600">
-                      {formatCurrency(finalShipping)}
+                      {shippingFee === null
+                        ? "CHƯA TÍNH"
+                        : finalShipping === 0
+                          ? "MIỄN PHÍ"
+                          : formatCurrency(finalShipping)}
                     </p>
                   </div>
 
@@ -777,47 +995,6 @@ function CheckoutContent() {
                     );
                   })}
                 </div>
-
-                {paymentMethod === "BANK" && (
-                  <div className="mt-5 grid gap-5 rounded-[32px] bg-slate-950 p-5 text-white lg:grid-cols-[320px_1fr]">
-                    <div className="rounded-[28px] bg-white p-4 shadow-2xl">
-                      <img
-                        src={bankQrUrl}
-                        alt="QR chuyển khoản Dynova"
-                        className="aspect-square w-full rounded-2xl object-contain"
-                      />
-                    </div>
-
-                    <div className="flex flex-col justify-center">
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-300">
-                        QR chuyển khoản
-                      </p>
-                      <h3 className="mt-2 text-2xl font-black">Quét mã để thanh toán</h3>
-
-                      <div className="mt-5 grid gap-3 text-sm text-slate-300">
-                        <p>
-                          Ngân hàng: <b className="text-white">{bankAccount.bank}</b>
-                        </p>
-                        <p>
-                          Số tài khoản: <b className="text-white">{bankAccount.accountNumber}</b>
-                        </p>
-                        <p>
-                          Chủ tài khoản: <b className="text-white">{bankAccount.accountName}</b>
-                        </p>
-                        <p>
-                          Số tiền:{" "}
-                          <b className="text-orange-300">{formatCurrency(finalTotal)}</b>
-                        </p>
-                        <p>
-                          Nội dung:{" "}
-                          <b className="text-orange-300">
-                            DYNOVA {form.phone || "SO-DIEN-THOAI"}
-                          </b>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </section>
 
@@ -920,7 +1097,11 @@ function CheckoutContent() {
                 <div className="flex justify-between">
                   <span>Vận chuyển</span>
                   <span className="text-slate-950">
-                    {finalShipping === 0 ? "Miễn phí" : formatCurrency(finalShipping)}
+                    {shippingFee === null
+                      ? "Chưa tính"
+                      : finalShipping === 0
+                        ? "Miễn phí"
+                        : formatCurrency(finalShipping)}
                   </span>
                 </div>
 

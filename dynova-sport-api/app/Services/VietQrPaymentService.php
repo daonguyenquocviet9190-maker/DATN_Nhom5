@@ -335,9 +335,17 @@ class VietQrPaymentService
 
     private function nextPaidOrderStatus(string $previousStatus): string
     {
-        return in_array(strtolower($previousStatus), ['pending', 'waiting_bank_transfer', 'bank_pending', 'waiting_payment', 'payment_pending'], true)
-            ? 'confirmed'
-            : $previousStatus;
+        $normalized = strtolower(trim((string) $previousStatus));
+
+        if (in_array($normalized, ['pending', 'waiting_bank_transfer', 'bank_pending', 'waiting_payment', 'payment_pending'], true)) {
+            return 'pending';
+        }
+
+        if ($normalized === 'cancelled') {
+            return 'cancelled';
+        }
+
+        return $previousStatus !== '' ? $previousStatus : 'pending';
     }
 
     private function writePaymentHistory(int $orderId, string $fromStatus, string $toStatus, string $note): void

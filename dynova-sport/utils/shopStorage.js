@@ -19,7 +19,34 @@ const KEYS = {
   settings: "dynova_settings",
 };
 
+const AUTH_TOKEN_KEYS = [
+  "dynova_auth_token",
+  "auth_token",
+  "access_token",
+  "token",
+];
+
+const AUTH_USER_KEYS = [
+  KEYS.currentUser,
+  "dynova_auth_user",
+  "dynova_user",
+  "auth_user",
+  "currentUser",
+  "current_user",
+  "user",
+];
+
+const AUTH_MISC_KEYS = [
+  "isLoggedIn",
+  "is_logged_in",
+  "userDisplayName",
+  "dynova_remember_login",
+];
+
+const LOGOUT_MARKER_KEY = "dynova_explicit_logout";
+
 const pendingCartRequests = new Map();
+const cartUpdateVersions = new Map();
 
 let hydratedToken = "";
 let hydrationPromise = null;
@@ -232,15 +259,78 @@ function getCartImage(product) {
   );
 }
 
-function getSelectedVariant(product) {
-  return (
+function getProductVariants(product) {
+  const variants =
+    product?.variants ??
+    product?.product_variants ??
+    product?.productVariants ??
+    product?.product?.variants ??
+    [];
+
+  return Array.isArray(variants)
+    ? variants
+    : [];
+}
+
+function getSelectedVariant(
+  product,
+  options = {}
+) {
+  const explicitVariant =
     product?.selected_variant ||
     product?.selectedVariant ||
     product?.variant ||
     product?.product_variant ||
     product?.productVariant ||
-    null
-  );
+    null;
+
+  const variantId =
+    options?.product_variant_id ??
+    options?.variant_id ??
+    options?.variantId ??
+    product?.product_variant_id ??
+    product?.variant_id ??
+    product?.variantId ??
+    product?.selected_variant_id ??
+    product?.selectedVariantId ??
+    explicitVariant?.id ??
+    null;
+
+  if (
+    explicitVariant &&
+    (
+      variantId === null ||
+      variantId === undefined ||
+      variantId === "" ||
+      String(explicitVariant?.id ?? "") ===
+        String(variantId)
+    )
+  ) {
+    return explicitVariant;
+  }
+
+  if (
+    variantId !== null &&
+    variantId !== undefined &&
+    variantId !== ""
+  ) {
+    const matchedVariant =
+      getProductVariants(product).find(
+        (variant) =>
+          String(
+            variant?.id ??
+              variant?.variant_id ??
+              variant?.variantId ??
+              ""
+          ) === String(variantId)
+      );
+
+    if (matchedVariant) {
+      return matchedVariant;
+    }
+  }
+
+  return explicitVariant;
 }
 
 function getFinalPrice(product) {
@@ -362,22 +452,50 @@ function findMatchingCartItem(
   );
 }
 
+function getStorageByPriority() {
+  if (!isBrowser()) return [null, null];
+
+  return [window.localStorage, window.sessionStorage];
+}
+
+function clearAuthStorage() {
+  if (!isBrowser()) return;
+
+  const storages = getStorageByPriority();
+
+  storages.forEach((storage) => {
+    if (!storage) return;
+
+    [...AUTH_TOKEN_KEYS, ...AUTH_USER_KEYS, ...AUTH_MISC_KEYS].forEach((key) => {
+      storage.removeItem(key);
+    });
+  });
+}
+
+function isExplicitLogout() {
+  if (!isBrowser()) return false;
+
+  return (
+    window.localStorage.getItem(LOGOUT_MARKER_KEY) === "1" ||
+    window.sessionStorage.getItem(LOGOUT_MARKER_KEY) === "1"
+  );
+}
+
 export function getAuthToken() {
   if (!isBrowser()) return "";
 
-  return (
-    localStorage.getItem(
-      "dynova_auth_token"
-    ) ||
-    localStorage.getItem(
-      "auth_token"
-    ) ||
-    localStorage.getItem(
-      "access_token"
-    ) ||
-    localStorage.getItem("token") ||
-    ""
-  );
+  if (isExplicitLogout()) return "";
+
+  for (const storage of getStorageByPriority()) {
+    if (!storage) continue;
+
+    for (const key of AUTH_TOKEN_KEYS) {
+      const value = storage.getItem(key);
+      if (value) return value;
+    }
+  }
+
+  return "";
 }
 
 export function hasAuthSession() {
@@ -520,7 +638,10 @@ export function normalizeCartItem(
   options = {}
 ) {
   const selectedVariant =
-    getSelectedVariant(product);
+    getSelectedVariant(
+      product,
+      options
+    );
 
   const productId =
     getProductId(product);
@@ -556,11 +677,37 @@ export function normalizeCartItem(
   const price =
     getFinalPrice(product);
 
-  const stockRaw =
-    product?.stock ??
-    product?.max_quantity ??
-    product?.quantity_available ??
-    selectedVariant?.stock;
+  /*
+   * Tồn kho phải đi theo đúng biến thể đang chọn.
+   * Trước đây product.stock được ưu tiên trước selectedVariant.stock nên
+   * biến thể còn 9 sản phẩm vẫn có thể lấy nhầm tồn kho tổng của sản phẩm.
+   */
+  const hasVariant =
+    variantId !== null &&
+    variantId !== undefined &&
+    variantId !== "";
+
+  const stockRaw = hasVariant
+    ? (
+        selectedVariant?.stock ??
+        product?.variant_stock ??
+        product?.variantStock ??
+        (
+          product?.source === "server" ||
+          product?.cart_item_id ||
+          product?.cartItemId
+            ? (
+                product?.stock ??
+                product?.max_quantity
+              )
+            : undefined
+        )
+      )
+    : (
+        product?.stock ??
+        product?.max_quantity ??
+        product?.quantity_available
+      );
 
   const stockKnown =
     stockRaw !== undefined &&
@@ -933,16 +1080,14 @@ export function getCart() {
   const serverCart =
     getServerCartCache();
 
-  const guestCart =
-    getGuestCart();
-
   startAutomaticHydration();
 
-  if (serverCart.length > 0) {
-    return serverCart;
-  }
-
-  return guestCart;
+  /*
+   * Khi đã đăng nhập, giỏ server là nguồn sự thật kể cả khi nó rỗng.
+   * Không fallback về dynova_cart vì giỏ guest cũ có thể làm sản phẩm đã xóa
+   * "sống lại" khi đổi trang và làm badge hiển thị số lượng cũ.
+   */
+  return serverCart;
 }
 
 export function saveCart(items) {
@@ -998,6 +1143,15 @@ function registerPendingRequest(
 async function resolveServerCartItem(
   target
 ) {
+  /*
+   * target được lấy trước khi optimistic update/delete nên nếu đã có id server
+   * thì dùng luôn. Không fetch lại giỏ giữa lúc xóa vì fetch đó có thể làm item
+   * vừa xóa xuất hiện lại tạm thời trên badge/UI.
+   */
+  if (target?.cart_item_id) {
+    return target;
+  }
+
   const cached = findMatchingCartItem(
     getServerCartCache(),
     target
@@ -1039,10 +1193,9 @@ async function resolveServerCartItem(
   const freshResult =
     await getCartApi();
 
-  applyServerCartResult(
-    freshResult
-  );
-
+  // Chỉ dùng response để tìm server id. Không ghi response này ngược vào
+  // cache vì UI đã optimistic update/remove; ghi lại ở đây có thể làm item
+  // vừa xóa xuất hiện trở lại trong badge trước khi request DELETE hoàn tất.
   return findMatchingCartItem(
     freshResult?.items || [],
     target
@@ -1054,6 +1207,41 @@ export function addToCart(
   options = {}
 ) {
   const currentCart = getCart();
+
+  const variantId =
+    getVariantId(product, options);
+
+  const activeVariants =
+    getProductVariants(product).filter(
+      (variant) =>
+        variant?.is_active !== false &&
+        variant?.is_active !== 0 &&
+        variant?.is_active !== "0"
+    );
+
+  if (
+    activeVariants.length > 0 &&
+    (
+      variantId === null ||
+      variantId === undefined ||
+      variantId === ""
+    )
+  ) {
+    if (isBrowser()) {
+      window.dispatchEvent(
+        new CustomEvent("dynova:cart-stock-warning", {
+          detail: {
+            message:
+              "Vui lòng chọn màu sắc/kích thước trước khi thêm sản phẩm vào giỏ hàng.",
+            productId:
+              getProductId(product),
+          },
+        })
+      );
+    }
+
+    return currentCart;
+  }
 
   const cartItem =
     normalizeCartItem(
@@ -1131,6 +1319,23 @@ export function addToCart(
     );
   }
 
+  const quantityToAdd = Math.max(
+    0,
+    finalQuantity - currentQuantity
+  );
+
+  /*
+   * Nếu giỏ đã đạt đúng tồn kho thì chỉ cảnh báo, không gửi thêm request lên
+   * server. Nếu người dùng yêu cầu 5 nhưng chỉ còn chỗ cho 1 thì API cũng chỉ
+   * được cộng 1, tránh backend từ chối toàn bộ request và rollback sai UI.
+   */
+  if (
+    existingIndex >= 0 &&
+    quantityToAdd <= 0
+  ) {
+    return currentCart;
+  }
+
   const next =
     existingIndex >= 0
       ? currentCart.map(
@@ -1171,14 +1376,18 @@ export function addToCart(
           ),
         ];
 
+  const authenticated =
+    hasAuthSession();
+
+  const previousCart = authenticated
+    ? getServerCartCache()
+    : currentCart;
+
   saveCart(next);
 
-  if (!hasAuthSession()) {
+  if (!authenticated) {
     return next;
   }
-
-  const previousCart =
-    getServerCartCache();
 
   const request = import(
     "@/services/cart.service"
@@ -1195,7 +1404,7 @@ export function addToCart(
             cartItem.product_variant_id,
 
           quantity:
-            requestedQuantity,
+            quantityToAdd,
         })
     )
     .then((result) => {
@@ -1203,18 +1412,36 @@ export function addToCart(
 
       return result;
     })
-    .catch((error) => {
-      saveServerCartCache(
-        previousCart
-      );
+    .catch(async (error) => {
+      let restoredItems =
+        previousCart;
 
-      dispatchCartSyncError(
-        error
-      );
+      /* Backend là nguồn sự thật. Nếu request bị từ chối (thường do hết kho),
+       * lấy lại giỏ mới nhất thay vì giữ optimistic cart sai ở localStorage. */
+      try {
+        const {
+          getCartApi,
+        } = await import(
+          "@/services/cart.service"
+        );
+
+        const fresh =
+          await getCartApi();
+
+        restoredItems =
+          fresh?.items || [];
+        applyServerCartResult(fresh);
+      } catch {
+        saveServerCartCache(
+          previousCart
+        );
+      }
+
+      dispatchCartSyncError(error);
 
       return {
         error,
-        items: previousCart,
+        items: restoredItems,
       };
     });
 
@@ -1224,6 +1451,106 @@ export function addToCart(
   );
 
   return next;
+}
+
+export async function addToCartConfirmed(
+  product,
+  options = {}
+) {
+  const candidate = normalizeCartItem(
+    product,
+    options
+  );
+
+  const beforeCart = getCart();
+  const beforeItem = findMatchingCartItem(
+    beforeCart,
+    candidate
+  );
+  const beforeQuantity = Number(
+    beforeItem?.quantity || 0
+  );
+
+  const next = addToCart(
+    product,
+    options
+  );
+
+  const afterItem = findMatchingCartItem(
+    next,
+    candidate
+  );
+  const afterQuantity = Number(
+    afterItem?.quantity || 0
+  );
+
+  if (afterQuantity <= beforeQuantity) {
+    return {
+      success: false,
+      items: next,
+      item: afterItem || beforeItem || null,
+      addedQuantity: 0,
+      message:
+        candidate?.stock_known && beforeQuantity >= candidate.stock
+          ? `${candidate.name} chỉ còn ${candidate.stock} sản phẩm trong kho.`
+          : "Không thể thêm sản phẩm vào giỏ hàng.",
+    };
+  }
+
+  if (!hasAuthSession()) {
+    return {
+      success: true,
+      items: next,
+      item: afterItem || null,
+      addedQuantity: afterQuantity - beforeQuantity,
+    };
+  }
+
+  const pending =
+    pendingCartRequests.get(
+      candidate.key
+    );
+
+  if (!pending) {
+    return {
+      success: false,
+      items: getCart(),
+      item: null,
+      addedQuantity: 0,
+      message: "Không thể đồng bộ giỏ hàng với máy chủ.",
+    };
+  }
+
+  const result = await pending;
+
+  if (result?.error) {
+    return {
+      success: false,
+      error: result.error,
+      items:
+        result?.items || getCart(),
+      item: null,
+      addedQuantity: 0,
+      message:
+        result.error?.message ||
+        "Không thể thêm sản phẩm vào giỏ hàng.",
+    };
+  }
+
+  const confirmedItems =
+    Array.isArray(result?.items)
+      ? result.items
+      : getCart();
+
+  return {
+    success: true,
+    items: confirmedItems,
+    item: findMatchingCartItem(
+      confirmedItems,
+      candidate
+    ),
+    addedQuantity: afterQuantity - beforeQuantity,
+  };
 }
 
 export function updateCartItem(
@@ -1311,16 +1638,34 @@ export function updateCartItem(
     }
   );
 
+  const authenticated =
+    hasAuthSession();
+
+  const previousCart = authenticated
+    ? getServerCartCache()
+    : currentCart;
+
   saveCart(next);
 
-  if (!hasAuthSession()) {
+  if (!authenticated) {
     return next;
   }
 
-  const previousCart =
-    getServerCartCache();
+  const mutationKey = `update:${key}`;
+  const mutationVersion =
+    (cartUpdateVersions.get(mutationKey) || 0) + 1;
+  const previousRequest =
+    pendingCartRequests.get(mutationKey);
 
-  const request = Promise.resolve()
+  cartUpdateVersions.set(
+    mutationKey,
+    mutationVersion
+  );
+
+  const request = Promise.resolve(
+    previousRequest
+  )
+    .catch(() => null)
     .then(async () => {
       const serverItem =
         await resolveServerCartItem(
@@ -1344,33 +1689,62 @@ export function updateCartItem(
 
       return updateCartItemApi(
         serverItem.cart_item_id,
-        nextQuantity
+        nextQuantity,
+        { persist: false }
       );
     })
     .then((result) => {
-      applyServerCartResult(result);
+      if (
+        cartUpdateVersions.get(mutationKey) ===
+        mutationVersion
+      ) {
+        applyServerCartResult(result);
+      }
 
       return result;
     })
-    .catch((error) => {
-      saveServerCartCache(
-        previousCart
-      );
+    .catch(async (error) => {
+      if (
+        cartUpdateVersions.get(mutationKey) !==
+        mutationVersion
+      ) {
+        return {
+          error,
+          items: getServerCartCache(),
+        };
+      }
 
-      dispatchCartSyncError(
-        error
-      );
+      let restoredItems =
+        previousCart;
+
+      try {
+        const {
+          getCartApi,
+        } = await import(
+          "@/services/cart.service"
+        );
+
+        const fresh =
+          await getCartApi();
+
+        restoredItems =
+          fresh?.items || [];
+        applyServerCartResult(fresh);
+      } catch {
+        saveServerCartCache(
+          previousCart
+        );
+      }
+
+      dispatchCartSyncError(error);
 
       return {
         error,
-        items: previousCart,
+        items: restoredItems,
       };
     });
 
-  registerPendingRequest(
-    `update:${key}`,
-    request
-  );
+  registerPendingRequest(mutationKey, request);
 
   return next;
 }
@@ -1394,14 +1768,18 @@ export function removeCartItem(key) {
         item?.key !== key
     );
 
+  const authenticated =
+    hasAuthSession();
+
+  const previousCart = authenticated
+    ? getServerCartCache()
+    : currentCart;
+
   saveCart(next);
 
-  if (!hasAuthSession()) {
+  if (!authenticated) {
     return next;
   }
-
-  const previousCart =
-    getServerCartCache();
 
   const request = Promise.resolve()
     .then(async () => {
@@ -1434,7 +1812,7 @@ export function removeCartItem(key) {
 
       return result;
     })
-    .catch((error) => {
+    .catch(async (error) => {
       saveServerCartCache(
         previousCart
       );
@@ -1465,7 +1843,9 @@ export function clearCart() {
   const previousCart =
     getServerCartCache();
 
-  clearServerCartCache();
+  /* Xóa cả cache server lẫn giỏ guest cũ để không có dữ liệu cũ hồi sinh. */
+  saveServerCartCache([]);
+  clearGuestCart();
 
   const request = Promise.resolve()
     .then(async () => {
@@ -1488,7 +1868,8 @@ export function clearCart() {
       return clearCartApi();
     })
     .then((result) => {
-      clearServerCartCache();
+      saveServerCartCache([]);
+      clearGuestCart();
 
       return result;
     })
@@ -1560,6 +1941,27 @@ export async function syncCartAfterLogin() {
     );
 
   applyServerCartResult(result);
+
+  const warnings = Array.isArray(
+    result?.warnings
+  )
+    ? result.warnings
+    : [];
+
+  if (warnings.length > 0 && isBrowser()) {
+    const message = warnings
+      .map((warning) => warning?.message)
+      .filter(Boolean)
+      .join(" ");
+
+    if (message) {
+      window.dispatchEvent(
+        new CustomEvent("dynova:cart-stock-warning", {
+          detail: { message },
+        })
+      );
+    }
+  }
 
   if (guestItems.length > 0) {
     clearGuestCart();
@@ -1778,25 +2180,16 @@ export function logoutUser() {
   if (!isBrowser()) return;
 
   window.localStorage.removeItem(
-    KEYS.currentUser
+    KEYS.serverCart
   );
-
-  window.localStorage.removeItem(
+  window.sessionStorage.removeItem(
     KEYS.serverCart
   );
 
-  window.localStorage.removeItem(
-    "isLoggedIn"
-  );
+  clearAuthStorage();
 
-  [
-    "dynova_auth_token",
-    "auth_token",
-    "access_token",
-    "token",
-  ].forEach((key) => {
-    window.localStorage.removeItem(key);
-  });
+  window.localStorage.setItem(LOGOUT_MARKER_KEY, "1");
+  window.sessionStorage.setItem(LOGOUT_MARKER_KEY, "1");
 
   hydratedToken = "";
   hydrationPromise = null;
@@ -1808,40 +2201,25 @@ export function logoutUser() {
 export function getCurrentUser() {
   if (!isBrowser()) return null;
 
-  const keys = [
-    KEYS.currentUser,
-    "dynova_auth_user",
-    "auth_user",
-    "currentUser",
-    "current_user",
-    "user",
-  ];
+  if (isExplicitLogout()) return null;
 
-  for (const key of keys) {
-    try {
-      const raw =
-        window.localStorage.getItem(
-          key
-        );
+  for (const storage of getStorageByPriority()) {
+    if (!storage) continue;
 
-      if (!raw) continue;
+    for (const key of AUTH_USER_KEYS) {
+      try {
+        const raw = storage.getItem(key);
+        if (!raw) continue;
 
-      const parsed =
-        JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        const user = parsed?.data?.user || parsed?.user || parsed;
 
-      const user =
-        parsed?.data?.user ||
-        parsed?.user ||
-        parsed;
-
-      if (
-        user &&
-        typeof user === "object"
-      ) {
-        return user;
+        if (user && typeof user === "object") {
+          return user;
+        }
+      } catch {
+        continue;
       }
-    } catch {
-      continue;
     }
   }
 

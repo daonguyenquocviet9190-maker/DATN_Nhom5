@@ -1151,11 +1151,49 @@ export default function OrdersPage() {
       const response = await reorderOrder(order.id);
       const reorderData = extractOrder(response, order);
       const items = getOrderItems(reorderData);
+      const candidateItems = items.length ? items : getOrderItems(order);
 
-      addItemsToCart(items.length ? items : getOrderItems(order), catalogMaps);
+      const invalidItem = candidateItems.find((item) => {
+        const requestedQty = getItemQuantity(item);
+        const availableQty = getAvailableStockForReorder(item, catalogMaps);
+        return availableQty <= 0 || requestedQty > availableQty;
+      });
+
+      if (invalidItem) {
+        const name = getItemName(invalidItem) || "Sản phẩm";
+        const availableQty = getAvailableStockForReorder(invalidItem, catalogMaps);
+        const message =
+          availableQty > 0
+            ? `${name} chỉ còn ${availableQty} sản phẩm trong kho, vui lòng kiểm tra lại.`
+            : `${name} hiện đã hết hàng và không thể thêm vào giỏ.`;
+
+        showNotice(message);
+        return;
+      }
+
+      addItemsToCart(candidateItems, catalogMaps);
       showNotice("Đã thêm sản phẩm của đơn hàng vào giỏ.");
     } catch {
-      addItemsToCart(getOrderItems(order), catalogMaps);
+      const candidateItems = getOrderItems(order);
+      const invalidItem = candidateItems.find((item) => {
+        const requestedQty = getItemQuantity(item);
+        const availableQty = getAvailableStockForReorder(item, catalogMaps);
+        return availableQty <= 0 || requestedQty > availableQty;
+      });
+
+      if (invalidItem) {
+        const name = getItemName(invalidItem) || "Sản phẩm";
+        const availableQty = getAvailableStockForReorder(invalidItem, catalogMaps);
+        const message =
+          availableQty > 0
+            ? `${name} chỉ còn ${availableQty} sản phẩm trong kho, vui lòng kiểm tra lại.`
+            : `${name} hiện đã hết hàng và không thể thêm vào giỏ.`;
+
+        showNotice(message);
+        return;
+      }
+
+      addItemsToCart(candidateItems, catalogMaps);
       showNotice("Đã thêm sản phẩm của đơn hàng vào giỏ.");
     } finally {
       setActionLoading(false);

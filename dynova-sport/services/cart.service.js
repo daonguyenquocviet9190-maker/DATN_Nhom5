@@ -513,14 +513,19 @@ export function clearServerCartCache() {
   dispatchCartEvents();
 }
 
-function commitResponse(response) {
+function commitResponse(
+  response,
+  { persist = true } = {}
+) {
   const items = extractCartItems(response);
   const summary = extractSummary(
     response,
     items
   );
 
-  replaceServerCartCache(items);
+  if (persist) {
+    replaceServerCartCache(items);
+  }
 
   return {
     response,
@@ -568,7 +573,8 @@ export async function addCartItemApi({
 
 export async function updateCartItemApi(
   cartItemId,
-  quantity
+  quantity,
+  options = {}
 ) {
   const response = await cartRequest(
     `/cart/items/${cartItemId}`,
@@ -583,7 +589,7 @@ export async function updateCartItemApi(
     }
   );
 
-  return commitResponse(response);
+  return commitResponse(response, options);
 }
 
 export async function removeCartItemApi(

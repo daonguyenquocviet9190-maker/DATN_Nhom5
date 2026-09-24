@@ -126,7 +126,7 @@ class GhnDeliverySimulationService
                 throw new RuntimeException('Hành trình giao hàng đã được khởi tạo.');
             }
 
-            $duration = max(60, min(1800, (int) ($options['duration_seconds'] ?? $this->defaultDuration())));
+            $duration = max(30, min(1800, (int) ($options['duration_seconds'] ?? $this->defaultDuration())));
             $speed = $this->normalizeSpeed((float) ($options['speed'] ?? $this->defaultSpeed()));
 
             DB::table('orders')->where('id', $orderId)->update([
@@ -432,7 +432,7 @@ class GhnDeliverySimulationService
 
     private function defaultDuration(): int
     {
-        return max(60, min(1800, (int) config('services.ghn.simulation_duration_seconds', 240)));
+        return max(30, min(1800, (int) config('services.ghn.simulation_duration_seconds', 90)));
     }
 
     private function defaultSpeed(): float

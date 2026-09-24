@@ -22,8 +22,11 @@ import {
   removeCartItem,
   updateCartItem,
 } from "@/utils/shopStorage";
+import {
+  getDefaultPublicSettings,
+  getPublicSettings,
+} from "@/services/settings.service";
 
-const FREE_SHIPPING_TARGET = 799000;
 // URL API Backend Laravel của bạn
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
@@ -39,10 +42,12 @@ export default function CartPage() {
   const [isApplying, setIsApplying] = useState(false);
 
   const [notice, setNotice] = useState("");
+  const [shippingSettings, setShippingSettings] = useState(
+    getDefaultPublicSettings
+  );
 
   const syncCart = () => {
     setItems(getCart());
-    window.dispatchEvent(new Event("dynova:storage"));
   };
 
   useEffect(() => {
@@ -72,6 +77,8 @@ export default function CartPage() {
       "dynova:cart-sync-error",
       handleCartSyncError
     );
+    window.addEventListener("dynova:cart", syncCart);
+    window.addEventListener("storage", syncCart);
 
     return () => {
       window.removeEventListener(
@@ -82,6 +89,24 @@ export default function CartPage() {
         "dynova:cart-sync-error",
         handleCartSyncError
       );
+      window.removeEventListener("dynova:cart", syncCart);
+      window.removeEventListener("storage", syncCart);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    getPublicSettings()
+      .then((response) => {
+        if (mounted) {
+          setShippingSettings(response.settings);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
     };
   }, []);
 
@@ -91,7 +116,18 @@ export default function CartPage() {
   }, [items]);
 
   // 2. Tính phí vận chuyển tạm tính
-  const shipping = subtotal >= FREE_SHIPPING_TARGET || subtotal === 0 ? 0 : 30000;
+  const freeShippingTarget = Math.max(
+    1,
+    Number(shippingSettings.free_shipping_threshold || 500000)
+  );
+  const defaultShippingFee = Math.max(
+    0,
+    Number(shippingSettings.default_shipping_fee || 30000)
+  );
+  const shipping =
+    subtotal >= freeShippingTarget || subtotal === 0
+      ? 0
+      : defaultShippingFee;
 
   // 3. Tính tổng tiền cuối cùng
   const finalTotal = useMemo(() => {
@@ -101,10 +137,10 @@ export default function CartPage() {
 
   const progress = Math.min(
     100,
-    Math.round((subtotal / FREE_SHIPPING_TARGET) * 100)
+    Math.round((subtotal / freeShippingTarget) * 100)
   );
 
-  const missingFreeShip = Math.max(0, FREE_SHIPPING_TARGET - subtotal);
+  const missingFreeShip = Math.max(0, freeShippingTarget - subtotal);
 
   const showNotice = (text) => {
     setNotice(text);
@@ -127,11 +163,18 @@ export default function CartPage() {
       return;
     }
 
-    updateCartItem(key, requestedQty);
-    syncCart();
+    const nextItems = updateCartItem(key, requestedQty);
+    setItems(nextItems);
 
     if (appliedCoupon) {
-      reValidateCoupon(appliedCoupon, subtotal);
+      const nextSubtotal = nextItems.reduce(
+        (sum, cartItem) =>
+          sum +
+          Number(cartItem.price || 0) *
+            Number(cartItem.quantity || 1),
+        0
+      );
+      reValidateCoupon(appliedCoupon, nextSubtotal);
     }
   };
 
@@ -304,7 +347,7 @@ export default function CartPage() {
 
                       <p className="mt-1 text-xs font-bold text-slate-400">
                         Mốc miễn phí vận chuyển:{" "}
-                        {formatCurrency(FREE_SHIPPING_TARGET)}
+                        {formatCurrency(freeShippingTarget)}
                       </p>
                     </div>
                   </div>

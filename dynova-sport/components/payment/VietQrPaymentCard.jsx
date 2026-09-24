@@ -160,11 +160,11 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           </span>
 
           <h3 className="mt-4 text-2xl font-black text-slate-950">
-            Thanh toán thành công
+            Thanh toán đã ghi nhận
           </h3>
 
           <p className="mt-2 text-sm font-semibold text-slate-500">
-            Đơn hàng đã được xác nhận. Đang chuyển đến chi tiết đơn hàng...
+            Chuyển khoản của bạn đã được hệ thống ghi nhận. Nhân viên sẽ xác nhận đơn hàng trong thời gian sớm nhất.
           </p>
 
           <p className="mt-4 text-3xl font-black text-emerald-600">
@@ -177,15 +177,15 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
 
   if (scanMode) {
     return (
-      <div className={`overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm ${className}`}>
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_25px_70px_rgba(15,23,42,0.08)] ${className}`}>
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-orange-50 via-white to-amber-50 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-200">
               <QrCode size={22} />
             </span>
 
             <div>
-              <h3 className="text-lg font-black text-slate-950">Thanh toán QR</h3>
+              <h3 className="text-lg font-black text-slate-950">Chuyển khoản QR</h3>
               <p className="mt-0.5 text-xs font-semibold text-slate-500">
                 Mã đơn {payment?.order_code}
               </p>
@@ -194,18 +194,20 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
 
           <span className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-black text-amber-700">
             <Loader2 size={13} className="animate-spin" />
-            Chờ thanh toán
+            Chờ xác nhận
           </span>
         </div>
 
         <div className="grid gap-6 p-5 md:grid-cols-[240px_1fr] md:p-6">
           <div className="mx-auto w-full max-w-[240px]">
-            <div className="aspect-square overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="qr-card-shell relative aspect-square overflow-hidden rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_24px_50px_rgba(249,115,22,0.12)]">
+              <div className="qr-scan-line" />
+              <div className="pointer-events-none absolute inset-[10px] rounded-[22px] border border-dashed border-orange-200/80" />
               {payment?.qr_url ? (
                 <img
                   src={payment.qr_url}
                   alt="QR thanh toán Dynova Sport"
-                  className="h-full w-full object-contain"
+                  className="relative z-10 h-full w-full rounded-[20px] object-contain"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-center text-sm font-bold text-slate-400">
@@ -220,7 +222,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           </div>
 
           <div>
-            <div className="rounded-2xl bg-slate-50 px-4 py-2">
+            <div className="rounded-2xl bg-slate-50 px-4 py-2 ring-1 ring-slate-100">
               <InfoRow label="Mã đơn" value={payment?.order_code} copyable />
               <InfoRow
                 label="Số tiền"
@@ -230,10 +232,10 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
               <InfoRow label="Nội dung" value={payment?.transfer_content} copyable />
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-black text-slate-900">Cách quét mã</p>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-sm font-black text-slate-900">Hướng dẫn quét mã</p>
               <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                Mở Camera trên điện thoại, hướng vào mã QR và mở liên kết xuất hiện trên màn hình.
+                Mở Camera trên điện thoại, quét mã QR và xác nhận giao dịch với số tiền và nội dung như trên.
               </p>
             </div>
           </div>
@@ -247,7 +249,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-4 md:px-6">
             <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
               <Loader2 size={15} className="shrink-0 animate-spin text-orange-500" />
-              Đang chờ xác nhận thanh toán...
+              Hệ thống đang chờ bạn chuyển khoản và xác nhận thanh toán...
             </div>
           </div>
         )}
@@ -257,15 +259,40 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
             {error}
           </p>
         ) : null}
+
+        <style jsx global>{`
+          .qr-card-shell {
+            background: linear-gradient(135deg, #fff7ed 0%, #ffffff 52%, #fff 100%);
+          }
+
+          .qr-scan-line {
+            position: absolute;
+            inset: 10% 8% auto 8%;
+            height: 54%;
+            z-index: 2;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(249,115,22,0.32) 25%, rgba(249,115,22,0.75) 48%, rgba(249,115,22,0.28) 72%, rgba(255,255,255,0) 100%);
+            box-shadow: 0 0 25px rgba(249,115,22,0.35);
+            filter: blur(1px);
+            animation: qr-sweep 2.8s ease-in-out infinite;
+          }
+
+          @keyframes qr-sweep {
+            0% { transform: translateY(-42%); opacity: 0; }
+            15% { opacity: 1; }
+            50% { transform: translateY(70%); opacity: 1; }
+            100% { transform: translateY(110%); opacity: 0; }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div className={`overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm ${className}`}>
-      <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className={`overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_25px_70px_rgba(15,23,42,0.08)] ${className}`}>
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-orange-50 via-white to-amber-50 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-200">
             <Landmark size={21} />
           </span>
 
@@ -279,14 +306,16 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
 
         <span className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-black text-amber-700">
           <Loader2 size={13} className="animate-spin" />
-          Chờ ngân hàng xác nhận
+          Chờ xác nhận
         </span>
       </div>
 
       <div className="grid gap-6 p-5 md:grid-cols-[230px_1fr] md:p-6">
-        <div className="mx-auto aspect-square w-full max-w-[230px] overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="qr-card-shell relative mx-auto aspect-square w-full max-w-[230px] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_20px_45px_rgba(249,115,22,0.10)]">
+          <div className="qr-scan-line" />
+          <div className="pointer-events-none absolute inset-[8px] rounded-[22px] border border-dashed border-orange-200/80" />
           {payment?.qr_url ? (
-            <img src={payment.qr_url} alt="VietQR" className="h-full w-full object-contain" />
+            <img src={payment.qr_url} alt="VietQR" className="relative z-10 h-full w-full rounded-[20px] object-contain" />
           ) : (
             <div className="flex h-full items-center justify-center text-center text-sm font-bold text-slate-400">
               Không tải được mã QR
@@ -294,7 +323,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
           )}
         </div>
 
-        <div className="rounded-2xl bg-slate-50 px-4 py-2">
+        <div className="rounded-2xl bg-slate-50 px-4 py-2 ring-1 ring-slate-100">
           <InfoRow label="Ngân hàng" value={payment?.bank?.name} />
           <InfoRow label="Số tài khoản" value={payment?.bank?.account_number} copyable />
           <InfoRow label="Chủ tài khoản" value={payment?.bank?.account_name} />

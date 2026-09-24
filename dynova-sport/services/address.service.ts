@@ -1,20 +1,33 @@
 import { apiFetch } from "./api";
 
-export type Province = {
-  id: string;
+export type Ward = {
+  code: string;
   name: string;
-  raw?: any;
+  districtCode: string;
+  districtName: string;
   source: "ghn";
+  [key: string]: unknown;
 };
 
-export type Ward = {
-  id: string;
+export type District = {
+  code: string;
   name: string;
-  provinceId?: string;
-  districtId?: string;
-  districtName?: string;
-  raw?: any;
+  provinceName?: string;
   source: "ghn";
+  [key: string]: unknown;
+};
+
+export type Province = {
+  code: string;
+  name: string;
+  source: "ghn";
+  [key: string]: unknown;
+};
+
+type AddressResponse = {
+  success?: boolean;
+  message?: string;
+  data?: Record<string, unknown>[];
 };
 
 export async function getShippingStatus() {
@@ -23,45 +36,72 @@ export async function getShippingStatus() {
 }
 
 export async function getShippingProvinces(): Promise<Province[]> {
-  const response: any = await apiFetch("/shipping/provinces", { auth: false });
-  const rows = Array.isArray(response?.data) ? response.data : [];
+  const response = await apiFetch<AddressResponse>("/shipping/provinces", {
+    auth: false,
+  });
 
-  return rows
-    .map((row: any) => ({
-      id: String(row.ProvinceID ?? row.ProvinceCode ?? row.id ?? ""),
+  const provinces = (response?.data || [])
+    .map((row) => ({
+      code: String(row.ProvinceID ?? row.ProvinceCode ?? ""),
       name: String(row.ProvinceName ?? row.name ?? ""),
-      raw: row,
       source: "ghn" as const,
     }))
-    .filter((row: Province) => row.id && row.name);
+    .filter((row) => row.code && row.name);
+
+  if (!provinces.length) {
+    throw new Error("GHN chưa trả về danh sách tỉnh/thành phố.");
+  }
+
+  return provinces;
 }
 
-/**
- * Địa chỉ hành chính 2 cấp trên UI:
- * Tỉnh/Thành phố -> Phường/Xã.
- *
- * GHN hiện vẫn sử dụng district_id nội bộ cho một số API phí/tạo vận đơn.
- * Backend /shipping/wards?province_id=... trả về ward kèm DistrictID để
- * frontend lưu districtCode ẩn, tuyệt đối không hiển thị Quận/Huyện cho khách.
- */
-export async function getShippingWards(province: Province): Promise<Ward[]> {
-  const response: any = await apiFetch(
-    `/shipping/wards?province_id=${encodeURIComponent(province.id)}`,
+export const getMergedProvinces = getShippingProvinces;
+
+export async function getShippingDistricts(
+  province: Province
+): Promise<District[]> {
+  const response = await apiFetch<AddressResponse>(
+    `/shipping/districts?province_id=${encodeURIComponent(province.code)}`,
     { auth: false }
   );
 
-  const rows = Array.isArray(response?.data) ? response.data : [];
-
-  return rows
-    .map((row: any) => ({
-      id: String(row.WardCode ?? row.WardID ?? row.Code ?? row.id ?? ""),
-      name: String(row.WardName ?? row.name ?? ""),
-      provinceId: province.id,
-      districtId: row.DistrictID != null ? String(row.DistrictID) : undefined,
-      districtName:
-        row.DistrictName != null ? String(row.DistrictName) : undefined,
-      raw: row,
+  const districts = (response?.data || [])
+    .map((row) => ({
+      code: String(row.DistrictID ?? row.DistrictId ?? ""),
+      name: String(row.DistrictName ?? row.name ?? ""),
+      provinceName: province.name,
       source: "ghn" as const,
     }))
-    .filter((row: Ward) => row.id && row.name);
+    .filter((row) => row.code && row.name);
+
+  if (!districts.length) {
+    throw new Error("GHN chưa trả về quận/huyện cho tỉnh đã chọn.");
+  }
+
+  return districts;
+}
+
+export async function getShippingWards(
+  district: District
+): Promise<Ward[]> {
+  const response = await apiFetch<AddressResponse>(
+    `/shipping/wards?district_id=${encodeURIComponent(district.code)}`,
+    { auth: false }
+  );
+
+  const wards = (response?.data || [])
+    .map((row) => ({
+      code: String(row.WardCode ?? row.WardID ?? ""),
+      name: String(row.WardName ?? row.name ?? ""),
+      districtCode: district.code,
+      districtName: district.name,
+      source: "ghn" as const,
+    }))
+    .filter((row) => row.code && row.name);
+
+  if (!wards.length) {
+    throw new Error("GHN chưa trả về phường/xã cho quận/huyện đã chọn.");
+  }
+
+  return wards;
 }

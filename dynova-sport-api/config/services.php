@@ -160,7 +160,7 @@ return [
 
         'simulation_duration_seconds' => env(
             'GHN_SIMULATION_DURATION_SECONDS',
-            240
+            90
         ),
 
         'simulation_speed' => env(
