@@ -14,10 +14,9 @@ class VoucherService
         $cleanCode = strtoupper(trim((string) $code));
 
         if ($cleanCode === '') {
-            return [
-                'voucher' => null,
-                'discount' => 0.0,
-            ];
+            throw ValidationException::withMessages([
+                'coupon' => ['Vui lòng nhập mã giảm giá.'],
+            ]);
         }
 
         if (!Schema::hasTable('vouchers')) {
