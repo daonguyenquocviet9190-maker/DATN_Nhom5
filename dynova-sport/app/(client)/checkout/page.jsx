@@ -639,16 +639,27 @@ function CheckoutContent() {
         items,
       });
 
-      const rawFee = response?.data?.fee ?? response?.fee;
+      const rawFee = response?.data?.fee ?? response?.fee ?? 0;
       const feeVal = Number(rawFee);
+      const isExplicitFreeShipping = Boolean(
+        response?.data?.free_shipping ?? response?.free_shipping ?? false
+      );
 
       if (!Number.isFinite(feeVal) || feeVal < 0) {
         throw new Error("Dịch vụ vận chuyển không trả về phí hợp lệ.");
       }
 
+      if (feeVal === 0 && !isExplicitFreeShipping) {
+        throw new Error(
+          "GHN trả về phí vận chuyển 0 nhưng chưa xác nhận miễn phí vận chuyển."
+        );
+      }
+
       setShippingFee(feeVal);
       setShippingMessage(
-        response?.message || "Đã tính phí giao hàng thành công!"
+        isExplicitFreeShipping
+          ? "Đơn hàng được miễn phí vận chuyển."
+          : response?.message || "Đã tính phí giao hàng thành công!"
       );
       return feeVal;
     } catch (error) {

@@ -57,6 +57,13 @@ class ShippingController extends Controller
             $result['calculated_weight'] = (int) $weight;
             $result['calculated_subtotal'] = (float) $value;
 
+            $quotedFee = (float) ($result['fee'] ?? 0);
+            $isFreeShipping = (bool) ($result['free_shipping'] ?? false);
+
+            if ($quotedFee <= 0 && !$isFreeShipping) {
+                throw new RuntimeException('GHN trả về phí vận chuyển 0 nhưng chưa xác nhận miễn phí vận chuyển.');
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => $result['free_shipping']
