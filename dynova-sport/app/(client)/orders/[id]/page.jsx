@@ -557,7 +557,7 @@ export default function OrderDetailPage() {
   const paymentBank = paymentState?.bank || {};
   const paymentTransferContent =
     paymentState?.transfer_content || paymentState?.payment_code || getOrderCode(order);
-  const showBankTransferQr = bankTransferPayment && !paymentPaid && !paymentStateLoading;
+  const showBankTransferQr = bankTransferPayment && !paymentPaid;
 
   const showNotice = (message) => {
     setNotice(message);
@@ -1213,30 +1213,33 @@ export default function OrderDetailPage() {
                 <span className="font-black text-orange-600">{order.payment_status === "paid" ? "Đã thanh toán" : "Chưa thanh toán"}</span>
               </div>
 
-              {showBankTransferQr && paymentQrUrl && (
+              {showBankTransferQr && (
                 <div className="mb-4 rounded-[24px] border border-orange-100 bg-orange-50 p-4">
                   <p className="text-xs font-black uppercase tracking-wider text-orange-600">Mã QR chuyển khoản</p>
-                  <div className="mt-3 rounded-[20px] border border-orange-200 bg-white p-3">
-                    <img
-                      src={paymentQrUrl}
-                      alt="QR chuyển khoản"
-                      className="mx-auto aspect-square w-full max-w-[180px] rounded-[14px] object-contain"
-                    />
-                  </div>
-                  <p className="mt-3 text-center text-xs font-bold leading-6 text-slate-600">
-                    Chuyển khoản đúng nội dung <span className="font-black text-orange-600">{paymentTransferContent}</span>
-                  </p>
-                  <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-6 text-slate-600">
-                    <p><span className="font-black text-slate-700">Ngân hàng:</span> {paymentBank.name || paymentBank.code || "Chưa cập nhật"}</p>
-                    <p><span className="font-black text-slate-700">Số tài khoản:</span> {paymentBank.account_number || "Chưa cập nhật"}</p>
-                    <p><span className="font-black text-slate-700">Chủ tài khoản:</span> {paymentBank.account_name || "Chưa cập nhật"}</p>
-                  </div>
-                </div>
-              )}
 
-              {showBankTransferQr && !paymentQrUrl && (
-                <div className="mb-4 rounded-[24px] border border-orange-100 bg-orange-50 p-4 text-center text-xs font-bold text-orange-700">
-                  {paymentStateLoading ? "Đang tải mã QR thanh toán..." : "Đang chuẩn bị mã QR thanh toán cho đơn này."}
+                  {paymentQrUrl ? (
+                    <>
+                      <div className="mt-3 rounded-[20px] border border-orange-200 bg-white p-3">
+                        <img
+                          src={paymentQrUrl}
+                          alt="QR chuyển khoản"
+                          className="mx-auto aspect-square w-full max-w-[180px] rounded-[14px] object-contain"
+                        />
+                      </div>
+                      <p className="mt-3 text-center text-xs font-bold leading-6 text-slate-600">
+                        Chuyển khoản đúng nội dung <span className="font-black text-orange-600">{paymentTransferContent}</span>
+                      </p>
+                      <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-6 text-slate-600">
+                        <p><span className="font-black text-slate-700">Ngân hàng:</span> {paymentBank.name || paymentBank.code || "Chưa cập nhật"}</p>
+                        <p><span className="font-black text-slate-700">Số tài khoản:</span> {paymentBank.account_number || "Chưa cập nhật"}</p>
+                        <p><span className="font-black text-slate-700">Chủ tài khoản:</span> {paymentBank.account_name || "Chưa cập nhật"}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-3 rounded-[18px] border border-dashed border-orange-200 bg-white py-5 text-center text-xs font-bold text-orange-700">
+                      {paymentStateLoading ? "Đang tải mã QR thanh toán..." : "Đang chuẩn bị mã QR thanh toán cho đơn này."}
+                    </div>
+                  )}
                 </div>
               )}
 

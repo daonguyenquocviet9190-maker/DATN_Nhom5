@@ -1101,6 +1101,98 @@ export function saveCart(items) {
   return saveGuestCart(items);
 }
 
+export function getSelectedCartKeys() {
+  if (!isBrowser()) {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem("dynova_selected_cart_keys");
+    if (raw === null) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSelectedCartKeys(keys = []) {
+  if (!isBrowser()) {
+    return [];
+  }
+
+  const normalized = Array.from(
+    new Set((Array.isArray(keys) ? keys : []).map((key) => String(key)).filter(Boolean))
+  );
+
+  window.localStorage.setItem("dynova_selected_cart_keys", JSON.stringify(normalized));
+  return normalized;
+}
+
+export function syncSelectedCartKeys(items = []) {
+  const allKeys = (Array.isArray(items) ? items : [])
+    .map((item) => String(item?.key || item?.id || item?.product_id || ""))
+    .filter(Boolean);
+
+  const rawSelection = window.localStorage.getItem("dynova_selected_cart_keys");
+  if (rawSelection === null) {
+    saveSelectedCartKeys(allKeys);
+    return allKeys;
+  }
+
+  const selected = getSelectedCartKeys();
+  const validSelected = selected.filter((key) => allKeys.includes(key));
+  saveSelectedCartKeys(validSelected);
+  return validSelected;
+}
+
+export function toggleCartSelection(key, checked) {
+  const normalizedKey = String(key);
+  const selected = getSelectedCartKeys();
+
+  const next = checked
+    ? Array.from(new Set([...selected, normalizedKey]))
+    : selected.filter((item) => item !== normalizedKey);
+
+  return saveSelectedCartKeys(next);
+}
+
+export function toggleAllCartSelection(items = [], checked = true) {
+  const keys = (Array.isArray(items) ? items : [])
+    .map((item) => String(item?.key || item?.id || item?.product_id || ""))
+    .filter(Boolean);
+
+  return saveSelectedCartKeys(checked ? keys : []);
+}
+
+export function getSelectedCartItems(items = []) {
+  const cartItems = Array.isArray(items) ? items : [];
+  const selectedKeys = getSelectedCartKeys();
+
+  const rawSelection = typeof window !== "undefined"
+    ? window.localStorage.getItem("dynova_selected_cart_keys")
+    : null;
+
+  if (rawSelection === null && cartItems.length > 0) {
+    const allKeys = syncSelectedCartKeys(cartItems);
+    return cartItems.filter((item) => allKeys.includes(String(item?.key || item?.id || item?.product_id || "")));
+  }
+
+  const validKeys = selectedKeys.filter((key) =>
+    cartItems.some((item) => String(item?.key || item?.id || item?.product_id || "") === key)
+  );
+
+  saveSelectedCartKeys(validKeys);
+
+  return cartItems.filter((item) => {
+    const key = String(item?.key || item?.id || item?.product_id || "");
+    return validKeys.includes(key);
+  });
+}
+
 function applyServerCartResult(result) {
   const items =
     Array.isArray(result?.items)

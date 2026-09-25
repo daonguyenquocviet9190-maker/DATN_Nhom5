@@ -15,6 +15,8 @@ import {
 import { formatCurrency } from "@/data/shop";
 import {
   getCart,
+  getSelectedCartKeys,
+  saveSelectedCartKeys,
   removeCartItem,
   updateCartItem,
 } from "@/utils/shopStorage";
@@ -25,13 +27,44 @@ import {
 
 export default function CartPage() {
   const [items, setItems] = useState([]);
+  const [selectedKeys, setSelectedKeys] = useState([]);
   const [notice, setNotice] = useState("");
   const [shippingSettings, setShippingSettings] = useState(
     getDefaultPublicSettings
   );
 
+  const getItemKey = (item) => {
+    if (item?.key) {
+      return String(item.key);
+    }
+
+    const productId = item?.id || item?.product_id || "unknown-product";
+    const variantId = item?.variant_id || item?.product_variant_id || "no-variant";
+    const size = item?.size || "size-unknown";
+    const color = item?.color || "color-unknown";
+
+    return `${productId}-${variantId}-${size}-${color}`;
+  };
+  const getItemProductId = (item) => item?.id || item?.product_id || null;
+
   const syncCart = () => {
-    setItems(getCart());
+    const nextItems = getCart();
+    setItems(nextItems);
+
+    if (nextItems.length === 0) {
+      setSelectedKeys([]);
+      saveSelectedCartKeys([]);
+      return;
+    }
+
+    const storedSelected = getSelectedCartKeys();
+    const validSelected = storedSelected.filter((key) =>
+      nextItems.some((item) => getItemKey(item) === key)
+    );
+
+    const nextSelected = validSelected.length > 0 ? validSelected : nextItems.map(getItemKey);
+    setSelectedKeys(nextSelected);
+    saveSelectedCartKeys(nextSelected);
   };
 
   useEffect(() => {
@@ -76,9 +109,18 @@ export default function CartPage() {
     };
   }, []);
 
+
+  const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
+
+  const selectedItems = useMemo(() => {
+    return items.filter((item) => selectedKeySet.has(getItemKey(item)));
+  }, [items, selectedKeySet]);
+
+  const selectedCount = selectedItems.length;
+
   const subtotal = useMemo(() => {
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, [items]);
+    return selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [selectedItems]);
 
   const freeShippingTarget = Math.max(
     1,
@@ -96,6 +138,8 @@ export default function CartPage() {
   const finalTotal = useMemo(() => {
     return subtotal + shipping;
   }, [subtotal, shipping]);
+
+  const allSelected = items.length > 0 && items.every((item) => selectedKeySet.has(getItemKey(item)));
 
   const progress = Math.min(
     100,
@@ -217,91 +261,231 @@ export default function CartPage() {
                 </div>
               </div>
 
+              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                <label className="flex cursor-pointer items-center gap-3 text-sm font-black text-slate-800">
+                  <span className="relative inline-flex h-5 w-5 items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? items.map((item) => getItemKey(item))
+                          : [];
+                        setSelectedKeys(next);
+                        saveSelectedCartKeys(next);
+                      }}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    />
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                      allSelected
+                        ? "border-orange-500 bg-orange-500"
+                        : "border-slate-300 bg-white"
+                    }`}>
+                      <svg
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        className={`h-3 w-3 text-white transition-opacity duration-200 ${
+                          allSelected ? "opacity-100" : "opacity-0"
+                        }`}
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M2.5 6.2L4.8 8.5L9.5 3.8"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </span>
+                  Chọn tất cả ({items.length} sản phẩm)
+                </label>
+              </div>
+
               <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
-                {items.map((item) => (
-                  <div
-                    key={item.key}
-                    className="grid gap-4 border-b border-slate-100 p-5 last:border-b-0 sm:grid-cols-[96px_1fr_auto] sm:items-center"
-                  >
-                    <Link
-                      href={"/shop/product/" + item.id}
-                      className="block overflow-hidden rounded-2xl bg-slate-100"
+                {items.map((item) => {
+                  const itemKey = getItemKey(item);
+                  const productId = getItemProductId(item);
+                  const checked = selectedKeys.includes(itemKey);
+
+                  return (
+                    <div
+                      key={item.key}
+                      className="grid gap-4 border-b border-slate-100 p-5 last:border-b-0 sm:grid-cols-[26px_96px_1fr_auto] sm:items-center"
                     >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="h-24 w-24 object-cover transition duration-500 hover:scale-105"
-                      />
-                    </Link>
+                      <span className="relative inline-flex h-5 w-5 items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            setSelectedKeys((prev) => {
+                              const next = event.target.checked
+                                ? Array.from(new Set([...prev, itemKey]))
+                                : prev.filter((key) => key !== itemKey);
 
-                    <div>
-                      <p className="text-[11px] font-black uppercase tracking-wider text-orange-500">
-                        {item.category || "Dynova Sport"}
-                      </p>
-                      <Link href={"/shop/product/" + item.id}>
-                        <h3 className="mt-1 line-clamp-2 font-black text-slate-950 transition hover:text-orange-600">
-                          {item.name}
-                        </h3>
-                      </Link>
-                      <p className="mt-1 text-sm font-semibold text-slate-500">
-                        {item.color || "Mặc định"} / Size {item.size || "Freesize"}
-                      </p>
-                      <p className="mt-2 font-black text-orange-600">
-                        {formatCurrency(item.price)}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
-                      <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                        <button
-                          onClick={() => updateQty(item.key, item.quantity - 1)}
-                          className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
-                        >
-                          <Minus size={13} />
-                        </button>
-                        <span className="w-10 text-center text-sm font-black text-slate-950">
-                          {item.quantity}
+                              saveSelectedCartKeys(next);
+                              return next;
+                            });
+                          }}
+                          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                        />
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                          checked
+                            ? "border-orange-500 bg-orange-500"
+                            : "border-slate-300 bg-white"
+                        }`}>
+                          <svg
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            className={`h-3 w-3 text-white transition-opacity duration-200 ${
+                              checked ? "opacity-100" : "opacity-0"
+                            }`}
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M2.5 6.2L4.8 8.5L9.5 3.8"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
                         </span>
-                        <button
-                          onClick={() => updateQty(item.key, item.quantity + 1)}
-                          className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                      </span>
+
+                      {productId ? (
+                        <Link
+                          href={"/shop/product/" + productId}
+                          className="block overflow-hidden rounded-2xl bg-slate-100"
                         >
-                          <Plus size={13} />
-                        </button>
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="h-24 w-24 object-cover transition duration-500 hover:scale-105"
+                          />
+                        </Link>
+                      ) : (
+                        <div className="block overflow-hidden rounded-2xl bg-slate-100">
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="h-24 w-24 object-cover transition duration-500 hover:scale-105"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-wider text-orange-500">
+                          {item.category || "Dynova Sport"}
+                        </p>
+                        {productId ? (
+                          <Link href={"/shop/product/" + productId}>
+                            <h3 className="mt-1 line-clamp-2 font-black text-slate-950 transition hover:text-orange-600">
+                              {item.name}
+                            </h3>
+                          </Link>
+                        ) : (
+                          <h3 className="mt-1 line-clamp-2 font-black text-slate-950">
+                            {item.name}
+                          </h3>
+                        )}
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          {item.color || "Mặc định"} / Size {item.size || "Freesize"}
+                        </p>
+                        <p className="mt-2 font-black text-orange-600">
+                          {formatCurrency(item.price)}
+                        </p>
                       </div>
 
-                      <p className="font-black text-slate-950">
-                        {formatCurrency(item.price * item.quantity)}
-                      </p>
+                      <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
+                        <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                          <button
+                            onClick={() => updateQty(item.key, item.quantity - 1)}
+                            className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                          >
+                            <Minus size={13} />
+                          </button>
+                          <span className="w-10 text-center text-sm font-black text-slate-950">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQty(item.key, item.quantity + 1)}
+                            className="p-3 text-slate-500 transition hover:bg-slate-50 hover:text-orange-600"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
 
-                      <button
-                        onClick={() => remove(item.key)}
-                        className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
-                        aria-label="Xóa sản phẩm"
-                      >
-                        <Trash2 size={17} />
-                      </button>
+                        <p className="font-black text-slate-950">
+                          {formatCurrency(item.price * item.quantity)}
+                        </p>
+
+                        <button
+                          onClick={() => remove(item.key)}
+                          className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
+                          aria-label="Xóa sản phẩm"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
             <aside className="h-fit rounded-[30px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 lg:sticky lg:top-24">
               <h2 className="text-xl font-black text-slate-950">Tóm tắt đơn hàng</h2>
 
+              <div className="mt-5 space-y-3 rounded-2xl bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+                  <span className="min-w-0 truncate">Sản phẩm đã chọn</span>
+                  <span className="shrink-0 font-black text-slate-900">{selectedCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+                  <span className="min-w-0 truncate">Tạm tính</span>
+                  <span className="shrink-0 font-bold text-slate-900">{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+                  <span className="min-w-0 truncate">Phí vận chuyển</span>
+                  <span className="shrink-0 font-bold text-slate-900">{shipping === 0 ? "Miễn phí" : formatCurrency(shipping)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+                  <span className="min-w-0 truncate">Khuyến mãi</span>
+                  <span className="shrink-0 font-bold text-emerald-600">- 0đ</span>
+                </div>
+              </div>
+
               <div className="mt-5 border-t border-dashed border-slate-200 pt-5">
-                <div className="flex items-end justify-between">
-                  <span className="font-black text-slate-950">Tổng cộng</span>
-                  <span className="text-3xl font-black text-orange-600">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                      Tổng thanh toán
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {selectedCount > 0 ? "Đã bao gồm phí vận chuyển" : "Chưa chọn sản phẩm"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-2xl font-black text-orange-600 sm:text-3xl">
                     {formatCurrency(finalTotal)}
                   </span>
                 </div>
               </div>
 
               <Link
-                href="/checkout"
-                className="mt-6 block rounded-2xl bg-orange-500 py-4 text-center text-xs font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600"
+                href={selectedItems.length > 0 ? "/checkout" : "#"}
+                onClick={(event) => {
+                  if (selectedItems.length === 0) {
+                    event.preventDefault();
+                    showNotice("Vui lòng chọn ít nhất một sản phẩm để thanh toán.");
+                  }
+                }}
+                className={`mt-6 block rounded-2xl py-4 text-center text-xs font-black uppercase tracking-wider text-white transition ${
+                  selectedItems.length > 0
+                    ? "bg-orange-500 hover:-translate-y-0.5 hover:bg-orange-600"
+                    : "cursor-not-allowed bg-slate-300"
+                }`}
               >
                 Tiến hành thanh toán
               </Link>
