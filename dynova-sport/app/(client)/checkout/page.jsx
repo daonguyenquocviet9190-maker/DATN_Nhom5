@@ -105,6 +105,11 @@ function CheckoutContent() {
   const [isErrorCoupon, setIsErrorCoupon] = useState(false);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
+  const [availableVouchers, setAvailableVouchers] = useState([]);
+  const [showVoucherDropdown, setShowVoucherDropdown] = useState(false);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const voucherDropdownRef = useRef(null);
+
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -145,6 +150,35 @@ function CheckoutContent() {
   }, [items]);
 
   useEffect(() => {
+    function handleClickOutside(event) {
+      if (voucherDropdownRef.current && !voucherDropdownRef.current.contains(event.target)) {
+        setShowVoucherDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchAvailableVouchers = async () => {
+    try {
+      setLoadingVouchers(true);
+      const res = await fetch(`${API_BASE_URL}/vouchers`, {
+        headers: { Accept: "application/json" },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const list = Array.isArray(data) ? data : data.data || [];
+        const activeVouchers = list.filter((v) => v.is_active === 1 || v.is_active === true);
+        setAvailableVouchers(activeVouchers);
+      }
+    } catch (err) {
+      console.error("Không thể tải danh sách mã giảm giá:", err);
+    } finally {
+      setLoadingVouchers(false);
+    }
+  };
+
+  useEffect(() => {
     const syncCart = () => setItems(getCart());
     const cart = getCart();
     const user = getCurrentUser();
@@ -169,6 +203,9 @@ function CheckoutContent() {
     if (savedCoupon) {
       setCouponInput(savedCoupon);
     }
+
+    fetchAvailableVouchers();
+
     return () => window.removeEventListener("dynova:cart", syncCart);
   }, [searchParams]);
 
@@ -228,7 +265,10 @@ function CheckoutContent() {
 
   const removeCouponState = () => {
     setAppliedCoupon("");
+    setCouponInput("");
     setDiscountAmount(0);
+    setCouponMessage(""); // Đã xử lý xóa sạch thông báo lỗi/thành công
+    setIsErrorCoupon(false);
     localStorage.removeItem("applied_coupon");
     localStorage.removeItem("discount_amount");
   };
@@ -242,6 +282,12 @@ function CheckoutContent() {
       return;
     }
     verifyCoupon(couponInput, subtotal);
+  };
+
+  const handleSelectVoucherFromDropdown = (voucherCode) => {
+    setCouponInput(voucherCode);
+    setShowVoucherDropdown(false);
+    verifyCoupon(voucherCode, subtotal);
   };
 
   useEffect(() => {
@@ -271,8 +317,6 @@ function CheckoutContent() {
           ? savedProfile.recent_orders[0] || null
           : null;
 
-        // Ưu tiên địa chỉ giao hàng của đơn gần nhất.
-        // Nếu chưa có đơn thì mới dùng profile.
         const savedProvinceName = latestOrder?.province || profileUser?.province || "";
         const savedDistrictName = latestOrder?.district || profileUser?.district || "";
         const savedWardName = latestOrder?.ward || profileUser?.ward || "";
@@ -374,14 +418,11 @@ function CheckoutContent() {
     }, 0);
   }, [items]);
 
-  // Không cộng phí mặc định vào tổng tiền trước khi API vận chuyển trả kết quả.
-  // Nếu API backend phải fallback thì chính backend sẽ trả fee fallback.
   const finalShipping =
     subtotal === 0 || shippingFee === null
       ? 0
       : Number(shippingFee);
   const finalTotal = Math.max(0, subtotal - discountAmount) + finalShipping;
-
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -567,9 +608,6 @@ function CheckoutContent() {
     }
   };
 
-  // Khi đã nạp được địa chỉ cũ đầy đủ, tự tính lại phí để tổng tiền hiển thị
-  // luôn khớp với địa chỉ giao hàng hiện tại. Người dùng vẫn có thể bấm
-  // nút "Tính phí" để kiểm tra lại thủ công.
   useEffect(() => {
     if (
       addressLoading ||
@@ -998,7 +1036,6 @@ function CheckoutContent() {
               </div>
             </section>
 
-            {/* CỘT ĐƠN HÀNG */}
             <aside className="h-fit rounded-[30px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70 lg:sticky lg:top-24">
               <h2 className="text-xl font-black text-slate-950">Đơn hàng</h2>
 
@@ -1027,8 +1064,7 @@ function CheckoutContent() {
                 ))}
               </div>
 
-              {/* KHU VỰC NHẬP MÃ GIẢM GIÁ */}
-              <div className="mt-6 border-t border-slate-100 pt-5">
+              <div className="mt-6 border-t border-slate-100 pt-5 relative" ref={voucherDropdownRef}>
                 <div className="flex gap-2">
                   <div className="relative min-w-0 flex-1">
                     <Tag
@@ -1039,8 +1075,9 @@ function CheckoutContent() {
                       type="text"
                       value={couponInput}
                       onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-black uppercase tracking-wider text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white"
-                      placeholder="Mã giảm giá"
+                      onClick={() => setShowVoucherDropdown(true)}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-black uppercase tracking-wider text-slate-950 outline-none transition focus:border-orange-500 focus:bg-white cursor-pointer"
+                      placeholder="Chọn hoặc nhập mã"
                       disabled={isApplyingCoupon}
                     />
                   </div>
@@ -1058,6 +1095,58 @@ function CheckoutContent() {
                     )}
                   </button>
                 </div>
+
+                {showVoucherDropdown && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-60 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
+                    <div className="p-2 text-xs font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 flex justify-between items-center">
+                      <span>Mã giảm giá khả dụng</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowVoucherDropdown(false)}
+                        className="text-slate-500 hover:text-slate-950"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    {loadingVouchers ? (
+                      <div className="flex items-center justify-center py-4 text-xs font-bold text-slate-400 gap-2">
+                        <Loader2 size={14} className="animate-spin" /> Đang tải mã...
+                      </div>
+                    ) : availableVouchers.length === 0 ? (
+                      <div className="py-4 text-center text-xs font-bold text-slate-400">
+                        Hiện không có mã giảm giá nào.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 mt-1">
+                        {availableVouchers.map((v) => (
+                          <div
+                            key={v.id || v.code}
+                            onClick={() => handleSelectVoucherFromDropdown(v.code)}
+                            className="group cursor-pointer rounded-xl p-2.5 transition hover:bg-orange-50 border border-transparent hover:border-orange-200"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-black text-orange-600 text-xs tracking-wider">
+                                {v.code}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 group-hover:text-orange-500">
+                                Chọn dùng →
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-700 mt-0.5 line-clamp-1">
+                              {v.title || v.description}
+                            </p>
+                            {v.min_order_value > 0 && (
+                              <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                                Đơn tối thiểu: {formatCurrency(v.min_order_value)}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {appliedCoupon && (
                   <div className="mt-3 flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2 text-xs font-extrabold text-emerald-700">
@@ -1087,7 +1176,6 @@ function CheckoutContent() {
                 )}
               </div>
 
-              {/* BẢNG TÍNH TIỀN */}
               <div className="mt-5 space-y-3 text-sm font-bold text-slate-600 border-t border-slate-100 pt-5">
                 <div className="flex justify-between">
                   <span>Tạm tính</span>
@@ -1113,7 +1201,6 @@ function CheckoutContent() {
                 )}
               </div>
 
-              {/* TỔNG TIỀN */}
               <div className="mt-5 border-t border-dashed border-slate-200 pt-5">
                 <div className="flex items-end justify-between">
                   <span className="font-black text-slate-950">Tổng thanh toán</span>
