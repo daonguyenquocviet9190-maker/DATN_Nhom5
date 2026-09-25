@@ -26,7 +26,12 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
-import { addToCartConfirmed, getCart } from "@/utils/shopStorage";
+import {
+  addToCartConfirmed,
+  getCart,
+  normalizeCartItem,
+  saveBuyNowItems,
+} from "@/utils/shopStorage";
 import { getProductImage, PRODUCT_FALLBACK } from "@/utils/imageUrl";
 import {
   checkWishlistItem,
@@ -921,9 +926,10 @@ export default function ProductDetailClient({
   };
 
   const handleColorChange = (colorId) => {
+    const nextColorId = String(colorId);
     const colorVariants = variants.filter(
       (variant) =>
-        String(variant.color_id) === String(colorId)
+        String(variant.color_id) === nextColorId
     );
 
     const previewVariant =
@@ -933,11 +939,22 @@ export default function ProductDetailClient({
       colorVariants[0] ||
       null;
 
-    setSelectedColorId(String(colorId));
+    const previousSizeStillAvailable =
+      productHasSizes &&
+      selectedSizeId &&
+      colorVariants.some(
+        (variant) =>
+          String(variant.size_id) === String(selectedSizeId) &&
+          Number(variant.stock || 0) > 0
+      );
 
-    // Đổi màu thì bắt buộc xác nhận lại size nếu sản phẩm có size.
+    setSelectedColorId(nextColorId);
     setSelectedSizeId(
-      productHasSizes ? "" : selectedSizeId
+      productHasSizes
+        ? previousSizeStillAvailable
+          ? String(selectedSizeId)
+          : ""
+        : selectedSizeId
     );
 
     if (previewVariant?.image) {
@@ -1080,6 +1097,32 @@ export default function ProductDetailClient({
        * thành công hoặc chuyển sang checkout. Điều này tránh tình trạng UI
        * báo "đã thêm" trong khi server vừa từ chối vì stock đã thay đổi.
        */
+      if (buyNow) {
+        const buyNowItem = normalizeCartItem(
+          {
+            ...cartProduct,
+            quantity,
+            size: cartProduct.size,
+            color: cartProduct.color,
+            product_variant_id: cartProduct.product_variant_id,
+            variant_id: cartProduct.variant_id,
+            variantId: cartProduct.variant_id,
+          },
+          {
+            quantity,
+            size: cartProduct.size,
+            color: cartProduct.color,
+            variantId: cartProduct.variant_id,
+            variant_id: cartProduct.variant_id,
+            product_variant_id: cartProduct.product_variant_id,
+          }
+        );
+
+        saveBuyNowItems([buyNowItem]);
+        router.push("/checkout?mode=buy_now");
+        return;
+      }
+
       const result = await addToCartConfirmed(cartProduct, {
         quantity,
         size: cartProduct.size,
@@ -1095,11 +1138,6 @@ export default function ProductDetailClient({
           result?.message ||
             "Không thể thêm sản phẩm do tồn kho vừa thay đổi."
         );
-        return;
-      }
-
-      if (buyNow) {
-        router.push("/checkout");
         return;
       }
 

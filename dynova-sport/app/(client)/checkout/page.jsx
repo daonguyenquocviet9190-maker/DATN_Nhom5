@@ -20,7 +20,9 @@ import {
 
 import { formatCurrency } from "@/data/shop";
 import {
+  clearBuyNowItems,
   clearCart,
+  getBuyNowItems,
   getCart,
   getCurrentUser,
 } from "@/utils/shopStorage";
@@ -97,6 +99,8 @@ function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const buyNowMode = searchParams ? searchParams.get("mode") === "buy_now" : false;
+
   const [items, setItems] = useState([]);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
@@ -122,6 +126,7 @@ function CheckoutContent() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [successOrder, setSuccessOrder] = useState(null);
+  const [successOrderAmount, setSuccessOrderAmount] = useState(0);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -145,8 +150,8 @@ function CheckoutContent() {
   }, [items]);
 
   useEffect(() => {
-    const syncCart = () => setItems(getCart());
-    const cart = getCart();
+    const syncCart = () => setItems(buyNowMode ? getBuyNowItems() : getCart());
+    const cart = buyNowMode ? getBuyNowItems() : getCart();
     const user = getCurrentUser();
 
     setItems(cart);
@@ -167,20 +172,53 @@ function CheckoutContent() {
     const savedCoupon = urlCoupon || localStorage.getItem("applied_coupon") || "";
 
     if (savedCoupon) {
+      const storedDiscount = Number(localStorage.getItem("discount_amount") || 0);
       setCouponInput(savedCoupon);
+      setAppliedCoupon(savedCoupon);
+      setDiscountAmount(storedDiscount > 0 ? storedDiscount : 0);
+      setCouponMessage("Mã giảm giá từ giỏ hàng đã được giữ lại cho bước thanh toán.");
+      setIsErrorCoupon(false);
     }
     return () => window.removeEventListener("dynova:cart", syncCart);
   }, [searchParams]);
 
+  const canApplyCoupon = subtotal > 0 && shippingFee !== null;
+
   useEffect(() => {
-    if (subtotal > 0 && couponInput) {
-      verifyCoupon(couponInput, subtotal);
+    if (!couponInput.trim()) {
+      if (appliedCoupon) {
+        removeCouponState();
+      }
+      setCouponMessage("");
+      setIsErrorCoupon(false);
+      return;
     }
-  }, [subtotal]);
+
+    const isPersistedCartCoupon =
+      String(couponInput).trim().toUpperCase() ===
+      String(localStorage.getItem("applied_coupon") || "").trim().toUpperCase();
+
+    if (!canApplyCoupon && !isPersistedCartCoupon) {
+      setCouponMessage("Bạn cần tính phí vận chuyển trước khi áp dụng mã giảm giá mới.");
+      setIsErrorCoupon(true);
+      return;
+    }
+
+    verifyCoupon(couponInput, subtotal);
+  }, [subtotal, shippingFee, couponInput]);
 
   const verifyCoupon = async (codeToVerify, currentSubtotal) => {
     const cleanCode = codeToVerify.trim().toUpperCase();
     if (!cleanCode) return;
+
+    const isPersistedCartCoupon =
+      cleanCode === String(localStorage.getItem("applied_coupon") || "").trim().toUpperCase();
+
+    if (shippingFee === null && !isPersistedCartCoupon) {
+      setCouponMessage("Bạn cần tính phí vận chuyển trước khi áp dụng mã giảm giá mới.");
+      setIsErrorCoupon(true);
+      return;
+    }
 
     setIsApplyingCoupon(true);
     setCouponMessage("");
@@ -235,12 +273,24 @@ function CheckoutContent() {
 
   const handleApplyCoupon = (e) => {
     e.preventDefault();
+
     if (!couponInput.trim()) {
       removeCouponState();
       setCouponMessage("Vui lòng nhập mã giảm giá.");
       setIsErrorCoupon(true);
       return;
     }
+
+    const isPersistedCartCoupon =
+      String(couponInput).trim().toUpperCase() ===
+      String(localStorage.getItem("applied_coupon") || "").trim().toUpperCase();
+
+    if (shippingFee === null && !isPersistedCartCoupon) {
+      setCouponMessage("Bạn cần tính phí vận chuyển trước khi áp dụng mã giảm giá mới.");
+      setIsErrorCoupon(true);
+      return;
+    }
+
     verifyCoupon(couponInput, subtotal);
   };
 
@@ -676,17 +726,35 @@ function CheckoutContent() {
       const order = orderResponse?.data || orderResponse?.order || orderResponse;
       if (!order?.id) throw new Error("Máy chủ chưa trả về mã đơn hàng.");
 
-      clearCart();
+      const realOrderAmount = Number(
+        order?.grand_total ??
+        order?.total ??
+        order?.total_price ??
+        checkedTotal ??
+        0
+      );
+
+      if (buyNowMode) {
+        clearBuyNowItems();
+      } else {
+        clearCart();
+      }
+
       removeCouponState();
       window.dispatchEvent(new Event("dynova:storage"));
       setItems([]);
+      setSuccessOrderAmount(realOrderAmount);
 
       if (paymentMethod === "BANK") {
         router.push(`/payment/bank/${order.id}`);
         return;
       }
 
-      setSuccessOrder(order);
+      setSuccessOrder({
+        ...order,
+        total: realOrderAmount,
+        grand_total: realOrderAmount,
+      });
     } catch (error) {
       setErrors({
         submit: error.message || "Không thể tạo đơn hàng. Vui lòng thử lại.",
@@ -720,19 +788,18 @@ function CheckoutContent() {
               <div className="mt-2 flex justify-between">
                 <span>Tổng tiền</span>
                 <span className="text-orange-600">
-                  {formatCurrency(successOrder.total || finalTotal)}
+                  {formatCurrency(successOrderAmount || successOrder?.grand_total || successOrder?.total || 0)}
                 </span>
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/orders")}
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Link
+                href="/orders"
                 className="rounded-2xl bg-orange-500 px-6 py-4 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
               >
                 Theo dõi đơn hàng
-              </button>
+              </Link>
 
               <Link
                 href="/shop"
@@ -1048,7 +1115,7 @@ function CheckoutContent() {
                   <button
                     type="button"
                     onClick={handleApplyCoupon}
-                    disabled={isApplyingCoupon}
+                    disabled={isApplyingCoupon || shippingFee === null}
                     className="flex h-12 items-center justify-center rounded-2xl bg-slate-950 px-5 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-500 disabled:opacity-60"
                   >
                     {isApplyingCoupon ? (

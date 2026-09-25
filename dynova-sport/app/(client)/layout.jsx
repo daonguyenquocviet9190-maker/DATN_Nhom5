@@ -164,7 +164,6 @@ export default function ClientLayout({ children }) {
     {
       title: "Mua sắm",
       links: [
-        { name: "Flash Sale", href: "/sale" },
         { name: "Sản phẩm mới", href: "/shop" },
         { name: "Bộ sưu tập", href: "/collections" },
         { name: "Sản phẩm yêu thích", href: "/wishlist" },

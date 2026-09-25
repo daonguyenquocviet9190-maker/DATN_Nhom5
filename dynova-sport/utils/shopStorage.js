@@ -9,6 +9,7 @@ import {
 const KEYS = {
   cart: "dynova_cart",
   serverCart: "dynova_server_cart",
+  buyNow: "dynova_buy_now_checkout",
   wishlist: "dynova_wishlist",
   users: "dynova_users",
   currentUser: "dynova_current_user",
@@ -1833,6 +1834,36 @@ export function removeCartItem(key) {
   );
 
   return next;
+}
+
+export function getBuyNowItems() {
+  if (!isBrowser()) return [];
+
+  const items = readJson(KEYS.buyNow, []);
+
+  return normalizeCartList(items, "buy_now").map((item) => ({
+    ...item,
+    source: "buy_now",
+  }));
+}
+
+export function saveBuyNowItems(items) {
+  const normalized = normalizeCartList(items, "buy_now").map((item) => ({
+    ...item,
+    source: "buy_now",
+  }));
+
+  writeJson(KEYS.buyNow, normalized);
+
+  return normalized;
+}
+
+export function clearBuyNowItems() {
+  if (!isBrowser()) return [];
+
+  window.localStorage.removeItem(KEYS.buyNow);
+  dispatchStorageEvent();
+  return [];
 }
 
 export function clearCart() {
