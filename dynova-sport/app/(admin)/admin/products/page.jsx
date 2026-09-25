@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Boxes,
@@ -294,6 +294,18 @@ function getVariantFinalPrice(variant) {
   }
 
   return price;
+}
+
+function isVariantActive(variant) {
+  return (
+    variant?.is_active !== false &&
+    variant?.is_active !== 0 &&
+    variant?.is_active !== "0"
+  );
+}
+
+function getActiveVariantCount(list = []) {
+  return list.filter((variant) => isVariantActive(variant)).length;
 }
 
 function getVariantPreview(variant) {
@@ -823,6 +835,13 @@ export default function AdminProductsPage() {
     );
   };
 
+  const matrixPreviewCount =
+    Math.max(
+      1,
+      (selectedColorIds.length || 1) *
+        (selectedSizeIds.length || 1)
+    );
+
   const loadData = async ({
     page = currentPage,
     showLoading = true,
@@ -1076,6 +1095,78 @@ export default function AdminProductsPage() {
       };
     }, [variants]);
 
+  const matrixGrid = useMemo(() => {
+    const selectedColorList =
+      selectedColorIds
+        .map((colorId) =>
+          colors.find(
+            (item) =>
+              String(item.id) === String(colorId)
+          )
+        )
+        .filter(Boolean);
+
+    const selectedSizeList =
+      selectedSizeIds
+        .map((sizeId) =>
+          sizes.find(
+            (item) =>
+              String(item.id) === String(sizeId)
+          )
+        )
+        .filter(Boolean);
+
+    if (
+      !selectedColorList.length ||
+      !selectedSizeList.length
+    ) {
+      return [];
+    }
+
+    const variantMap = new Map();
+
+    variants.forEach((variant) => {
+      const colorKey = normalizeId(
+        variant.color_id
+      );
+      const sizeKey = normalizeId(
+        variant.size_id
+      );
+
+      if (colorKey && sizeKey) {
+        variantMap.set(
+          `${colorKey}::${sizeKey}`,
+          variant
+        );
+      }
+    });
+
+    return selectedColorList.map((color) => ({
+      colorId: String(color.id),
+      colorName: color.name,
+      colorHex: color.hex || "#cbd5e1",
+      cells: selectedSizeList.map((size) => {
+        const variant =
+          variantMap.get(
+            `${String(color.id)}::${String(size.id)}`
+          ) || null;
+
+        return {
+          sizeId: String(size.id),
+          sizeName: size.name,
+          sizeType: size.type || "",
+          variant,
+        };
+      }),
+    }));
+  }, [
+    selectedColorIds,
+    selectedSizeIds,
+    colors,
+    sizes,
+    variants,
+  ]);
+
   const resetEditor = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
@@ -1258,19 +1349,33 @@ export default function AdminProductsPage() {
     clientKey,
     patch
   ) => {
-    setVariants(
-      (current) =>
-        current.map(
-          (variant) =>
-            variant.client_key ===
-            clientKey
-              ? {
-                  ...variant,
-                  ...patch,
-                }
-              : variant
-        )
-    );
+    setVariants((current) => {
+      const next = current.map((variant) =>
+        variant.client_key === clientKey
+          ? {
+              ...variant,
+              ...patch,
+            }
+          : variant
+      );
+
+      if (
+        form.status === "active" &&
+        patch?.is_active === false &&
+        getActiveVariantCount(next) === 0
+      ) {
+        setError(
+          "Sản phẩm đang bán phải có ít nhất 1 biến thể đang hoạt động."
+        );
+        return current;
+      }
+
+      if (form.status === "active") {
+        setError("");
+      }
+
+      return next;
+    });
   };
 
   const removeVariant = (
@@ -1285,13 +1390,33 @@ export default function AdminProductsPage() {
 
     if (!target) return;
 
+    const activeAfterRemoval =
+      variants.filter(
+        (variant) =>
+          variant.client_key !== clientKey &&
+          isVariantActive(variant)
+      ).length;
+
+    if (
+      form.status === "active" &&
+      isVariantActive(target) &&
+      activeAfterRemoval === 0
+    ) {
+      setError(
+        "Sản phẩm đang bán phải có ít nhất 1 biến thể đang hoạt động. Không thể xóa biến thể cuối cùng."
+      );
+      return;
+    }
+
     const label =
       target.sku ||
       "biến thể này";
 
     const accepted =
       window.confirm(
-        `Xóa ${label} khỏi sản phẩm?`
+        target.id
+          ? `Xóa ${label} khỏi sản phẩm?\n\nNếu biến thể đã phát sinh đơn hàng, hệ thống sẽ tắt biến thể thay vì xóa hẳn để giữ lịch sử.`
+          : `Xóa ${label} khỏi sản phẩm?`
       );
 
     if (!accepted) return;
@@ -1304,6 +1429,7 @@ export default function AdminProductsPage() {
             clientKey
         )
     );
+    setError("");
   };
 
   const duplicateVariant = (
@@ -1383,7 +1509,240 @@ export default function AdminProductsPage() {
     );
   };
 
+  const ensureMatrixCellVariant = (
+    colorId,
+    sizeId
+  ) => {
+    const existingVariant =
+      variants.find(
+        (variant) =>
+          String(variant.color_id) === String(colorId) &&
+          String(variant.size_id) === String(sizeId)
+      );
+
+    if (existingVariant) {
+      return existingVariant;
+    }
+
+    const color =
+      colors.find(
+        (item) =>
+          String(item.id) === String(colorId)
+      ) || null;
+
+    const size =
+      sizes.find(
+        (item) =>
+          String(item.id) === String(sizeId)
+      ) || null;
+
+    const nextVariant = createVariant({
+      color_id: colorId,
+      size_id: sizeId,
+      sku: buildAutoSku({
+        productName: form.name,
+        color,
+        size,
+        index: variants.length,
+      }),
+      price: matrixDefaults.price,
+      discount_price: matrixDefaults.discount_price,
+      stock: matrixDefaults.stock,
+      is_active: true,
+    });
+
+    setVariants((current) => [...current, nextVariant]);
+    return nextVariant;
+  };
+
+  const applyMatrixDefaultsToSelection = () => {
+    if (
+      !selectedColorIds.length ||
+      !selectedSizeIds.length
+    ) {
+      setError(
+        "Chọn ít nhất một màu và một size trước khi áp dụng mặc định cho ma trận."
+      );
+      return;
+    }
+
+    const targetVariants = variants.filter(
+      (variant) =>
+        selectedColorIds.includes(
+          String(variant.color_id)
+        ) &&
+        selectedSizeIds.includes(
+          String(variant.size_id)
+        )
+    );
+
+    const missingPairs = selectedColorIds.flatMap((colorId) =>
+      selectedSizeIds
+        .filter(
+          (sizeId) =>
+            !variants.some(
+              (variant) =>
+                String(variant.color_id) === String(colorId) &&
+                String(variant.size_id) === String(sizeId)
+            )
+        )
+        .map((sizeId) => ({ colorId, sizeId }))
+    );
+
+    if (missingPairs.length > 0) {
+      missingPairs.forEach(({ colorId, sizeId }) => {
+        ensureMatrixCellVariant(colorId, sizeId);
+      });
+    }
+
+    setVariants((current) =>
+      current.map((variant) => {
+        if (
+          selectedColorIds.includes(
+            String(variant.color_id)
+          ) &&
+          selectedSizeIds.includes(
+            String(variant.size_id)
+          )
+        ) {
+          return {
+            ...variant,
+            price:
+              matrixDefaults.price || variant.price,
+            discount_price:
+              matrixDefaults.discount_price,
+            stock:
+              matrixDefaults.stock,
+          };
+        }
+
+        return variant;
+      })
+    );
+
+    setError("");
+    showNotice(
+      `Đã áp dụng giá trị mặc định cho ${
+        targetVariants.length + missingPairs.length
+      } ô ma trận.`
+    );
+  };
+
+  const applyDefaultsToColorRow = (colorId) => {
+    const pairs =
+      selectedSizeIds.map((sizeId) => ({
+        colorId,
+        sizeId,
+      }));
+
+    if (!pairs.length) {
+      setError(
+        "Vui lòng chọn ít nhất một size trước khi áp dụng cho hàng màu."
+      );
+      return;
+    }
+
+    pairs.forEach(({ colorId: currentColorId, sizeId }) => {
+      ensureMatrixCellVariant(currentColorId, sizeId);
+    });
+
+    setVariants((current) =>
+      current.map((variant) => {
+        if (
+          String(variant.color_id) === String(colorId) &&
+          selectedSizeIds.includes(
+            String(variant.size_id)
+          )
+        ) {
+          return {
+            ...variant,
+            price:
+              matrixDefaults.price || variant.price,
+            discount_price:
+              matrixDefaults.discount_price,
+            stock:
+              matrixDefaults.stock,
+          };
+        }
+
+        return variant;
+      })
+    );
+
+    setError("");
+    showNotice(
+      `Đã áp dụng cho hàng màu ${
+        colors.find(
+          (item) =>
+            String(item.id) === String(colorId)
+        )?.name || "đã chọn"
+      }.`
+    );
+  };
+
+  const applyDefaultsToSizeColumn = (sizeId) => {
+    const pairs =
+      selectedColorIds.map((colorId) => ({
+        colorId,
+        sizeId,
+      }));
+
+    if (!pairs.length) {
+      setError(
+        "Vui lòng chọn ít nhất một màu trước khi áp dụng cho cột size."
+      );
+      return;
+    }
+
+    pairs.forEach(({ colorId, sizeId: currentSizeId }) => {
+      ensureMatrixCellVariant(colorId, currentSizeId);
+    });
+
+    setVariants((current) =>
+      current.map((variant) => {
+        if (
+          String(variant.size_id) === String(sizeId) &&
+          selectedColorIds.includes(
+            String(variant.color_id)
+          )
+        ) {
+          return {
+            ...variant,
+            price:
+              matrixDefaults.price || variant.price,
+            discount_price:
+              matrixDefaults.discount_price,
+            stock:
+              matrixDefaults.stock,
+          };
+        }
+
+        return variant;
+      })
+    );
+
+    setError("");
+    showNotice(
+      `Đã áp dụng cho cột size ${
+        sizes.find(
+          (item) =>
+            String(item.id) === String(sizeId)
+        )?.name || "đã chọn"
+      }.`
+    );
+  };
+
   const generateMatrix = () => {
+    if (
+      variants.length === 0 &&
+      (!selectedColorIds.length || !selectedSizeIds.length)
+    ) {
+      setError(
+        "Để tạo ma trận đúng chuẩn, hãy chọn ít nhất 1 màu và 1 size trước khi sinh biến thể."
+      );
+      return;
+    }
+
     const selectedColors = selectedColorIds.length
       ? selectedColorIds
       : [""];
@@ -2282,12 +2641,23 @@ export default function AdminProductsPage() {
                                 key={option.value}
                                 type="button"
                                 aria-pressed={active}
-                                onClick={() =>
+                                onClick={() => {
+                                  if (
+                                    option.value === "active" &&
+                                    getActiveVariantCount(variants) === 0
+                                  ) {
+                                    setError(
+                                      "Để đặt trạng thái 'Đang bán', sản phẩm phải có ít nhất 1 biến thể đang hoạt động."
+                                    );
+                                    return;
+                                  }
+
+                                  setError("");
                                   setForm((current) => ({
                                     ...current,
                                     status: option.value,
-                                  }))
-                                }
+                                  }));
+                                }}
                                 className={
                                   "rounded-2xl border p-4 text-left transition " +
                                   (active
@@ -2537,8 +2907,20 @@ export default function AdminProductsPage() {
                       <Plus
                         size={17}
                       />
-                      Tạo biến thể
+                      Tạo ma trận biến thể
                     </button>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-3">
+                    <p className="text-[11px] font-black uppercase tracking-wider text-orange-200">
+                      Preview ma trận
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-slate-200">
+                      Màu đã chọn: <span className="text-white">{selectedColorIds.length || 0}</span> · Size đã chọn: <span className="text-white">{selectedSizeIds.length || 0}</span>
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">
+                      Hệ thống sẽ sinh <span className="font-black text-orange-300">{matrixPreviewCount}</span> tổ hợp biến thể theo đúng ma trận màu × size.
+                    </p>
                   </div>
 
                   <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr_360px]">
@@ -2734,6 +3116,204 @@ export default function AdminProductsPage() {
                   </div>
                 </section>
 
+                {matrixGrid.length > 0 && (
+                  <section className="rounded-[24px] border border-sky-500/20 bg-sky-500/5 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-wider text-sky-200">
+                          Ma trận biến thể
+                        </p>
+                        <p className="mt-1 text-sm font-bold text-slate-200">
+                          Click vào ô để tạo hoặc chỉnh nhanh giá, giảm giá và tồn kho.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-200">
+                          {matrixGrid.length * selectedSizeIds.length} ô
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={applyMatrixDefaultsToSelection}
+                          className="rounded-xl border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-200 transition hover:bg-sky-500/20"
+                        >
+                          Áp dụng mặc định
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <div
+                        className="grid min-w-[760px] gap-2"
+                        style={{
+                          gridTemplateColumns: `160px repeat(${selectedSizeIds.length || 1}, minmax(150px, 1fr))`,
+                        }}
+                      >
+                        <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3" />
+
+                        {selectedSizeIds.map((sizeId) => {
+                          const size = sizes.find(
+                            (item) => String(item.id) === String(sizeId)
+                          );
+
+                          return (
+                            <div
+                              key={sizeId}
+                              className="rounded-2xl border border-white/10 bg-slate-950/70 p-3 text-center"
+                            >
+                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Size
+                              </p>
+                              <p className="mt-1 text-sm font-black text-white">
+                                {size?.name || "Size"}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  applyDefaultsToSizeColumn(sizeId)
+                                }
+                                className="mt-2 w-full rounded-xl border border-sky-500/30 bg-sky-500/10 px-2 py-1.5 text-[9px] font-black uppercase tracking-wider text-sky-200 transition hover:bg-sky-500/20"
+                              >
+                                Áp dụng cột
+                              </button>
+                            </div>
+                          );
+                        })}
+
+                        {matrixGrid.map((row) => (
+                          <Fragment key={row.colorId}>
+                            <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className="h-4 w-4 rounded-full border border-white/20"
+                                  style={{ backgroundColor: row.colorHex }}
+                                />
+                                <span className="text-sm font-black text-white">
+                                  {row.colorName}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  applyDefaultsToColorRow(row.colorId)
+                                }
+                                className="rounded-xl border border-orange-400/30 bg-orange-500/10 px-2 py-1.5 text-[9px] font-black uppercase tracking-wider text-orange-200 transition hover:bg-orange-500/20"
+                              >
+                                Áp dụng hàng
+                              </button>
+                            </div>
+
+                            {row.cells.map((cell) => {
+                              const activeVariant = cell.variant;
+
+                              return (
+                                <div
+                                  key={`${row.colorId}-${cell.sizeId}`}
+                                  className={
+                                    "rounded-2xl border p-3 text-left " +
+                                    (activeVariant
+                                      ? "border-emerald-400/35 bg-emerald-500/8"
+                                      : "border-dashed border-white/10 bg-white/[0.02]")
+                                  }
+                                >
+                                  {activeVariant ? (
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                          {activeVariant.sku || "SKU"}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateVariant(
+                                              activeVariant.client_key,
+                                              {
+                                                is_active: !activeVariant.is_active,
+                                              }
+                                            )
+                                          }
+                                          className={
+                                            "h-6 w-10 rounded-full border transition " +
+                                            (activeVariant.is_active
+                                              ? "border-emerald-400 bg-emerald-500/20"
+                                              : "border-slate-600 bg-slate-700/60")
+                                          }
+                                        >
+                                          <span
+                                            className={
+                                              "block h-4 w-4 rounded-full bg-white transition " +
+                                              (activeVariant.is_active ? "ml-5" : "ml-1")
+                                            }
+                                          />
+                                        </button>
+                                      </div>
+
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={activeVariant.price}
+                                        onChange={(event) =>
+                                          updateVariant(activeVariant.client_key, {
+                                            price: event.target.value,
+                                          })
+                                        }
+                                        className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-2.5 py-2 text-[11px] font-bold text-white outline-none focus:border-orange-400"
+                                        placeholder="Giá"
+                                      />
+
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={activeVariant.discount_price}
+                                        onChange={(event) =>
+                                          updateVariant(activeVariant.client_key, {
+                                            discount_price: event.target.value,
+                                          })
+                                        }
+                                        className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-2.5 py-2 text-[11px] font-bold text-white outline-none focus:border-orange-400"
+                                        placeholder="Giảm"
+                                      />
+
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={activeVariant.stock}
+                                        onChange={(event) =>
+                                          updateVariant(activeVariant.client_key, {
+                                            stock: event.target.value,
+                                          })
+                                        }
+                                        className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-2.5 py-2 text-[11px] font-bold text-white outline-none focus:border-orange-400"
+                                        placeholder="Tồn"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        ensureMatrixCellVariant(
+                                          row.colorId,
+                                          cell.sizeId
+                                        )
+                                      }
+                                      className="w-full rounded-xl border border-dashed border-sky-400/40 bg-sky-500/5 px-3 py-3 text-[11px] font-black uppercase tracking-wider text-sky-200 transition hover:bg-sky-500/10"
+                                    >
+                                      Tạo ô này
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                )}
+
                 <section className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04]">
                   <div className="flex flex-col gap-4 border-b border-white/10 p-5 xl:flex-row xl:items-center xl:justify-between">
                     <div>
@@ -2774,7 +3354,7 @@ export default function AdminProductsPage() {
                         <Plus
                           size={15}
                         />
-                        Thêm biến thể
+                        Thêm biến thể thủ công
                       </button>
                     </div>
                   </div>

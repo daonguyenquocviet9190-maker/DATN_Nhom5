@@ -31,6 +31,9 @@ import {
   reorderOrder,
 } from "@/services/order.service";
 import {
+  getSePayPayment,
+} from "@/services/payment.service";
+import {
   createReview,
   getMyReviews,
 } from "@/services/review.service";
@@ -508,6 +511,8 @@ export default function OrderDetailPage() {
   const [reviews, setReviews] = useState([]);
   const [reviewForms, setReviewForms] = useState({});
   const [reviewSubmitting, setReviewSubmitting] = useState("");
+  const [paymentState, setPaymentState] = useState(null);
+  const [paymentStateLoading, setPaymentStateLoading] = useState(false);
   const [catalogMaps, setCatalogMaps] = useState({
     productMap: {},
     variantMap: {},
@@ -525,9 +530,11 @@ export default function OrderDetailPage() {
   const rawStatus = normalizeStatus(order?.status || "pending");
   const paymentMethod = String(order?.payment_method || "").toLowerCase();
   const paymentStatus = String(order?.payment_status || "unpaid").toLowerCase();
+  const bankTransferPayment = ["bank", "bank_transfer", "vietqr", "sepay"].includes(paymentMethod);
+  const paymentPaid = paymentStatus === "paid";
   const status =
-    ["bank", "bank_transfer", "vietqr", "sepay"].includes(paymentMethod) &&
-    paymentStatus !== "paid" &&
+    bankTransferPayment &&
+    !paymentPaid &&
     rawStatus === "pending"
       ? "waiting_bank_transfer"
       : rawStatus;
@@ -546,6 +553,11 @@ export default function OrderDetailPage() {
   const subtotal = Number(order?.subtotal || order?.total_price || 0);
   const shippingFee = Number(order?.shipping_fee || 0);
   const discount = Number(order?.discount || order?.discount_amount || 0);
+  const paymentQrUrl = paymentState?.qr_url || "";
+  const paymentBank = paymentState?.bank || {};
+  const paymentTransferContent =
+    paymentState?.transfer_content || paymentState?.payment_code || getOrderCode(order);
+  const showBankTransferQr = bankTransferPayment && !paymentPaid && !paymentStateLoading;
 
   const showNotice = (message) => {
     setNotice(message);
@@ -594,6 +606,40 @@ export default function OrderDetailPage() {
   useEffect(() => {
     loadOrder();
   }, [orderId]);
+
+  useEffect(() => {
+    const shouldLoadPaymentState = !!orderId && bankTransferPayment && !paymentPaid;
+
+    if (!shouldLoadPaymentState) {
+      setPaymentState(null);
+      return;
+    }
+
+    let ignore = false;
+
+    const loadPaymentState = async () => {
+      try {
+        setPaymentStateLoading(true);
+        const state = await getSePayPayment(orderId);
+        if (!ignore) setPaymentState(state);
+      } catch {
+        if (!ignore) setPaymentState(null);
+      } finally {
+        if (!ignore) setPaymentStateLoading(false);
+      }
+    };
+
+    loadPaymentState();
+
+    const timer = window.setInterval(() => {
+      loadPaymentState();
+    }, 8000);
+
+    return () => {
+      ignore = true;
+      window.clearInterval(timer);
+    };
+  }, [orderId, bankTransferPayment, paymentPaid]);
 
   const handleCancel = async () => {
     if (!order?.id) return;
@@ -1166,6 +1212,33 @@ export default function OrderDetailPage() {
                 <span className="text-slate-500">Trạng thái</span>
                 <span className="font-black text-orange-600">{order.payment_status === "paid" ? "Đã thanh toán" : "Chưa thanh toán"}</span>
               </div>
+
+              {showBankTransferQr && paymentQrUrl && (
+                <div className="mb-4 rounded-[24px] border border-orange-100 bg-orange-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-wider text-orange-600">Mã QR chuyển khoản</p>
+                  <div className="mt-3 rounded-[20px] border border-orange-200 bg-white p-3">
+                    <img
+                      src={paymentQrUrl}
+                      alt="QR chuyển khoản"
+                      className="mx-auto aspect-square w-full max-w-[180px] rounded-[14px] object-contain"
+                    />
+                  </div>
+                  <p className="mt-3 text-center text-xs font-bold leading-6 text-slate-600">
+                    Chuyển khoản đúng nội dung <span className="font-black text-orange-600">{paymentTransferContent}</span>
+                  </p>
+                  <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-6 text-slate-600">
+                    <p><span className="font-black text-slate-700">Ngân hàng:</span> {paymentBank.name || paymentBank.code || "Chưa cập nhật"}</p>
+                    <p><span className="font-black text-slate-700">Số tài khoản:</span> {paymentBank.account_number || "Chưa cập nhật"}</p>
+                    <p><span className="font-black text-slate-700">Chủ tài khoản:</span> {paymentBank.account_name || "Chưa cập nhật"}</p>
+                  </div>
+                </div>
+              )}
+
+              {showBankTransferQr && !paymentQrUrl && (
+                <div className="mb-4 rounded-[24px] border border-orange-100 bg-orange-50 p-4 text-center text-xs font-bold text-orange-700">
+                  {paymentStateLoading ? "Đang tải mã QR thanh toán..." : "Đang chuẩn bị mã QR thanh toán cho đơn này."}
+                </div>
+              )}
 
               <div className="my-4 border-t border-slate-100" />
 
