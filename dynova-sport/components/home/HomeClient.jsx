@@ -504,91 +504,84 @@ export default function HomeClient({
       </section>
 
       {safeBrands.length > 0 && (
-        <section className="container-page pb-14">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-                  Thương hiệu
-                </p>
-                <h2 className="mt-1 text-2xl font-black text-slate-950">
-                  Brand nổi bật
-                </h2>
-              </div>
+  <section className="container-page pb-14">
+    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
 
-              <div className="flex flex-wrap gap-2">
-                {safeBrands.slice(0, 8).map((brand) => (
-                  <Link
-                    key={brand.id}
-                    href={"/shop?brand=" + brand.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-                  >
-                    {brand.name}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Tiêu đề */}
+      <div className="mb-6">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
+          THƯƠNG HIỆU
+        </p>
 
-      <section className="container-page pb-16">
-        <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
-              Danh mục
-            </p>
+        <h2 className="mt-1 text-2xl font-black text-slate-950">
+          Thương hiệu nổi bật
+        </h2>
 
-            <h2 className="mt-2 text-3xl font-black tracking-[-0.03em] text-slate-950">
-              Mua theo nhu cầu tập luyện
-            </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Khám phá các thương hiệu thể thao được yêu thích.
+        </p>
+      </div>
 
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              Khám phá nhanh các nhóm sản phẩm phù hợp cho luyện tập, thi đấu và phong cách năng động.
-            </p>
-          </div>
+      {/* Danh sách logo chạy */}
+      <div className="relative overflow-hidden">
+        <div className="brand-marquee flex w-max gap-5">
 
-          <Link
-            href="/shop"
-            className="inline-flex items-center gap-2 text-sm font-black text-orange-600 hover:text-orange-700"
-          >
-            Xem tất cả
-            <ArrowRight size={16} />
-          </Link>
-        </div>
+          {/* Lặp lại 2 lần để tạo hiệu ứng chạy vô hạn */}
+          {[...safeBrands, ...safeBrands].map((brand, index) => {
+            const logoUrl = brand.logo
+              ? `http://127.0.0.1:8000/storage/brands/${encodeURIComponent(
+                  brand.logo
+                )}`
+              : "";
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {safeCategories.map((category) => (
-            <Link
-              key={category.id}
-              href={"/shop?category=" + category.id}
-              className="group flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
-            >
-              <div className="h-40 overflow-hidden bg-slate-100">
-                <img
-                  src={getCategoryImage(category)}
-                  alt={category.name}
-                  onError={(e) => {
-                    e.currentTarget.src = CATEGORY_FALLBACK;
-                  }}
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            return (
+              <Link
+                key={`${brand.id}-${index}`}
+                href={`/shop?brand=${brand.id}`}
+              className="group flex h-[100px] w-[180px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-orange-300 hover:shadow-lg"
+              >
+                {logoUrl ? (
+                 <img
+                  src={logoUrl}
+                  alt={brand.name}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
-              </div>
+                ) : (
+                  <span className="text-lg font-black text-slate-800">
+                    {brand.name}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
 
-              <div className="flex flex-1 flex-col p-4">
-                <h3 className="text-base font-black text-slate-950 transition group-hover:text-orange-600">
-                  {category.name}
-                </h3>
-
-                <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
-                  {category.description ||
-                    "Khám phá sản phẩm phù hợp với nhu cầu tập luyện."}
-                </p>
-              </div>
-            </Link>
-          ))}
         </div>
-      </section>
+      </div>
+
+      {/* CSS chạy ngang */}
+      <style jsx>{`
+        .brand-marquee {
+          animation: brand-scroll 30s linear infinite;
+        }
+
+        .brand-marquee:hover {
+          animation-play-state: paused;
+        }
+
+        @keyframes brand-scroll {
+          from {
+            transform: translateX(0);
+          }
+
+          to {
+            transform: translateX(-50%);
+          }
+        }
+      `}</style>
+
+    </div>
+  </section>
+)}
 
       <section className="bg-white py-16">
         <div className="container-page">
