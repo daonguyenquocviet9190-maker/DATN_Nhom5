@@ -385,7 +385,7 @@ export default function HomeClient({
   };
 
   return (
-    <div className="bg-[#f7f8fb]">
+    <div className="bg-white">
       {notice && (
         <div className="float-in fixed right-5 top-24 z-[90] max-w-sm rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
           {notice}
@@ -629,23 +629,23 @@ export default function HomeClient({
 
       <section className="container-page py-16">
         <div className="grid items-stretch gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="relative flex min-h-[430px] overflow-hidden rounded-[36px] bg-slate-950 p-7 text-white shadow-2xl shadow-slate-950/15 md:p-8">
-            <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-orange-500/20 blur-3xl" />
-            <div className="absolute -bottom-24 left-10 h-60 w-60 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(249,115,22,0.22),transparent_35%)]" />
+          <div className="relative flex min-h-[430px] overflow-hidden rounded-[36px] border border-slate-200 bg-white p-7 text-slate-900 shadow-[0_18px_50px_rgba(15,23,42,0.06)] md:p-8">
+            <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-orange-100 blur-3xl" />
+            <div className="absolute -bottom-24 left-10 h-60 w-60 rounded-full bg-orange-100 blur-3xl" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(249,115,22,0.08),transparent_35%)]" />
 
             <div className="relative z-10 flex w-full flex-col justify-between">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-lg shadow-orange-500/20">
+                <div className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-orange-500/20">
                   <BadgePercent size={15} />
                   Ưu đãi thành viên
                 </div>
 
-                <h2 className="mt-5 max-w-xl text-3xl font-black leading-tight tracking-[-0.04em] md:text-4xl">
+                <h2 className="mt-5 max-w-xl text-3xl font-black leading-tight tracking-[-0.04em] text-slate-950 md:text-4xl">
                   Nhập DYNOVANEW giảm ngay 100.000đ
                 </h2>
 
-                <p className="mt-3 max-w-lg text-sm leading-7 text-slate-300">
+                <p className="mt-3 max-w-lg text-sm leading-7 text-slate-600">
                   Áp dụng cho đơn hàng từ 500.000đ, giúp bạn mua sắm tiết kiệm hơn tại Dynova Sport.
                 </p>
 
@@ -657,12 +657,12 @@ export default function HomeClient({
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur"
+                      className="rounded-3xl border border-orange-100 bg-orange-50 p-4"
                     >
-                      <p className="text-xl font-black text-orange-300">
+                      <p className="text-xl font-black text-orange-600">
                         {item.value}
                       </p>
-                      <p className="mt-1 text-xs font-bold text-slate-400">
+                      <p className="mt-1 text-xs font-bold text-slate-500">
                         {item.label}
                       </p>
                     </div>
@@ -673,7 +673,7 @@ export default function HomeClient({
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
                   href="/shop"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-black uppercase tracking-wider text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-500 hover:text-white"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-orange-500 px-6 py-4 text-sm font-black uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-orange-600"
                 >
                   Mua ngay
                   <ArrowRight size={16} />
@@ -681,7 +681,7 @@ export default function HomeClient({
 
                 <Link
                   href="/checkout"
-                  className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm font-black uppercase tracking-wider text-slate-800 transition hover:-translate-y-0.5 hover:border-orange-200 hover:text-orange-600"
                 >
                   Checkout
                 </Link>
@@ -720,7 +720,7 @@ export default function HomeClient({
                   <Link
                     key={product.id}
                     href={"/shop/product/" + product.id}
-                    className="group flex min-h-[150px] gap-4 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-3 transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:bg-white hover:shadow-xl"
+                    className="group flex min-h-[150px] gap-4 overflow-hidden rounded-[28px] border border-slate-200 bg-white p-3 transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl"
                   >
                     <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-[22px] bg-slate-100 sm:h-32 sm:w-32">
                       <img
@@ -801,14 +801,14 @@ export default function HomeClient({
       </section>
 
       <section className="container-page pb-16">
-        <div className="overflow-hidden rounded-[32px] bg-gradient-to-r from-slate-950 to-slate-800 p-8 text-white md:p-10">
+        <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-[0_18px_45px_rgba(15,23,42,0.04)] md:p-10">
           <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-500">
                 Dynova Sport
               </p>
 
-              <h2 className="mt-2 max-w-2xl text-3xl font-black tracking-[-0.03em]">
+              <h2 className="mt-2 max-w-2xl text-3xl font-black tracking-[-0.03em] text-slate-950">
                 Sẵn sàng nâng cấp phong cách thể thao của bạn?
               </h2>
             </div>
