@@ -675,7 +675,7 @@ export default function ProductDetailClient({
   );
 
   const [selectedSizeId, setSelectedSizeId] = useState(
-    variants.length === 1 && firstVariant?.size_id
+    firstVariant?.size_id
       ? String(firstVariant.size_id)
       : ""
   );
@@ -701,22 +701,34 @@ export default function ProductDetailClient({
       return;
     }
 
-    setSelectedColorId(
-      firstVariant.color_id
-        ? String(firstVariant.color_id)
-        : ""
-    );
+    const nextColorId = firstVariant.color_id
+      ? String(firstVariant.color_id)
+      : "";
 
-    // Chỉ tự chọn khi sản phẩm thực sự chỉ có đúng một biến thể.
-    // Với nhiều size, khách hàng phải tự xác nhận size trước khi mua.
-    setSelectedSizeId(
-      variants.length === 1 && firstVariant.size_id
+    const firstAvailableSizeId = variants.find(
+      (variant) =>
+        String(variant.color_id || "") === String(nextColorId || "") &&
+        Number(variant.stock || 0) > 0
+    )?.size_id
+      ? String(
+          variants.find(
+            (variant) =>
+              String(variant.color_id || "") === String(nextColorId || "") &&
+              Number(variant.stock || 0) > 0
+          )?.size_id
+        )
+      : firstVariant.size_id
         ? String(firstVariant.size_id)
-        : ""
+        : "";
+
+    setSelectedColorId(nextColorId);
+
+    setSelectedSizeId(
+      productHasSizes ? firstAvailableSizeId : ""
     );
 
     setQuantity(1);
-  }, [firstVariant?.id, variants.length]);
+  }, [firstVariant?.id, productHasSizes, variants]);
 
   useEffect(() => {
     setMainImage(gallery[0] || FALLBACK_IMAGE);
@@ -948,12 +960,21 @@ export default function ProductDetailClient({
           Number(variant.stock || 0) > 0
       );
 
+    const fallbackSizeId =
+      productHasSizes && colorVariants.length > 0
+        ? String(
+            (colorVariants.find(
+              (variant) => Number(variant.stock || 0) > 0
+            ) || colorVariants[0]).size_id || ""
+          )
+        : "";
+
     setSelectedColorId(nextColorId);
     setSelectedSizeId(
       productHasSizes
         ? previousSizeStillAvailable
           ? String(selectedSizeId)
-          : ""
+          : fallbackSizeId
         : selectedSizeId
     );
 

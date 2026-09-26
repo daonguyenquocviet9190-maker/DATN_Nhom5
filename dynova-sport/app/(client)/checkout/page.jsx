@@ -149,13 +149,12 @@ function CheckoutContent() {
       const cartItems = buyNowMode ? getBuyNowItems() : getCart();
       const selected = buyNowMode ? [] : getSelectedCartKeys();
 
-      const filtered =
-        buyNowMode || selected.length === 0
-          ? cartItems
-          : cartItems.filter((item) => {
-              const key = String(item?.key || item?.id || item?.product_id || "");
-              return selected.includes(key);
-            });
+      const filtered = buyNowMode
+        ? cartItems
+        : cartItems.filter((item) => {
+            const key = String(item?.key || item?.id || item?.product_id || "");
+            return selected.includes(key);
+          });
 
       setItems(filtered);
     };

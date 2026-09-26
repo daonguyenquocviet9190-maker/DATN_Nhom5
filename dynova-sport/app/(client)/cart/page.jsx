@@ -135,6 +135,13 @@ export default function CartPage() {
       ? 0
       : defaultShippingFee;
 
+  const shippingSummaryText =
+    subtotal === 0
+      ? "Tính khi đặt hàng"
+      : subtotal >= freeShippingTarget
+        ? "Miễn phí ước tính"
+        : `${formatCurrency(defaultShippingFee)} ước tính`;
+
   const finalTotal = useMemo(() => {
     return subtotal + shipping;
   }, [subtotal, shipping]);
@@ -243,11 +250,11 @@ export default function CartPage() {
                     <div>
                       <p className="text-sm font-black text-slate-950">
                         {missingFreeShip === 0
-                          ? "Bạn đã được miễn phí vận chuyển."
-                          : "Mua thêm " + formatCurrency(missingFreeShip) + " để miễn phí vận chuyển."}
+                          ? "Đơn hàng đã đạt mức miễn phí ước tính."
+                          : "Mua thêm " + formatCurrency(missingFreeShip) + " để đạt miễn phí ước tính."}
                       </p>
                       <p className="mt-1 text-xs font-bold text-slate-400">
-                        Mốc miễn phí vận chuyển: {formatCurrency(freeShippingTarget)}
+                        Mốc miễn phí ước tính: {formatCurrency(freeShippingTarget)}
                       </p>
                     </div>
                   </div>
@@ -449,11 +456,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
                   <span className="min-w-0 truncate">Phí vận chuyển</span>
-                  <span className="shrink-0 font-bold text-slate-900">{shipping === 0 ? "Miễn phí" : formatCurrency(shipping)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
-                  <span className="min-w-0 truncate">Khuyến mãi</span>
-                  <span className="shrink-0 font-bold text-emerald-600">- 0đ</span>
+                  <span className="shrink-0 font-bold text-slate-900">{shippingSummaryText}</span>
                 </div>
               </div>
 
