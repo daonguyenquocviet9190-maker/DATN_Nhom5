@@ -693,6 +693,9 @@ export default function ProductDetailClient({
   const [cartSubmitting, setCartSubmitting] = useState(false);
   const cartSubmitLock = useRef(false);
 
+  const productHasColors = colorOptions.length > 0;
+  const productHasSizes = allSizeOptions.length > 0;
+
   useEffect(() => {
     if (!firstVariant) {
       setSelectedColorId("");
@@ -764,9 +767,6 @@ export default function ProductDetailClient({
     selectedColorId,
     variantsForSelectedColor,
   ]);
-
-  const productHasColors = colorOptions.length > 0;
-  const productHasSizes = allSizeOptions.length > 0;
 
   const hasRequiredSelection =
     (!productHasColors || Boolean(selectedColorId)) &&
