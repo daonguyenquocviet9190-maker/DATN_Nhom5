@@ -3354,7 +3354,7 @@ export default function AdminProductsPage() {
                         <Plus
                           size={15}
                         />
-                        Thêm biến thể 
+                        Thêm biến thể
                       </button>
                     </div>
                   </div>

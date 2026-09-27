@@ -465,7 +465,7 @@ export function getAdminOrders(query: QueryParams = {}) {
 export function updateAdminOrderStatus(
   id: number | string,
   status: string,
-  options: { tracking_code?: string; shipping_provider?: string } = {}
+  options: { shipping_provider?: "ghn" | "shop_staff"; note?: string } = {}
 ) {
   return adminFetch(`/admin/orders/${id}/status`, {
     method: "PATCH",

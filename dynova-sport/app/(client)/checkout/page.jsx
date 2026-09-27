@@ -26,6 +26,8 @@ import {
   getCart,
   getCurrentUser,
   getSelectedCartKeys,
+  saveCart,
+  saveSelectedCartKeys,
 } from "@/utils/shopStorage";
 
 import {
@@ -735,6 +737,7 @@ function CheckoutContent() {
           size: item.size || item.size_name || null,
           color: item.color || item.color_name || null,
         })),
+        checkoutMode: buyNowMode ? "buy_now" : "cart",
         coupon: appliedCoupon,
         paymentMethod,
         subtotal,
@@ -759,7 +762,11 @@ function CheckoutContent() {
       if (buyNowMode) {
         clearBuyNowItems();
       } else {
-        clearCart();
+        const cartItems = getCart();
+        const selectedKeys = new Set(items.map((item) => String(item?.key || item?.id || item?.product_id || "")));
+        const remainingCart = cartItems.filter((item) => !selectedKeys.has(String(item?.key || item?.id || item?.product_id || "")));
+        saveCart(remainingCart);
+        saveSelectedCartKeys([]);
       }
 
       removeCouponState();

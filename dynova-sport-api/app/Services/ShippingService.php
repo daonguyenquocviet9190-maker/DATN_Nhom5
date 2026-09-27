@@ -564,6 +564,8 @@ class ShippingService
         $description = (string) ($payload['Description'] ?? $payload['description'] ?? $this->statusLabel($status));
         $this->recordShippingEvent((int) $order->id, $trackingCode, $status, $description, $occurredAt, $payload, 'ghn_webhook');
 
+        $this->syncInternalOrderFromGhn((object) ['id' => $order->id, 'status' => $order->status], ['status' => $status]);
+
         if ($status === 'delivered') {
             $fresh = DB::table('orders')->where('id', $order->id)->first();
             $this->markDelivered($fresh);
@@ -1070,7 +1072,56 @@ class ShippingService
 
     private function syncInternalOrderFromGhn(object $order, array $tracking): void
     {
-        if (($tracking['status'] ?? null) === 'delivered') {
+        $status = strtolower((string) ($tracking['status'] ?? ''));
+
+        if ($status === '') {
+            return;
+        }
+
+        if (in_array($status, ['picked', 'storing', 'transporting', 'sorting', 'delivering', 'money_collect_delivering', 'delivery_fail', 'waiting_to_return', 'return', 'return_transporting', 'return_sorting', 'returning', 'return_fail'], true)) {
+            DB::transaction(function () use ($order, $status) {
+                $locked = DB::table('orders')->where('id', $order->id)->lockForUpdate()->first();
+                if (!$locked || in_array((string) ($locked->status ?? ''), ['completed', 'cancelled'], true)) {
+                    return;
+                }
+
+                // Chỉ chuyển đúng một lần khi GHN thực sự nhận kiện từ shop.
+                // Các mốc vận chuyển sau đó không được tạo lịch sử shipping -> shipping.
+                if ((string) ($locked->status ?? '') !== 'confirmed') {
+                    return;
+                }
+
+                $updates = ['status' => 'shipping', 'updated_at' => now()];
+                if (Schema::hasColumn('orders', 'shipping_provider')) {
+                    $updates['shipping_provider'] = 'ghn';
+                }
+                if (Schema::hasColumn('orders', 'ghn_status')) {
+                    $updates['ghn_status'] = $status;
+                }
+                if (Schema::hasColumn('orders', 'ghn_last_synced_at')) {
+                    $updates['ghn_last_synced_at'] = now();
+                }
+
+                DB::table('orders')->where('id', $locked->id)->update($updates);
+
+                if (Schema::hasTable('order_status_histories')) {
+                    DB::table('order_status_histories')->insert([
+                        'order_id' => $locked->id,
+                        'changed_by' => null,
+                        'from_status' => $locked->status,
+                        'to_status' => 'shipping',
+                        'source' => 'ghn',
+                        'note' => 'GHN cập nhật trạng thái vận chuyển: ' . $this->statusLabel($status),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }, 3);
+
+            return;
+        }
+
+        if ($status === 'delivered') {
             $this->markDelivered($order);
         }
     }
@@ -1133,15 +1184,15 @@ class ShippingService
 
         $insert = [
             'order_id' => $orderId,
-            'provider' => 'ghn',
             'tracking_code' => $trackingCode ?: null,
             'status' => $status,
             'description' => $description ?: $this->statusLabel($status),
-            'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'occurred_at' => $time,
             'created_at' => now(),
             'updated_at' => now(),
         ];
+        if (Schema::hasColumn('shipping_status_histories', 'provider')) $insert['provider'] = 'ghn';
+        if (Schema::hasColumn('shipping_status_histories', 'payload')) $insert['payload'] = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (Schema::hasColumn('shipping_status_histories', 'source')) $insert['source'] = $source;
         if (Schema::hasColumn('shipping_status_histories', 'location')) $insert['location'] = $location;
         if (Schema::hasColumn('shipping_status_histories', 'is_simulated')) $insert['is_simulated'] = $isSimulated;
