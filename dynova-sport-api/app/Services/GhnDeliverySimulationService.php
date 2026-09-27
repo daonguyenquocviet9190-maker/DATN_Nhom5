@@ -117,7 +117,11 @@ class GhnDeliverySimulationService
             throw new RuntimeException('Đơn hàng đã hủy và không thể tiếp tục vận chuyển.');
         }
 
-        if ($orderStatus !== 'shipping') {
+        $canStartWhileWaitingForPickup = $action === 'start'
+            && $orderStatus === 'confirmed'
+            && strtolower((string) ($order->shipping_provider ?? '')) === 'ghn';
+
+        if ($orderStatus !== 'shipping' && !$canStartWhileWaitingForPickup) {
             throw new RuntimeException('Đơn hàng chưa ở trạng thái đang giao.');
         }
 
@@ -237,11 +241,44 @@ class GhnDeliverySimulationService
             'updated_at' => now(),
         ]);
 
+        if (in_array($currentStatus, ['picked', 'storing', 'transporting', 'sorting', 'delivering', 'delivered'], true)) {
+            $this->markOrderAsShipping($orderId, $currentStatus);
+        }
+
         if ($progress >= 100) {
             $this->completeOrder($orderId);
         }
 
         return DB::table('orders')->where('id', $orderId)->first() ?? $order;
+    }
+
+    private function markOrderAsShipping(int $orderId, string $shippingStatus): void
+    {
+        DB::transaction(function () use ($orderId, $shippingStatus) {
+            $order = DB::table('orders')->where('id', $orderId)->lockForUpdate()->first();
+
+            if (!$order || (string) ($order->status ?? '') !== 'confirmed') {
+                return;
+            }
+
+            DB::table('orders')->where('id', $orderId)->update([
+                'status' => 'shipping',
+                'updated_at' => now(),
+            ]);
+
+            if (Schema::hasTable('order_status_histories')) {
+                DB::table('order_status_histories')->insert([
+                    'order_id' => $orderId,
+                    'changed_by' => null,
+                    'from_status' => 'confirmed',
+                    'to_status' => 'shipping',
+                    'source' => 'ghn_auto_simulator',
+                    'note' => 'GHN đã lấy hàng: ' . $this->statusLabel($shippingStatus),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }, 3);
     }
 
     private function persistCrossedStages(int $orderId, string $trackingCode, float $previousProgress, float $progress): void

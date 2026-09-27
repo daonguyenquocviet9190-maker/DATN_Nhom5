@@ -1085,10 +1085,15 @@ class AdminSimpleController extends Controller
 
         $validated = $request->validate([
             'status' => ['required', 'in:pending,confirmed,shipping,completed,cancelled'],
+            'shipping_provider' => ['nullable', 'in:ghn,shop_staff'],
             'note' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $shipmentTrackingCode = null;
+        $shippingProvider = isset($validated['shipping_provider'])
+            ? strtolower((string) $validated['shipping_provider'])
+            : null;
+        $waitForCarrierPickup = false;
         $preflightOrder = DB::table('orders')->where('id', $id)->first();
 
         if (!$preflightOrder) {
@@ -1111,31 +1116,77 @@ class AdminSimpleController extends Controller
             ], 422);
         }
 
+        if (
+            $validated['status'] === 'cancelled'
+            && strtolower((string) ($preflightOrder->status ?? '')) === 'confirmed'
+            && strtolower((string) ($preflightOrder->shipping_provider ?? '')) === 'ghn'
+            && !empty($preflightOrder->tracking_code)
+        ) {
+            try {
+                if (!$this->shipping->cancelShipment((string) $preflightOrder->tracking_code)) {
+                    throw new \RuntimeException('GHN chưa xác nhận hủy vận đơn.');
+                }
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không thể hủy đơn khi vận đơn GHN vẫn còn hiệu lực: ' . $e->getMessage(),
+                ], 503);
+            }
+        }
+
         if ($validated['status'] === 'shipping') {
             $currentStatus = strtolower((string) ($preflightOrder->status ?? 'pending'));
             if ($currentStatus !== 'confirmed') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Chỉ có thể tạo vận đơn GHN khi đơn đã được xác nhận.',
+                    'message' => 'Chỉ có thể bàn giao đơn vị vận chuyển sau khi đơn đã được xác nhận.',
                 ], 422);
             }
 
-            try {
-                $shipment = $this->shipping->createOrderForOrder((int) $id);
-                $shipmentTrackingCode = $shipment['order_code'] ?? null;
-                if (!$shipmentTrackingCode) {
-                    throw new \RuntimeException('GHN chưa trả về mã vận đơn.');
-                }
-            } catch (\Throwable $e) {
+            $shippingProvider ??= strtolower((string) ($preflightOrder->shipping_provider ?? ''));
+            if (!in_array($shippingProvider, ['ghn', 'shop_staff'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => $e->getMessage(),
-                ], 503);
+                    'message' => 'Vui lòng chọn GHN hoặc nhân viên shop để giao hàng.',
+                ], 422);
+            }
+
+            if ($shippingProvider === 'shop_staff' && !empty($preflightOrder->tracking_code)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Đơn đã có vận đơn GHN nên không thể đổi sang nhân viên shop.',
+                ], 422);
+            }
+
+            if ($shippingProvider === 'ghn') {
+                try {
+                    $shipment = $this->shipping->createOrderForOrder((int) $id);
+                    $shipmentTrackingCode = $shipment['order_code'] ?? null;
+                    if (!$shipmentTrackingCode) {
+                        throw new \RuntimeException('GHN chưa trả về mã vận đơn.');
+                    }
+                    $waitForCarrierPickup = true;
+                } catch (\Throwable $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $e->getMessage(),
+                    ], 503);
+                }
+            }
+        }
+
+        if ($validated['status'] === 'completed') {
+            $provider = strtolower((string) ($preflightOrder->shipping_provider ?? ''));
+            if ($provider !== 'shop_staff') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Đơn GHN được hoàn tất tự động khi GHN xác nhận giao thành công.',
+                ], 422);
             }
         }
 
         try {
-            return DB::transaction(function () use ($request, $id, $validated, $shipmentTrackingCode) {
+            return DB::transaction(function () use ($request, $id, $validated, $shipmentTrackingCode, $shippingProvider, $waitForCarrierPickup) {
                 $order = DB::table('orders')->where('id', $id)->lockForUpdate()->first();
                 if (!$order) return response()->json(['success' => false, 'message' => 'Không tìm thấy đơn hàng.'], 404);
 
@@ -1144,7 +1195,7 @@ class AdminSimpleController extends Controller
                 $transitions = [
                     'pending' => ['confirmed', 'cancelled'],
                     'confirmed' => ['shipping', 'cancelled'],
-                    'shipping' => [],
+                    'shipping' => ['completed'],
                     'completed' => [],
                     'cancelled' => [],
                 ];
@@ -1212,14 +1263,28 @@ class AdminSimpleController extends Controller
                     }
                 }
 
-                $payload = ['status' => $next, 'updated_at' => now()];
-                if ($next === 'completed' && $this->hasColumn('orders', 'completed_at')) $payload['completed_at'] = now();
+                // GHN mới tiếp nhận yêu cầu thì đơn vẫn đang được shop chuẩn bị.
+                // Trạng thái "shipping" chỉ được ghi khi GHN báo đã lấy hàng.
+                $savedStatus = $waitForCarrierPickup ? $current : $next;
+                $payload = ['status' => $savedStatus, 'updated_at' => now()];
+                if ($next === 'shipping' && $shippingProvider && $this->hasColumn('orders', 'shipping_provider')) {
+                    $payload['shipping_provider'] = $shippingProvider;
+                }
+                if ($savedStatus === 'completed' && $this->hasColumn('orders', 'completed_at')) $payload['completed_at'] = now();
                 if ($next === 'cancelled' && $this->hasColumn('orders', 'cancelled_at')) $payload['cancelled_at'] = now();
+                if (
+                    $next === 'cancelled'
+                    && !empty($order->tracking_code)
+                    && strtolower((string) ($order->shipping_provider ?? '')) === 'ghn'
+                    && $this->hasColumn('orders', 'ghn_status')
+                ) {
+                    $payload['ghn_status'] = 'cancel';
+                }
                 if (!empty($shipmentTrackingCode) && $this->hasColumn('orders', 'tracking_code')) {
                     $payload['tracking_code'] = trim($shipmentTrackingCode);
                     if ($this->hasColumn('orders', 'shipping_provider')) $payload['shipping_provider'] = 'ghn';
                 }
-                if ($next === 'completed' && ($order->payment_method ?? '') === 'cod' && $this->hasColumn('orders', 'payment_status')) {
+                if ($savedStatus === 'completed' && ($order->payment_method ?? '') === 'cod' && $this->hasColumn('orders', 'payment_status')) {
                     $payload['payment_status'] = 'paid';
                 }
                 DB::table('orders')->where('id', $id)->update($payload);
@@ -1231,14 +1296,18 @@ class AdminSimpleController extends Controller
                     }
                 }
 
-                if ($this->hasTable('order_status_histories')) {
+                if ($savedStatus !== $current && $this->hasTable('order_status_histories')) {
                     DB::table('order_status_histories')->insert([
                         'order_id' => $id,
                         'changed_by' => $request->user()->id,
                         'from_status' => $current,
-                        'to_status' => $next,
+                        'to_status' => $savedStatus,
                         'source' => 'admin',
-                        'note' => $validated['note'] ?? null,
+                        'note' => $validated['note'] ?? (
+                            $savedStatus === 'shipping' && $shippingProvider === 'shop_staff'
+                                ? 'Nhân viên shop bắt đầu giao hàng.'
+                                : null
+                        ),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
@@ -1247,16 +1316,20 @@ class AdminSimpleController extends Controller
                 $updated = DB::table('orders')->where('id', $id)->first();
                 return response()->json([
                     'success' => true,
-                    'message' => $next === 'cancelled'
+                    'message' => $waitForCarrierPickup
+                        ? 'Đã tạo vận đơn GHN. Đơn sẽ tự chuyển sang đang giao khi GHN lấy hàng.'
+                        : ($next === 'cancelled'
                         ? 'Đã hủy đơn và hoàn tồn kho đúng một lần.'
                         : ($next === 'shipping'
-                            ? 'Đã tạo vận đơn GHN và chuyển đơn sang trạng thái đang giao.'
-                            : 'Cập nhật trạng thái đơn hàng thành công.'),
+                            ? 'Đã bàn giao đơn cho nhân viên shop.'
+                            : ($next === 'completed'
+                                ? 'Đã xác nhận giao hàng thành công.'
+                                : 'Cập nhật trạng thái đơn hàng thành công.'))),
                     'data' => $updated,
                     'order' => $updated,
                     'previous_status' => $current,
-                    'current_status' => $next,
-                    'allowed_next_statuses' => $transitions[$next] ?? [],
+                    'current_status' => $savedStatus,
+                    'allowed_next_statuses' => $transitions[$savedStatus] ?? [],
                 ]);
             }, 3);
         } catch (\Throwable $e) {

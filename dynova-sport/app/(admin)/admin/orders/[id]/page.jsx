@@ -16,6 +16,7 @@ import {
   Phone,
   RefreshCw,
   ShieldCheck,
+  Store,
   Truck,
   User,
 } from "lucide-react";
@@ -38,25 +39,9 @@ const API_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&auto=format&fit=crop&q=80";
 
-const STATUS_OPTIONS = [
-  { value: "pending", label: "Chờ xử lý" },
-  { value: "confirmed", label: "Đã xác nhận" },
-  { value: "shipping", label: "Đang giao" },
-  { value: "completed", label: "Hoàn thành" },
-  { value: "cancelled", label: "Đã hủy" },
-];
-
-const ORDER_TRANSITIONS = {
-  pending: ["confirmed", "cancelled"],
-  confirmed: ["shipping", "cancelled"],
-  shipping: [],
-  completed: [],
-  cancelled: [],
-};
-
 const TIMELINE_STEPS = [
   { key: "pending", label: "Chờ xử lý", icon: Clock3 },
-  { key: "confirmed", label: "Đã xác nhận", icon: PackageCheck },
+  { key: "confirmed", label: "Đang chuẩn bị", icon: PackageCheck },
   { key: "shipping", label: "Đang giao", icon: Truck },
   { key: "completed", label: "Hoàn thành", icon: CheckCircle2 },
 ];
@@ -115,24 +100,13 @@ function getStatusMeta(status = "") {
   const map = {
     pending: { label: "Chờ xử lý", icon: Clock3, className: "bg-amber-500/10 text-amber-300 ring-amber-400/20" },
     waiting_bank_transfer: { label: "Chờ thanh toán", icon: Clock3, className: "bg-yellow-500/10 text-yellow-300 ring-yellow-400/20" },
-    confirmed: { label: "Đã xác nhận", icon: PackageCheck, className: "bg-sky-500/10 text-sky-300 ring-sky-400/20" },
+    confirmed: { label: "Đang chuẩn bị", icon: PackageCheck, className: "bg-sky-500/10 text-sky-300 ring-sky-400/20" },
     shipping: { label: "Đang giao", icon: Truck, className: "bg-indigo-500/10 text-indigo-300 ring-indigo-400/20" },
     completed: { label: "Hoàn thành", icon: CheckCircle2, className: "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" },
     cancelled: { label: "Đã hủy", icon: PackageX, className: "bg-rose-500/10 text-rose-300 ring-rose-400/20" },
   };
 
   return map[normalized] || map.pending;
-}
-
-function getAllowedStatusOptions(currentStatus) {
-  const normalized = normalizeStatus(currentStatus);
-  const nextStatuses = ORDER_TRANSITIONS[normalized] || [];
-
-  return STATUS_OPTIONS.filter((item) => item.value === normalized || nextStatuses.includes(item.value));
-}
-
-function isFinalStatus(status) {
-  return ["completed", "cancelled"].includes(normalizeStatus(status));
 }
 
 function extractOrder(response) {
@@ -253,16 +227,17 @@ export default function AdminOrderDetailPage() {
   const orderId = params?.id;
 
   const [order, setOrder] = useState(null);
-  const [selectedStatus, setSelectedStatus] = useState("pending");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAction, setSavingAction] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [shippingConfig, setShippingConfig] = useState(null);
   const [shippingAction, setShippingAction] = useState("");
+  const [deliveryProvider, setDeliveryProvider] = useState("shop_staff");
 
   const items = useMemo(() => getOrderItems(order), [order]);
-  const status = normalizeStatus(order?.status || selectedStatus);
+  const status = normalizeStatus(order?.status || "pending");
   const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
   const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
   const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
@@ -270,11 +245,11 @@ export default function AdminOrderDetailPage() {
   const displayStatus = bankUnpaid ? "waiting_bank_transfer" : status;
   const statusMeta = getStatusMeta(displayStatus);
   const StatusIcon = statusMeta.icon;
-
-  const allowedStatusOptions = useMemo(() => getAllowedStatusOptions(status), [status]);
-  const finalStatus = isFinalStatus(status);
-  const shippingLocked = status === "shipping";
   const paymentLocked = bankUnpaid;
+  const shippingProvider = String(order?.shipping_provider || "").toLowerCase();
+  const hasGhnShipment = shippingProvider === "ghn" && Boolean(order?.tracking_code);
+  const shopDelivery = shippingProvider === "shop_staff";
+  const ghnAvailable = Boolean(shippingConfig?.configured);
 
   const loadOrder = async ({ silent = false } = {}) => {
     if (!orderId) return;
@@ -285,11 +260,8 @@ export default function AdminOrderDetailPage() {
 
       const response = await getAdminOrderById(orderId);
       const data = extractOrder(response);
-      const currentStatus = normalizeStatus(data?.status || "pending");
-      const nextStatuses = ORDER_TRANSITIONS[currentStatus] || [];
 
       setOrder(data);
-      setSelectedStatus(nextStatuses[0] || currentStatus);
     } catch (err) {
       setError(getApiErrorMessage(err) || "Không thể tải chi tiết đơn hàng.");
     } finally {
@@ -304,6 +276,11 @@ export default function AdminOrderDetailPage() {
   useEffect(() => {
     getShippingStatus().then((data) => setShippingConfig(data || null)).catch(() => setShippingConfig(null));
   }, []);
+
+  useEffect(() => {
+    if (status !== "confirmed" || order?.tracking_code) return;
+    setDeliveryProvider(ghnAvailable ? "ghn" : "shop_staff");
+  }, [ghnAvailable, order?.id, order?.tracking_code, status]);
 
   useEffect(() => {
     const running = Boolean(order?.tracking?.delivery_map?.simulation?.running);
@@ -323,36 +300,38 @@ export default function AdminOrderDetailPage() {
     window.setTimeout(() => setNotice(""), 1800);
   };
 
-  const handleUpdateStatus = async () => {
+  const handleUpdateStatus = async (nextStatus, options = {}) => {
     if (!order?.id) return;
-
-    const currentStatus = normalizeStatus(order?.status);
-    const nextStatuses = ORDER_TRANSITIONS[currentStatus] || [];
-
-    if (!nextStatuses.includes(selectedStatus)) {
-      setError("Không thể chuyển trạng thái ngược hoặc sai luồng đơn hàng.");
-      return;
-    }
 
     try {
       setSaving(true);
+      setSavingAction(nextStatus === "shipping" ? options.shipping_provider || nextStatus : nextStatus);
       setError("");
 
-      const response = await updateAdminOrderStatus(order.id, selectedStatus);
-      const updatedOrder = extractOrder(response) || { ...order, status: selectedStatus };
-      const savedStatus = normalizeStatus(updatedOrder?.status || response?.saved_status || response?.data?.status || selectedStatus);
+      const response = await updateAdminOrderStatus(order.id, nextStatus, options);
+      const updatedOrder = extractOrder(response) || { ...order, status: nextStatus };
+      const savedStatus = normalizeStatus(updatedOrder?.status || response?.current_status || response?.data?.status || nextStatus);
 
       setOrder({ ...order, ...updatedOrder, status: savedStatus });
-
-      const nextOptions = ORDER_TRANSITIONS[savedStatus] || [];
-      setSelectedStatus(nextOptions[0] || savedStatus);
-
-      showNotice("Đã cập nhật trạng thái đơn hàng.");
+      showNotice(response?.message || "Đã cập nhật trạng thái đơn hàng.");
       await loadOrder();
     } catch (err) {
       setError(getApiErrorMessage(err) || "Không thể cập nhật trạng thái đơn hàng.");
     } finally {
       setSaving(false);
+      setSavingAction("");
+    }
+  };
+
+  const handleCancelOrder = () => {
+    if (window.confirm("Bạn chắc chắn muốn hủy đơn? Tồn kho sẽ được hoàn lại và thao tác này không thể đảo ngược.")) {
+      handleUpdateStatus("cancelled");
+    }
+  };
+
+  const handleCompleteShopDelivery = () => {
+    if (window.confirm("Xác nhận khách đã nhận hàng thành công? Đơn COD sẽ được ghi nhận đã thanh toán.")) {
+      handleUpdateStatus("completed");
     }
   };
 
@@ -432,7 +411,7 @@ export default function AdminOrderDetailPage() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-white">Tiến trình đơn hàng</h3>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Không cho phép đổi ngược trạng thái.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">GHN tự cập nhật sau khi lấy hàng; đơn nội bộ do nhân viên shop xác nhận theo từng bước.</p>
               </div>
               <ShieldCheck className="text-orange-300" size={24} />
             </div>
@@ -508,39 +487,141 @@ export default function AdminOrderDetailPage() {
 
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
-            <h3 className="text-lg font-black text-white">Cập nhật trạng thái</h3>
-            <div className="mt-5 space-y-3">
-              {finalStatus || shippingLocked || paymentLocked ? (
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-sm font-black text-white">
-                    {paymentLocked ? "Đang chờ thanh toán VietQR." : status === "shipping" ? "Đơn hàng đang được vận chuyển." : status === "completed" ? "Đơn hàng đã hoàn thành." : "Đơn hàng đã hủy."}
-                  </p>
-                </div>
-              ) : (
-                <>
+            <h3 className="text-lg font-black text-white">Xử lý đơn hàng</h3>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Chỉ hiển thị thao tác hợp lệ ở bước hiện tại.</p>
 
-                  <select
-                    value={selectedStatus}
-                    onChange={(event) => setSelectedStatus(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-black text-white outline-none"
+            <div className="mt-5 space-y-4">
+              {paymentLocked ? (
+                <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-sm font-black text-white">Đang chờ thanh toán VietQR.</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Hệ thống sẽ mở bước xác nhận sau khi nhận được thanh toán.</p>
+                </div>
+              ) : status === "pending" ? (
+                <>
+                  <div className="rounded-3xl border border-sky-400/20 bg-sky-500/10 p-4">
+                    <p className="text-sm font-black text-sky-100">Kiểm tra thanh toán, địa chỉ và tồn kho trước khi xác nhận.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus("confirmed")}
+                    disabled={saving}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {allowedStatusOptions.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                    {savingAction === "confirmed" ? <Loader2 size={17} className="animate-spin" /> : <PackageCheck size={17} />}
+                    Xác nhận và chuẩn bị hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelOrder}
+                    disabled={saving}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-5 py-3 text-sm font-black text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingAction === "cancelled" ? <Loader2 size={17} className="animate-spin" /> : <PackageX size={17} />}
+                    Hủy đơn hàng
+                  </button>
+                </>
+              ) : status === "confirmed" && hasGhnShipment ? (
+                <>
+                  <div className="rounded-3xl border border-indigo-400/20 bg-indigo-500/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
+                      <div>
+                        <p className="text-sm font-black text-white">Đã tạo vận đơn GHN</p>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Đang chờ GHN lấy hàng. Trạng thái sẽ tự chuyển sang “Đang giao” sau khi GHN nhận kiện.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleShippingSync}
+                    disabled={Boolean(shippingAction) || saving}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-5 py-3 text-sm font-black text-indigo-100 transition hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {shippingAction === "sync" ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
+                    Đồng bộ trạng thái GHN
+                  </button>
+                  <button type="button" onClick={handleCancelOrder} disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-5 py-3 text-sm font-black text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-60">
+                    {savingAction === "cancelled" ? <Loader2 size={17} className="animate-spin" /> : <PackageX size={17} />}
+                    Hủy đơn hàng
+                  </button>
+                </>
+              ) : status === "confirmed" ? (
+                <>
+                  <div>
+                    <p className="text-sm font-black text-white">Chọn đơn vị giao hàng</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Lựa chọn được lưu khi bạn bắt đầu bàn giao đơn.</p>
+                  </div>
 
                   <button
                     type="button"
-                    onClick={handleUpdateStatus}
-                    disabled={saving || selectedStatus === status}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black uppercase tracking-wider text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => ghnAvailable && setDeliveryProvider("ghn")}
+                    disabled={!ghnAvailable || saving}
+                    className={`w-full rounded-3xl border p-4 text-left transition ${deliveryProvider === "ghn" && ghnAvailable ? "border-indigo-400/40 bg-indigo-500/15" : "border-white/10 bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    {saving ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
-                    Lưu trạng thái
+                    <span className="flex items-start gap-3">
+                      <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
+                      <span>
+                        <span className="block text-sm font-black text-white">Giao Hàng Nhanh (GHN)</span>
+                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{ghnAvailable ? "Tạo vận đơn và tự đồng bộ hành trình giao hàng." : "GHN chưa được cấu hình hoặc hiện không khả dụng."}</span>
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryProvider("shop_staff")}
+                    disabled={saving}
+                    className={`w-full rounded-3xl border p-4 text-left transition ${deliveryProvider === "shop_staff" ? "border-orange-400/40 bg-orange-500/15" : "border-white/10 bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    <span className="flex items-start gap-3">
+                      <Store className="mt-0.5 shrink-0 text-orange-300" size={20} />
+                      <span>
+                        <span className="block text-sm font-black text-white">Nhân viên shop giao</span>
+                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">Không cần mã vận đơn; shop tự giao và xác nhận khi khách đã nhận hàng.</span>
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus("shipping", { shipping_provider: deliveryProvider })}
+                    disabled={saving || (deliveryProvider === "ghn" && !ghnAvailable)}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingAction === deliveryProvider ? <Loader2 size={17} className="animate-spin" /> : deliveryProvider === "ghn" ? <Truck size={17} /> : <Store size={17} />}
+                    {deliveryProvider === "ghn" ? "Tạo vận đơn GHN" : "Bắt đầu giao bằng nhân viên shop"}
+                  </button>
+
+                  <button type="button" onClick={handleCancelOrder} disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-400/20 bg-rose-500/10 px-5 py-3 text-sm font-black text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-60">
+                    {savingAction === "cancelled" ? <Loader2 size={17} className="animate-spin" /> : <PackageX size={17} />}
+                    Hủy đơn hàng
                   </button>
                 </>
+              ) : status === "shipping" && shopDelivery ? (
+                <>
+                  <div className="rounded-3xl border border-orange-400/20 bg-orange-500/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <Store className="mt-0.5 shrink-0 text-orange-300" size={20} />
+                      <div>
+                        <p className="text-sm font-black text-white">Nhân viên shop đang giao</p>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Chỉ hoàn tất sau khi nhân viên xác nhận khách đã nhận hàng.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleCompleteShopDelivery} disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-600 disabled:opacity-60">
+                    {savingAction === "completed" ? <Loader2 size={17} className="animate-spin" /> : <CheckCircle2 size={17} />}
+                    Xác nhận giao thành công
+                  </button>
+                </>
+              ) : status === "shipping" ? (
+                <div className="rounded-3xl border border-indigo-400/20 bg-indigo-500/10 p-4">
+                  <p className="text-sm font-black text-white">GHN đang vận chuyển đơn hàng.</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Trạng thái hoàn thành sẽ được cập nhật tự động từ GHN.</p>
+                </div>
+              ) : (
+                <div className={`rounded-3xl border p-4 ${status === "completed" ? "border-emerald-400/20 bg-emerald-500/10" : "border-rose-400/20 bg-rose-500/10"}`}>
+                  <p className="text-sm font-black text-white">{status === "completed" ? "Đơn hàng đã hoàn thành." : "Đơn hàng đã hủy và không thể kích hoạt lại."}</p>
+                </div>
               )}
             </div>
           </section>
@@ -584,7 +665,19 @@ export default function AdminOrderDetailPage() {
             </div>
           </section>
 
-          {(order?.tracking_code || order?.tracking) && (
+          {shopDelivery && (
+            <section className="rounded-[32px] border border-orange-400/20 bg-orange-500/10 p-6 backdrop-blur-xl">
+              <div className="flex items-start gap-3">
+                <Store className="mt-0.5 shrink-0 text-orange-300" size={21} />
+                <div>
+                  <h3 className="text-lg font-black text-white">Nhân viên shop giao</h3>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-slate-400">Đơn không dùng mã vận đơn GHN. Shop chịu trách nhiệm giao và xác nhận kết quả với khách.</p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {hasGhnShipment && (order?.tracking_code || order?.tracking) && (
             <section className="rounded-[32px] border border-indigo-400/20 bg-indigo-500/10 p-6 backdrop-blur-xl">
               <div className="flex items-center gap-3">
                 <Truck className="text-indigo-300" size={21} />
@@ -598,12 +691,14 @@ export default function AdminOrderDetailPage() {
             </section>
           )}
 
-          <GhnDevSimulator
-            order={order}
-            environment={shippingConfig?.environment}
-            busy={shippingAction}
-            onSync={handleShippingSync}
-          />
+          {hasGhnShipment && (
+            <GhnDevSimulator
+              order={order}
+              environment={shippingConfig?.environment}
+              busy={shippingAction}
+              onSync={handleShippingSync}
+            />
+          )}
 
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Thanh toán</h3>

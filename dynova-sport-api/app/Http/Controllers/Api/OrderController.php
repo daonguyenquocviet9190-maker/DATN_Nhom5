@@ -343,6 +343,33 @@ class OrderController extends Controller
              * server cart đang có dữ liệu. Điều này tránh lỗi 422 vì ID/variant
              * trên localStorage không còn khớp với giỏ thật.
              */
+            // Dùng dữ liệu đã chọn trên checkout như nguồn đáng tin cậy nhất.
+            // Nếu request gửi subset sản phẩm, server không được lật sang toàn bộ giỏ
+            // trên database và tính lại đơn theo mọi item trong giỏ.
+            $requestedItems = collect($request->input('items', []))
+                ->map(function ($item) {
+                    if (!is_array($item)) {
+                        return null;
+                    }
+
+                    return [
+                        'product_id' => $item['product_id']
+                            ?? $item['productId']
+                            ?? $item['product']['id']
+                            ?? $item['id']
+                            ?? null,
+                        'product_variant_id' => $item['product_variant_id']
+                            ?? $item['variant_id']
+                            ?? $item['variantId']
+                            ?? data_get($item, 'variant.id')
+                            ?? null,
+                        'quantity' => max(1, (int) ($item['quantity'] ?? 1)),
+                    ];
+                })
+                ->filter(fn ($item) => !empty($item['product_id']))
+                ->values()
+                ->all();
+
             $serverCartRows = Schema::hasTable('cart_items')
                 ? DB::table('cart_items')
                     ->where('user_id', $user->id)
@@ -350,82 +377,60 @@ class OrderController extends Controller
                     ->get()
                 : collect();
 
-            // Dọn các dòng cart lỗi/di sản không có product_id. Các dòng này có thể
-            // không hiện trên UI (do cart API JOIN products) nhưng trước đây vẫn làm
-            // checkout fail 422 "Không xác định được sản phẩm trong giỏ hàng".
-            $serverProductIds = $serverCartRows
-                ->pluck('product_id')
-                ->filter()
-                ->map(fn ($id) => (int) $id)
-                ->unique()
-                ->values();
+            // Nếu người dùng đã chọn một phần sản phẩm trên checkout, ưu tiên subset đó
+            // thay vì dùng tất cả cart_items trong database.
+            $sourceItems = $requestedItems;
 
-            $existingProductIds = $serverProductIds->isNotEmpty()
-                ? DB::table('products')
-                    ->whereIn('id', $serverProductIds->all())
-                    ->pluck('id')
+            if (empty($sourceItems)) {
+                // Dọn các dòng cart lỗi/di sản không có product_id. Các dòng này có thể
+                // không hiện trên UI (do cart API JOIN products) nhưng trước đây vẫn làm
+                // checkout fail 422 "Không xác định được sản phẩm trong giỏ hàng".
+                $serverProductIds = $serverCartRows
+                    ->pluck('product_id')
+                    ->filter()
                     ->map(fn ($id) => (int) $id)
-                    ->flip()
-                : collect();
+                    ->unique()
+                    ->values();
 
-            $invalidCartIds = $serverCartRows
-                ->filter(function ($row) use ($existingProductIds) {
-                    if (empty($row->product_id)) {
-                        return true;
-                    }
+                $existingProductIds = $serverProductIds->isNotEmpty()
+                    ? DB::table('products')
+                        ->whereIn('id', $serverProductIds->all())
+                        ->pluck('id')
+                        ->map(fn ($id) => (int) $id)
+                        ->flip()
+                    : collect();
 
-                    return !$existingProductIds->has((int) $row->product_id);
-                })
-                ->pluck('id')
-                ->filter()
-                ->values();
+                $invalidCartIds = $serverCartRows
+                    ->filter(function ($row) use ($existingProductIds) {
+                        if (empty($row->product_id)) {
+                            return true;
+                        }
 
-            if ($invalidCartIds->isNotEmpty()) {
-                DB::table('cart_items')
-                    ->where('user_id', $user->id)
-                    ->whereIn('id', $invalidCartIds->all())
-                    ->delete();
-            }
+                        return !$existingProductIds->has((int) $row->product_id);
+                    })
+                    ->pluck('id')
+                    ->filter()
+                    ->values();
 
-            $validServerCartRows = $serverCartRows
-                ->filter(fn ($row) =>
-                    !empty($row->product_id) &&
-                    $existingProductIds->has((int) $row->product_id)
-                )
-                ->values();
+                if ($invalidCartIds->isNotEmpty()) {
+                    DB::table('cart_items')
+                        ->where('user_id', $user->id)
+                        ->whereIn('id', $invalidCartIds->all())
+                        ->delete();
+                }
 
-            if ($validServerCartRows->isNotEmpty()) {
+                $validServerCartRows = $serverCartRows
+                    ->filter(fn ($row) =>
+                        !empty($row->product_id) &&
+                        $existingProductIds->has((int) $row->product_id)
+                    )
+                    ->values();
+
                 $sourceItems = $validServerCartRows->map(fn ($row) => [
                     'product_id' => $row->product_id,
                     'product_variant_id' => $row->product_variant_id,
-                    'quantity' => $row->quantity,
+                    'quantity' => max(1, (int) ($row->quantity ?? 1)),
                 ])->values()->all();
-            } else {
-                // Dùng request gốc thay vì $validated['items'] để không làm rơi
-                // product_id / variant_id khi giỏ server chưa hydrate kịp.
-                $sourceItems = collect($request->input('items', []))
-                    ->map(function ($item) {
-                        if (!is_array($item)) {
-                            return null;
-                        }
-
-                        return [
-                            'product_id' => $item['product_id']
-                                ?? $item['productId']
-                                ?? $item['product']['id']
-                                ?? $item['id']
-                                ?? null,
-                            'product_variant_id' => $item['product_variant_id']
-                                ?? $item['variant_id']
-                                ?? $item['variantId']
-                                ?? data_get($item, 'variant.id')
-                                ?? null,
-                            'quantity' => $item['quantity'] ?? 1,
-                        ];
-                    })
-                    ->filter()
-                    ->values()
-                    ->all();
             }
 
             if (empty($sourceItems)) {
@@ -728,9 +733,45 @@ class OrderController extends Controller
                 DB::table('users')->where('id', $user->id)->update($userUpdates);
             }
 
-            // Checkout thành công thì giỏ server phải được làm sạch.
-            if (Schema::hasTable('cart_items')) {
-                DB::table('cart_items')->where('user_id', $user->id)->delete();
+            // Chỉ xóa những item thực sự đã được thanh toán trong đơn hiện tại.
+            // Điều này giữ lại các sản phẩm còn lại trong giỏ khi người dùng chọn subset.
+            if (Schema::hasTable('cart_items') && !empty($sourceItems)) {
+                foreach ($sourceItems as $item) {
+                    $productId = $this->toNullableInt($item['product_id'] ?? null);
+                    if (!$productId) {
+                        continue;
+                    }
+
+                    $variantId = $this->toNullableInt($item['product_variant_id'] ?? null);
+                    $qtyToRemove = max(1, (int) ($item['quantity'] ?? 1));
+
+                    $query = DB::table('cart_items')
+                        ->where('user_id', $user->id)
+                        ->where('product_id', $productId);
+
+                    if ($variantId !== null) {
+                        $query->where('product_variant_id', $variantId);
+                    } else {
+                        $query->where(function ($sub) {
+                            $sub->whereNull('product_variant_id')->orWhere('product_variant_id', 0);
+                        });
+                    }
+
+                    $matchingRows = $query->get();
+                    foreach ($matchingRows as $row) {
+                        $currentQty = max(0, (int) ($row->quantity ?? 0));
+                        $remainingQty = $currentQty - $qtyToRemove;
+
+                        if ($remainingQty <= 0) {
+                            DB::table('cart_items')->where('id', $row->id)->delete();
+                        } else {
+                            DB::table('cart_items')->where('id', $row->id)->update([
+                                'quantity' => $remainingQty,
+                                'updated_at' => now(),
+                            ]);
+                        }
+                    }
+                }
             }
 
             return $orderId;
