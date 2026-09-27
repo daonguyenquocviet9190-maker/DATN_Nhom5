@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
 use App\Http\Controllers\Api\Admin\AdminSettingsController;
 use App\Http\Controllers\Api\Admin\AdminSimpleController;
+use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BannerController;
 use App\Http\Controllers\Api\BrandController;
@@ -189,6 +190,19 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         '/profile/avatar',
         [ProfileController::class, 'uploadAvatar']
     );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Address book
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/addresses', [AddressController::class, 'index']);
+    Route::post('/addresses', [AddressController::class, 'store']);
+    Route::put('/addresses/{address}', [AddressController::class, 'update'])->whereNumber('address');
+    Route::delete('/addresses/{address}', [AddressController::class, 'destroy'])->whereNumber('address');
+    Route::patch('/addresses/{address}/default', [AddressController::class, 'setDefault'])->whereNumber('address');
 
     /*
     |--------------------------------------------------------------------------

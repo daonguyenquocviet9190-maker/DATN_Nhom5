@@ -207,9 +207,9 @@ export default function BankPaymentPage() {
                 ))}
               </div>
 
-              <p className="mt-5 rounded-2xl bg-rose-50 p-4 text-xs font-bold leading-6 text-rose-600">
+              {/* <p className="mt-5 rounded-2xl bg-rose-50 p-4 text-xs font-bold leading-6 text-rose-600">
                 Chuyển đúng số tiền và giữ nguyên nội dung <b>{transferContent}</b> để hệ thống đối soát chính xác và xác nhận nhanh hơn.
-              </p>
+              </p> */}
 
               {error && <p className="mt-4 text-xs font-bold text-rose-500">{error}</p>}
 

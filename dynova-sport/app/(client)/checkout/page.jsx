@@ -7,8 +7,10 @@ import {
   AlertCircle,
   Banknote,
   CheckCircle2,
+  ChevronDown,
   Landmark,
   Loader2,
+  MapPin,
   PackageCheck,
   Phone,
   ShieldCheck,
@@ -42,6 +44,7 @@ import {
 } from "@/services/address.service";
 
 import { getProfile } from "@/services/profile.service";
+import { getSavedAddresses } from "@/services/saved-address.service";
 import { apiFetch } from "@/services/api";
 const paymentMethods = [
   {
@@ -126,6 +129,10 @@ function CheckoutContent() {
   const [addressError, setAddressError] = useState("");
   const addressRequestId = useRef(0);
 
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [showSavedAddresses, setShowSavedAddresses] = useState(false);
+
   const [shippingFee, setShippingFee] = useState(null);
   const [shippingMessage, setShippingMessage] = useState("");
   const [shippingLoading, setShippingLoading] = useState(false);
@@ -148,6 +155,14 @@ function CheckoutContent() {
     address: "",
     note: "",
   });
+
+  const selectedSavedAddress = useMemo(() => {
+    return (
+      savedAddresses.find(
+        (savedAddress) => String(savedAddress.id) === String(selectedAddressId)
+      ) || null
+    );
+  }, [savedAddresses, selectedAddressId]);
 
   const subtotal = useMemo(() => {
     return items.reduce(
@@ -309,30 +324,62 @@ function CheckoutContent() {
 
         const data = await getShippingProvinces();
         if (!mounted) return;
-
         setProvinces(data);
 
         let savedProfile = null;
+        let addressBook = [];
+
         try {
-          savedProfile = await getProfile();
+          [savedProfile, addressBook] = await Promise.all([
+            getProfile(),
+            getSavedAddresses(),
+          ]);
         } catch {
-          savedProfile = null;
+          try {
+            savedProfile = await getProfile();
+          } catch {
+            savedProfile = null;
+          }
+
+          try {
+            addressBook = await getSavedAddresses();
+          } catch {
+            addressBook = [];
+          }
         }
 
         if (!mounted) return;
+        setSavedAddresses(addressBook);
+
+        const preferredAddress =
+          addressBook.find((item) => Boolean(item.is_default)) ||
+          addressBook[0] ||
+          null;
+
+        if (preferredAddress) {
+          setSelectedAddressId(String(preferredAddress.id));
+        }
 
         const profileUser = savedProfile?.user || null;
         const latestOrder = Array.isArray(savedProfile?.recent_orders)
           ? savedProfile.recent_orders[0] || null
           : null;
 
-        const savedProvinceName = latestOrder?.province || profileUser?.province || "";
-        const savedDistrictName = latestOrder?.district || profileUser?.district || "";
-        const savedWardName = latestOrder?.ward || profileUser?.ward || "";
-        const savedAddress = latestOrder?.address || profileUser?.address || "";
+        const savedProvinceName =
+          preferredAddress?.province || latestOrder?.province || profileUser?.province || "";
+        const savedProvinceCode = preferredAddress?.province_code || "";
+        const savedDistrictName =
+          preferredAddress?.district || latestOrder?.district || profileUser?.district || "";
+        const savedDistrictCode = preferredAddress?.district_code || "";
+        const savedWardName =
+          preferredAddress?.ward || latestOrder?.ward || profileUser?.ward || "";
+        const savedWardCode = preferredAddress?.ward_code || "";
+        const savedAddress =
+          preferredAddress?.address_line || latestOrder?.address || profileUser?.address || "";
 
         const savedProvinceNormalized = normalizeText(savedProvinceName);
         const selectedProvince =
+          data.find((item) => String(item.code) === String(savedProvinceCode)) ||
           data.find((item) => {
             const candidate = normalizeText(item.name || "");
             return (
@@ -341,16 +388,21 @@ function CheckoutContent() {
                 candidate.includes(savedProvinceNormalized) ||
                 savedProvinceNormalized.includes(candidate))
             );
-          }) || null;
+          }) ||
+          null;
 
         const provinceDistricts = selectedProvince
           ? await getShippingDistricts(selectedProvince)
           : [];
         if (!mounted) return;
+
         const savedDistrictNormalized = normalizeText(savedDistrictName);
         const savedWardNormalized = normalizeText(savedWardName);
 
         const selectedDistrict =
+          provinceDistricts.find(
+            (item) => String(item.code) === String(savedDistrictCode)
+          ) ||
           provinceDistricts.find((item) => {
             const candidate = normalizeText(item.name || "");
             return (
@@ -359,13 +411,16 @@ function CheckoutContent() {
                 candidate.includes(savedDistrictNormalized) ||
                 savedDistrictNormalized.includes(candidate))
             );
-          }) || null;
+          }) ||
+          null;
 
         const districtWards = selectedDistrict
           ? await getShippingWards(selectedDistrict)
           : [];
         if (!mounted) return;
+
         const selectedWard =
+          districtWards.find((item) => String(item.code) === String(savedWardCode)) ||
           districtWards.find((item) => {
             const candidate = normalizeText(item.name || "");
             return (
@@ -374,7 +429,8 @@ function CheckoutContent() {
                 candidate.includes(savedWardNormalized) ||
                 savedWardNormalized.includes(candidate))
             );
-          }) || null;
+          }) ||
+          null;
 
         setDistricts(provinceDistricts);
         setWards(districtWards);
@@ -382,6 +438,7 @@ function CheckoutContent() {
         setForm((prev) => ({
           ...prev,
           fullName:
+            preferredAddress?.recipient_name ||
             latestOrder?.customer_name ||
             profileUser?.fullName ||
             profileUser?.full_name ||
@@ -393,18 +450,19 @@ function CheckoutContent() {
             profileUser?.email ||
             prev.email,
           phone:
+            preferredAddress?.phone ||
             latestOrder?.customer_phone ||
             latestOrder?.phone ||
             profileUser?.phone ||
             prev.phone,
           provinceCode: selectedProvince ? String(selectedProvince.code) : "",
-          province: selectedProvince?.name || "",
+          province: selectedProvince?.name || savedProvinceName || "",
           districtCode: selectedDistrict?.code
             ? String(selectedDistrict.code)
             : "",
-          district: selectedDistrict?.name || "",
+          district: selectedDistrict?.name || savedDistrictName || "",
           wardCode: selectedWard?.code ? String(selectedWard.code) : "",
-          ward: selectedWard?.name || "",
+          ward: selectedWard?.name || savedWardName || "",
           address: savedAddress || prev.address,
         }));
       } catch {
@@ -419,6 +477,68 @@ function CheckoutContent() {
       mounted = false;
     };
   }, []);
+
+  const applySavedAddress = async (savedAddress) => {
+    if (!savedAddress) return;
+
+    const requestId = ++addressRequestId.current;
+    setSelectedAddressId(String(savedAddress.id));
+    setAddressLoading(true);
+    setAddressError("");
+    setShippingFee(null);
+    setShippingMessage("");
+
+    try {
+      const selectedProvince =
+        provinces.find(
+          (item) => String(item.code) === String(savedAddress.province_code)
+        ) || null;
+
+      const nextDistricts = selectedProvince
+        ? await getShippingDistricts(selectedProvince)
+        : [];
+
+      if (addressRequestId.current !== requestId) return;
+
+      const selectedDistrict =
+        nextDistricts.find(
+          (item) => String(item.code) === String(savedAddress.district_code)
+        ) || null;
+
+      const nextWards = selectedDistrict
+        ? await getShippingWards(selectedDistrict)
+        : [];
+
+      if (addressRequestId.current !== requestId) return;
+
+      const selectedWard =
+        nextWards.find(
+          (item) => String(item.code) === String(savedAddress.ward_code)
+        ) || null;
+
+      setDistricts(nextDistricts);
+      setWards(nextWards);
+      setForm((prev) => ({
+        ...prev,
+        fullName: savedAddress.recipient_name || prev.fullName,
+        phone: savedAddress.phone || prev.phone,
+        provinceCode: selectedProvince ? String(selectedProvince.code) : "",
+        province: selectedProvince?.name || savedAddress.province || "",
+        districtCode: selectedDistrict ? String(selectedDistrict.code) : "",
+        district: selectedDistrict?.name || savedAddress.district || "",
+        wardCode: selectedWard ? String(selectedWard.code) : "",
+        ward: selectedWard?.name || savedAddress.ward || "",
+        address: savedAddress.address_line || "",
+      }));
+      setShowSavedAddresses(false);
+    } catch (error) {
+      setAddressError(error?.message || "Không thể áp dụng địa chỉ đã lưu.");
+    } finally {
+      if (addressRequestId.current === requestId) {
+        setAddressLoading(false);
+      }
+    }
+  };
 
   const totalWeight = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -442,11 +562,15 @@ function CheckoutContent() {
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    if (["fullName", "phone", "address"].includes(name)) {
+      setSelectedAddressId("");
+    }
     setErrors((prev) => ({ ...prev, [name]: "", submit: "" }));
   };
 
   const handleProvinceChange = async (event) => {
     const requestId = ++addressRequestId.current;
+    setSelectedAddressId("");
     const provinceCode = event.target.value;
     const province = provinces.find(
       (item) => String(item.code) === String(provinceCode)
@@ -488,6 +612,7 @@ function CheckoutContent() {
 
   const handleDistrictChange = async (event) => {
     const requestId = ++addressRequestId.current;
+    setSelectedAddressId("");
     const districtCode = event.target.value;
     const district = districts.find(
       (item) => String(item.code) === String(districtCode)
@@ -525,6 +650,7 @@ function CheckoutContent() {
   };
 
   const handleWardChange = (event) => {
+    setSelectedAddressId("");
     const wardCode = event.target.value;
     const ward = wards.find((item) => String(item.code) === String(wardCode));
 
@@ -871,6 +997,147 @@ function CheckoutContent() {
                   <p className="mt-1 text-sm text-slate-500">
                     Kiểm tra lại thông tin người nhận và địa chỉ giao hàng.
                   </p>
+                </div>
+
+                <div className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => setShowSavedAddresses((prev) => !prev)}
+                    className="flex w-full items-center justify-between gap-4 p-4 text-left transition hover:bg-slate-100/70"
+                    aria-expanded={showSavedAddresses}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
+                        <MapPin size={18} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-black text-slate-950">Địa chỉ giao hàng</p>
+                          {selectedSavedAddress?.is_default && (
+                            <span className="rounded-full bg-orange-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-orange-600">
+                              Mặc định
+                            </span>
+                          )}
+                        </div>
+
+                        {selectedSavedAddress ? (
+                          <>
+                            <p className="mt-1 truncate text-xs font-bold text-slate-700">
+                              {selectedSavedAddress.recipient_name} · {selectedSavedAddress.phone}
+                            </p>
+                            <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">
+                              {[
+                                selectedSavedAddress.address_line,
+                                selectedSavedAddress.ward,
+                                selectedSavedAddress.district,
+                                selectedSavedAddress.province,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            {savedAddresses.length > 0
+                              ? "Bấm để chọn nhanh một địa chỉ đã lưu."
+                              : "Chưa có địa chỉ đã lưu. Bạn vẫn có thể nhập thủ công bên dưới."}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="hidden text-[10px] font-black uppercase tracking-wider text-orange-600 sm:inline">
+                        {selectedSavedAddress ? "Đổi địa chỉ" : "Chọn địa chỉ"}
+                      </span>
+                      <ChevronDown
+                        size={18}
+                        className={
+                          "text-slate-400 transition-transform duration-200 " +
+                          (showSavedAddresses ? "rotate-180" : "")
+                        }
+                      />
+                    </div>
+                  </button>
+
+                  {showSavedAddresses && (
+                    <div className="border-t border-slate-200 bg-white p-4">
+                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        {/* <p className="text-xs font-bold text-slate-500">
+                          Chọn một địa chỉ, hệ thống sẽ tự điền thông tin và tính lại phí GHN.
+                        </p> */}
+                        <Link
+                          href="/profile/addresses"
+                          className="inline-flex shrink-0 items-center gap-2 text-xs font-black uppercase tracking-wider text-orange-600 transition hover:text-orange-700"
+                        >
+                          <MapPin size={14} />
+                          Quản lý sổ địa chỉ
+                        </Link>
+                      </div>
+
+                      {savedAddresses.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {savedAddresses.map((savedAddress) => {
+                            const active =
+                              String(selectedAddressId) === String(savedAddress.id);
+
+                            return (
+                              <button
+                                key={savedAddress.id}
+                                type="button"
+                                onClick={() => applySavedAddress(savedAddress)}
+                                className={
+                                  "rounded-2xl border p-4 text-left transition " +
+                                  (active
+                                    ? "border-orange-400 bg-orange-50/40 ring-4 ring-orange-500/10"
+                                    : "border-slate-200 bg-white hover:border-orange-200 hover:bg-orange-50/20")
+                                }
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="font-black text-slate-950">
+                                      {savedAddress.recipient_name}
+                                    </p>
+                                    <p className="mt-1 text-xs font-bold text-slate-500">
+                                      {savedAddress.phone}
+                                    </p>
+                                  </div>
+                                  {savedAddress.is_default && (
+                                    <span className="shrink-0 rounded-full bg-orange-50 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-orange-600">
+                                      Mặc định
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">
+                                  {[
+                                    savedAddress.address_line,
+                                    savedAddress.ward,
+                                    savedAddress.district,
+                                    savedAddress.province,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-center">
+                          <p className="text-xs font-bold text-slate-500">
+                            Bạn chưa lưu địa chỉ nào.
+                          </p>
+                          <Link
+                            href="/profile/addresses"
+                            className="mt-2 inline-flex text-xs font-black text-orange-600 hover:text-orange-700"
+                          >
+                            + Thêm địa chỉ vào sổ địa chỉ
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-5 md:grid-cols-2">
