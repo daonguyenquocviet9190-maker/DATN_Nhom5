@@ -60,6 +60,10 @@ class BankOrderCreationTest extends TestCase
             $table->string('payment_method');
             $table->string('payment_status');
             $table->string('status');
+            $table->string('coupon')->nullable();
+            $table->timestamp('stock_deducted_at')->nullable();
+            $table->timestamp('stock_restored_at')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
             $table->decimal('subtotal', 14, 2);
             $table->decimal('discount_amount', 14, 2)->default(0);
             $table->decimal('shipping_fee', 14, 2)->default(0);
@@ -114,6 +118,43 @@ class BankOrderCreationTest extends TestCase
             $table->text('request_payload')->nullable();
             $table->text('response_payload')->nullable();
             $table->timestamp('paid_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('order_status_histories', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('order_id');
+            $table->unsignedBigInteger('changed_by')->nullable();
+            $table->string('from_status')->nullable();
+            $table->string('to_status');
+            $table->string('source')->nullable();
+            $table->text('note')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('vouchers', function (Blueprint $table) {
+            $table->id();
+            $table->string('code');
+            $table->string('discount_type');
+            $table->decimal('discount_value', 14, 2);
+            $table->decimal('min_order_value', 14, 2)->default(0);
+            $table->decimal('max_discount', 14, 2)->nullable();
+            $table->unsignedInteger('usage_limit')->nullable();
+            $table->unsignedInteger('per_user_limit')->nullable();
+            $table->unsignedInteger('used_count')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->timestamp('start_date')->nullable();
+            $table->timestamp('end_date')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('voucher_usages', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('voucher_id');
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('order_id')->nullable();
+            $table->decimal('discount_amount', 14, 2)->default(0);
+            $table->string('status')->default('used');
             $table->timestamps();
         });
 
@@ -189,10 +230,10 @@ class BankOrderCreationTest extends TestCase
                 'service_type_id' => 2,
                 'raw' => ['fee' => 30000],
             ]);
-        $this->app->instance(ShippingService::class, $shipping);
+        $this->instance(ShippingService::class, $shipping);
 
         $user = new User();
-        $user->id = 4;
+        $user->setAttribute('id', 4);
         Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/orders', [
@@ -225,6 +266,135 @@ class BankOrderCreationTest extends TestCase
         $this->assertDatabaseHas('orders', ['user_id' => 4, 'status' => 'pending', 'subtotal' => 200000]);
         $this->assertDatabaseHas('cart_items', ['user_id' => 4, 'product_id' => 11, 'quantity' => 1]);
         $this->assertDatabaseHas('cart_items', ['user_id' => 4, 'product_id' => 10, 'quantity' => 1]);
+    }
+
+    public function test_buy_now_does_not_remove_matching_items_from_the_saved_cart(): void
+    {
+        DB::table('products')->insert([
+            'id' => 12,
+            'name' => 'Áo polo thể thao',
+            'price' => 250000,
+            'stock' => 10,
+            'status' => 'active',
+        ]);
+
+        DB::table('cart_items')->insert([
+            'user_id' => 4,
+            'product_id' => 12,
+            'product_variant_id' => null,
+            'quantity' => 2,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $shipping = Mockery::mock(ShippingService::class);
+        $shipping->shouldReceive('calculate')->once()->andReturn([
+            'fee' => 30000,
+            'carrier_fee' => 30000,
+            'provider' => 'ghn',
+            'free_shipping' => false,
+            'service_id' => 53320,
+            'service_type_id' => 2,
+        ]);
+        $this->instance(ShippingService::class, $shipping);
+
+        $user = new User();
+        $user->setAttribute('id', 4);
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/orders', [
+            'customer' => [
+                'fullName' => 'Nguyễn Văn A',
+                'email' => 'a@example.com',
+                'phone' => '0937781823',
+            ],
+            'shippingAddress' => [
+                'province' => 'Hà Nội',
+                'provinceCode' => 1,
+                'district' => 'Quận Hoàn Kiếm',
+                'districtCode' => 1,
+                'ward' => 'Phường Hàng Bạc',
+                'wardCode' => '1',
+                'address' => '1 Hàng Bạc',
+            ],
+            'items' => [[
+                'product_id' => 12,
+                'quantity' => 1,
+            ]],
+            'checkoutMode' => 'buy_now',
+            'paymentMethod' => 'COD',
+            'subtotal' => 250000,
+            'discount' => 0,
+            'shippingFee' => 30000,
+            'total' => 280000,
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('cart_items', [
+            'user_id' => 4,
+            'product_id' => 12,
+            'quantity' => 2,
+        ]);
+        $this->assertDatabaseHas('products', ['id' => 12, 'stock' => 9]);
+    }
+
+    public function test_order_creation_rejects_unconfirmed_zero_shipping_fee_and_rolls_back_stock(): void
+    {
+        DB::table('products')->insert([
+            'id' => 13,
+            'name' => 'Quần chạy bộ',
+            'price' => 300000,
+            'stock' => 5,
+            'status' => 'active',
+        ]);
+
+        $shipping = Mockery::mock(ShippingService::class);
+        $shipping->shouldReceive('calculate')->once()->andReturn([
+            'fee' => 0,
+            'carrier_fee' => 0,
+            'provider' => 'ghn',
+            'free_shipping' => false,
+            'service_id' => 53320,
+            'service_type_id' => 2,
+        ]);
+        $this->instance(ShippingService::class, $shipping);
+
+        $user = new User();
+        $user->setAttribute('id', 4);
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/orders', [
+            'customer' => [
+                'fullName' => 'Nguyễn Văn A',
+                'email' => 'a@example.com',
+                'phone' => '0937781823',
+            ],
+            'shippingAddress' => [
+                'province' => 'Hà Nội',
+                'provinceCode' => 1,
+                'district' => 'Quận Hoàn Kiếm',
+                'districtCode' => 1,
+                'ward' => 'Phường Hàng Bạc',
+                'wardCode' => '1',
+                'address' => '1 Hàng Bạc',
+            ],
+            'items' => [[
+                'product_id' => 13,
+                'quantity' => 1,
+            ]],
+            'checkoutMode' => 'buy_now',
+            'paymentMethod' => 'COD',
+            'subtotal' => 300000,
+            'discount' => 0,
+            'shippingFee' => 0,
+            'total' => 300000,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('errors.shippingAddress.0', 'GHN trả về phí vận chuyển 0 nhưng chưa xác nhận miễn phí vận chuyển.');
+
+        $this->assertDatabaseHas('products', ['id' => 13, 'stock' => 5]);
+        $this->assertDatabaseMissing('orders', ['user_id' => 4, 'subtotal' => 300000]);
     }
 
     public function test_bank_order_remains_pending_until_admin_confirmation_after_qr_scan(): void
@@ -307,10 +477,10 @@ class BankOrderCreationTest extends TestCase
                 'service_id' => 53320,
                 'service_type_id' => 2,
             ]);
-        $this->app->instance(ShippingService::class, $shipping);
+        $this->instance(ShippingService::class, $shipping);
 
         $user = new User();
-        $user->id = 4;
+        $user->setAttribute('id', 4);
         Sanctum::actingAs($user);
 
         $response = $this->postJson('/api/orders', [
@@ -359,5 +529,139 @@ class BankOrderCreationTest extends TestCase
             'id' => 1,
             'stock' => 3,
         ]);
+    }
+
+    public function test_voucher_usage_is_limited_per_customer_and_released_when_order_is_cancelled(): void
+    {
+        DB::table('products')->insert([
+            'id' => 30,
+            'name' => 'Áo khoác thể thao',
+            'price' => 500000,
+            'stock' => 5,
+            'status' => 'active',
+        ]);
+        $voucherId = DB::table('vouchers')->insertGetId([
+            'code' => 'KHACHMOI',
+            'discount_type' => 'fixed',
+            'discount_value' => 50000,
+            'min_order_value' => 300000,
+            'usage_limit' => 100,
+            'per_user_limit' => 1,
+            'used_count' => 0,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $shipping = Mockery::mock(ShippingService::class);
+        $shipping->shouldReceive('calculate')->times(3)->andReturn([
+            'fee' => 30000,
+            'carrier_fee' => 30000,
+            'service_id' => 53320,
+            'service_type_id' => 2,
+        ]);
+        $this->instance(ShippingService::class, $shipping);
+
+        $user = new User();
+        $user->setAttribute('id', 9);
+        Sanctum::actingAs($user);
+
+        $payload = [
+            'customer' => ['fullName' => 'Khách mua hàng', 'email' => 'buyer@example.com', 'phone' => '0909000000'],
+            'shippingAddress' => [
+                'province' => 'Hồ Chí Minh', 'provinceCode' => 202,
+                'district' => 'Quận 1', 'districtCode' => 1442,
+                'ward' => 'Phường Bến Nghé', 'wardCode' => '21012',
+                'address' => '1 Đồng Khởi',
+            ],
+            'items' => [['product_id' => 30, 'quantity' => 1]],
+            'paymentMethod' => 'COD',
+            'subtotal' => 1,
+            'discount' => 0,
+            'shippingFee' => 0,
+            'total' => 1,
+            'coupon' => 'KHACHMOI',
+        ];
+
+        $first = $this->postJson('/api/orders', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.discount_amount', 50000);
+        $orderId = (int) $first->json('data.id');
+
+        $this->assertDatabaseHas('voucher_usages', [
+            'voucher_id' => $voucherId,
+            'user_id' => 9,
+            'order_id' => $orderId,
+            'status' => 'used',
+        ]);
+        $this->assertNotNull(DB::table('orders')->where('id', $orderId)->value('stock_deducted_at'));
+        $this->assertSame(1, (int) DB::table('vouchers')->where('id', $voucherId)->value('used_count'));
+
+        $this->postJson('/api/orders', $payload)->assertUnprocessable();
+        $this->assertDatabaseCount('voucher_usages', 1);
+
+        DB::table('payment_transactions')->insert([
+            'order_id' => $orderId,
+            'provider' => 'sepay',
+            'transaction_ref' => 'DNV-VOUCHER-CANCEL',
+            'amount' => 480000,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson("/api/orders/{$orderId}/cancel")->assertOk();
+        $this->assertDatabaseHas('voucher_usages', ['order_id' => $orderId, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('payment_transactions', ['order_id' => $orderId, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('orders', ['id' => $orderId, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('products', ['id' => 30, 'stock' => 5]);
+        $this->assertSame(0, (int) DB::table('vouchers')->where('id', $voucherId)->value('used_count'));
+
+        $this->postJson('/api/orders', $payload)->assertCreated();
+    }
+
+    public function test_customer_tracking_endpoint_checks_ownership_and_returns_carrier_status(): void
+    {
+        $orderId = DB::table('orders')->insertGetId([
+            'user_id' => 4,
+            'order_code' => 'DNV-TRACKING-001',
+            'tracking_code' => 'GHN-TRACKING-001',
+            'customer_name' => 'Khách hàng',
+            'customer_phone' => '0909000000',
+            'shipping_address' => '1 Đồng Khởi',
+            'province' => 'Hồ Chí Minh',
+            'district' => 'Quận 1',
+            'ward' => 'Phường Bến Nghé',
+            'payment_method' => 'cod',
+            'payment_status' => 'unpaid',
+            'status' => 'shipping',
+            'subtotal' => 500000,
+            'shipping_fee' => 30000,
+            'grand_total' => 530000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $shipping = Mockery::mock(ShippingService::class);
+        $shipping->shouldReceive('syncOrderTracking')->once()->with($orderId)->andReturn([
+            'order_code' => 'GHN-TRACKING-001',
+            'status' => 'delivering',
+            'status_label' => 'Đang giao hàng',
+            'logs' => [],
+        ]);
+        $this->instance(ShippingService::class, $shipping);
+
+        $user = new User();
+        $user->setAttribute('id', 4);
+        Sanctum::actingAs($user);
+
+        $this->getJson("/api/orders/{$orderId}/tracking")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'delivering');
+
+        $otherUser = new User();
+        $otherUser->id = 5;
+        Sanctum::actingAs($otherUser);
+        $this->getJson("/api/orders/{$orderId}/tracking")->assertNotFound();
     }
 }

@@ -42,8 +42,7 @@ import {
 } from "@/services/address.service";
 
 import { getProfile } from "@/services/profile.service";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+import { apiFetch } from "@/services/api";
 const paymentMethods = [
   {
     id: "COD",
@@ -170,15 +169,10 @@ function CheckoutContent() {
   const fetchAvailableVouchers = async () => {
     try {
       setLoadingVouchers(true);
-      const res = await fetch(`${API_BASE_URL}/vouchers`, {
-        headers: { Accept: "application/json" },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const list = Array.isArray(data) ? data : data.data || [];
-        const activeVouchers = list.filter((v) => v.is_active === 1 || v.is_active === true);
-        setAvailableVouchers(activeVouchers);
-      }
+      const data = await apiFetch("/vouchers", { auth: false });
+      const list = Array.isArray(data) ? data : data?.data || [];
+      const activeVouchers = list.filter((v) => v.is_active === 1 || v.is_active === true);
+      setAvailableVouchers(activeVouchers);
     } catch (err) {
       console.error("Không thể tải danh sách mã giảm giá:", err);
     } finally {
@@ -243,12 +237,10 @@ function CheckoutContent() {
     setCouponMessage("");
 
     try {
-      const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
+      // /vouchers/apply là route cần đăng nhập. Dùng apiFetch để tự gửi
+      // Bearer token thay vì fetch thuần khiến voucher luôn bị 401.
+      const data = await apiFetch("/vouchers/apply", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
         body: JSON.stringify({
           code: cleanCode,
           coupon: cleanCode,
@@ -257,26 +249,23 @@ function CheckoutContent() {
         }),
       });
 
-      const data = await res.json();
+      const discountVal =
+        data?.data?.discount_amount ?? data?.data?.discount_value ?? data?.discount ?? 0;
 
-      if (res.ok && (data.success || data.status)) {
-        const discountVal =
-          data.data?.discount_amount ?? data.data?.discount_value ?? data.discount ?? 0;
+      setAppliedCoupon(cleanCode);
+      setDiscountAmount(Number(discountVal));
+      setCouponMessage(data?.message || "Áp dụng mã giảm giá thành công!");
+      setIsErrorCoupon(false);
 
-        setAppliedCoupon(cleanCode);
-        setDiscountAmount(Number(discountVal));
-        setCouponMessage(data.message || "Áp dụng mã giảm giá thành công!");
-        setIsErrorCoupon(false);
-
-        localStorage.setItem("applied_coupon", cleanCode);
-        localStorage.setItem("discount_amount", discountVal);
-      } else {
-        removeCouponState();
-        setCouponMessage(data.message || "Mã giảm giá không tồn tại hoặc không đủ điều kiện.");
-        setIsErrorCoupon(true);
-      }
-    } catch {
-      setCouponMessage("Lỗi kết nối tới máy chủ khi kiểm tra mã.");
+      localStorage.setItem("applied_coupon", cleanCode);
+      localStorage.setItem("discount_amount", String(discountVal));
+    } catch (error) {
+      removeCouponState();
+      setCouponMessage(
+        error?.data?.message ||
+          error?.message ||
+          "Không thể kiểm tra mã giảm giá. Vui lòng thử lại."
+      );
       setIsErrorCoupon(true);
     } finally {
       setIsApplyingCoupon(false);

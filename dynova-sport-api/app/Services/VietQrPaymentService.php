@@ -31,6 +31,7 @@ class VietQrPaymentService
             $paymentCode = $this->paymentCodeForOrder((int) $order->id);
             $amount = (float) ($order->grand_total ?? $order->total ?? 0);
             if ($amount <= 0) throw new RuntimeException('Tổng tiền đơn hàng không hợp lệ.');
+            $provider = $this->providerName();
 
             $transaction = DB::table('payment_transactions')->where('order_id', $orderId)->whereIn('provider', self::PAYMENT_PROVIDERS)->orderByDesc('id')->lockForUpdate()->first();
             $settings = $this->bankSettings();
@@ -41,11 +42,11 @@ class VietQrPaymentService
                 'bank_code' => $settings['bank_code'],
                 'account_number' => $settings['account_number'],
                 'account_name' => $settings['account_name'],
-                'environment' => config('services.sepay.environment', 'test'),
-                'provider' => 'sepay_test',
+                'environment' => config('services.sepay.environment', 'production'),
+                'provider' => $provider,
             ];
             $data = [
-                'provider' => 'sepay_test', 'transaction_ref' => $paymentCode, 'amount' => $amount, 'status' => 'pending',
+                'provider' => $provider, 'transaction_ref' => $paymentCode, 'amount' => $amount, 'status' => 'pending',
                 'request_payload' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'updated_at' => now(),
             ];
             if ($transaction) {
@@ -114,12 +115,12 @@ class VietQrPaymentService
             if (($order->payment_status ?? '') === 'paid') return ['processed' => true, 'status' => 200, 'message' => 'Đơn hàng đã được thanh toán trước đó.', 'order_id' => $order->id, 'order_code' => $order->order_code ?? null];
 
             if (Schema::hasTable('payment_transactions') && $providerTransactionNo !== '') {
-                $duplicate = DB::table('payment_transactions')->where('provider', 'sepay_test')->where('provider_transaction_no', $providerTransactionNo)->where('status', 'paid')->where('order_id', '<>', $order->id)->exists();
+                $duplicate = DB::table('payment_transactions')->whereIn('provider', self::PAYMENT_PROVIDERS)->where('provider_transaction_no', $providerTransactionNo)->where('status', 'paid')->where('order_id', '<>', $order->id)->exists();
                 if ($duplicate) return ['processed' => false, 'status' => 409, 'message' => 'Giao dịch SePay đã được dùng cho đơn hàng khác.'];
             }
 
             $transaction = DB::table('payment_transactions')->where('order_id', $order->id)->whereIn('provider', self::PAYMENT_PROVIDERS)->orderByDesc('id')->lockForUpdate()->first();
-            $txData = ['provider' => 'sepay_test', 'transaction_ref' => $paymentCode, 'amount' => $transferAmount, 'status' => 'paid', 'updated_at' => now(), 'paid_at' => now()];
+            $txData = ['provider' => $this->providerName(), 'transaction_ref' => $paymentCode, 'amount' => $transferAmount, 'status' => 'paid', 'updated_at' => now(), 'paid_at' => now()];
             if (Schema::hasColumn('payment_transactions', 'provider_transaction_no')) $txData['provider_transaction_no'] = $providerTransactionNo !== '' ? $providerTransactionNo : null;
             if (Schema::hasColumn('payment_transactions', 'response_payload')) $txData['response_payload'] = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -139,12 +140,11 @@ class VietQrPaymentService
         }, 3);
     }
 
-    /** QR demo: không cần PAYMENT_SANDBOX_ENABLED. Chỉ cần TEST + SEPAY_TEST_SCAN_QR=true. */
     public function confirmTestScan(int $orderId, string $token): array
     {
         $this->assertReady();
-        if (!$this->isTestScanQrEnabled()) throw new RuntimeException('QR demo chưa được bật. Vui lòng đặt SEPAY_TEST_SCAN_QR=true.');
-        if (strtolower((string) config('services.sepay.environment', 'test')) !== 'test') throw new RuntimeException('Chức năng quét QR demo chỉ dùng trong môi trường test.');
+        if (!$this->isTestScanQrEnabled()) throw new RuntimeException('Chế độ quét QR thử nghiệm chưa được bật.');
+        if (strtolower((string) config('services.sepay.environment', 'production')) !== 'test') throw new RuntimeException('Chức năng quét QR thử chỉ dùng trong môi trường test.');
 
         $order = DB::table('orders')->where('id', $orderId)->first();
         if (!$order) throw new RuntimeException('Không tìm thấy đơn hàng.');
@@ -184,8 +184,9 @@ class VietQrPaymentService
 
     private function isTestScanQrEnabled(): bool
     {
-        return strtolower((string) config('services.sepay.environment', 'test')) === 'test'
-            && filter_var(env('SEPAY_TEST_SCAN_QR', 'false'), FILTER_VALIDATE_BOOL);
+        return app()->environment(['local', 'testing'])
+            && strtolower((string) config('services.sepay.environment', 'production')) === 'test'
+            && (bool) config('services.sepay.test_scan_enabled', false);
     }
 
     private function makeTestScanToken(object $order, object $transaction): string
@@ -247,7 +248,7 @@ class VietQrPaymentService
             'transfer_content' => $paymentCode,
             'qr_url' => $qrUrl,
             'scan_url' => $scanUrl,
-            'payment_mode' => $useScanQr ? 'scan' : 'sepay_test',
+            'payment_mode' => $useScanQr ? 'test_scan' : $this->providerName(),
             'simulated' => $useScanQr,
             'money_transfer_required' => !$useScanQr,
             'bank' => [
@@ -306,7 +307,7 @@ class VietQrPaymentService
             $branch = $branch !== '' ? $branch : trim((string) ($settings->bank_branch ?? ''));
         }
 
-        if ($bankCode === '' || $accountNumber === '' || $accountName === '') throw ValidationException::withMessages(['payment' => 'SePay Test chưa được cấu hình đầy đủ tài khoản nhận tiền.']);
+        if ($bankCode === '' || $accountNumber === '' || $accountName === '') throw ValidationException::withMessages(['payment' => 'Thông tin tài khoản nhận thanh toán chưa được cấu hình đầy đủ.']);
         if ($bankName === '') $bankName = $bankCode;
 
         return ['bank_name' => $bankName, 'bank_code' => $bankCode, 'account_number' => $accountNumber, 'account_name' => $accountName, 'branch' => $branch];
@@ -324,6 +325,13 @@ class VietQrPaymentService
     private function isBankPaymentMethod(?string $method): bool
     {
         return in_array(strtolower(trim((string) $method)), self::SUPPORTED_PAYMENT_METHODS, true);
+    }
+
+    private function providerName(): string
+    {
+        return strtolower((string) config('services.sepay.environment', 'production')) === 'test'
+            ? 'sepay_test'
+            : 'sepay';
     }
 
     private function decodePayload(mixed $value): array

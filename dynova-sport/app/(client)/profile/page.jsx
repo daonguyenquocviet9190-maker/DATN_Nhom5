@@ -392,8 +392,12 @@ export default function ProfilePage() {
       return;
     }
 
-    if (passwordForm.password.length < 6) {
-      setError("Mật khẩu mới cần tối thiểu 6 ký tự.");
+    if (
+      passwordForm.password.length < 8 ||
+      !/[A-Za-z]/.test(passwordForm.password) ||
+      !/\d/.test(passwordForm.password)
+    ) {
+      setError("Mật khẩu mới cần ít nhất 8 ký tự, gồm chữ và số.");
       return;
     }
 
@@ -944,7 +948,7 @@ export default function ProfilePage() {
                     onChange={(event) =>
                       updatePasswordField("password", event.target.value)
                     }
-                    placeholder="Tối thiểu 6 ký tự"
+                    placeholder="Tối thiểu 8 ký tự, gồm chữ và số"
                     rightSlot={
                       <button
                         type="button"

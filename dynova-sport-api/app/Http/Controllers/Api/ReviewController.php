@@ -126,12 +126,12 @@ class ReviewController extends Controller
             'order_item_id' => $purchase->order_item_id,
             'rating' => (int)$validated['rating'],
             'content' => trim($validated['content']),
-            'status' => 'approved',
+            'status' => 'pending',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Gửi đánh giá xác thực thành công.', 'data' => ['review' => $this->normalize(DB::table('reviews')->where('id', $id)->first())]], 201);
+        return response()->json(['success' => true, 'message' => 'Đánh giá đã được gửi và đang chờ duyệt.', 'data' => ['review' => $this->normalize(DB::table('reviews')->where('id', $id)->first())]], 201);
     }
 
     public function myReviews(Request $request)
@@ -145,8 +145,8 @@ class ReviewController extends Controller
         $review = DB::table('reviews')->where('id', $id)->where('user_id', $request->user()->id)->first();
         if (!$review) return response()->json(['success' => false, 'message' => 'Không tìm thấy đánh giá.'], 404);
         $validated = $request->validate(['rating' => ['required','integer','min:1','max:5'], 'content' => ['required','string','min:5','max:1000']]);
-        DB::table('reviews')->where('id', $id)->update(['rating'=>(int)$validated['rating'], 'content'=>trim($validated['content']), 'updated_at'=>now()]);
-        return response()->json(['success'=>true,'message'=>'Cập nhật đánh giá thành công.','data'=>['review'=>$this->normalize(DB::table('reviews')->where('id',$id)->first())]]);
+        DB::table('reviews')->where('id', $id)->update(['rating'=>(int)$validated['rating'], 'content'=>trim($validated['content']), 'status'=>'pending', 'updated_at'=>now()]);
+        return response()->json(['success'=>true,'message'=>'Đánh giá đã được cập nhật và đang chờ duyệt.','data'=>['review'=>$this->normalize(DB::table('reviews')->where('id',$id)->first())]]);
     }
 
     public function destroy(Request $request, $id)

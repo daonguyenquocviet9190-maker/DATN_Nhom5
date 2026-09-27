@@ -28,6 +28,7 @@ import { addToCart, getCart } from "@/utils/shopStorage";
 import {
   cancelOrder,
   getOrderById,
+  getOrderTracking,
   reorderOrder,
 } from "@/services/order.service";
 import {
@@ -578,6 +579,14 @@ export default function OrderDetailPage() {
 
       const data = extractOrder(response);
 
+      if (data?.tracking_code) {
+        try {
+          data.tracking = await getOrderTracking(orderId);
+        } catch {
+          data.tracking = null;
+        }
+      }
+
       setCatalogMaps(nextCatalogMaps);
       setOrder(data);
 
@@ -606,6 +615,40 @@ export default function OrderDetailPage() {
   useEffect(() => {
     loadOrder();
   }, [orderId]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      status !== "completed" ||
+      typeof window === "undefined" ||
+      window.location.hash !== "#reviews"
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      document.getElementById("reviews")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [loading, status, items.length]);
+
+  const refreshTracking = async () => {
+    if (!orderId || !order?.tracking_code) return;
+
+    try {
+      setActionLoading("tracking");
+      const nextTracking = await getOrderTracking(orderId);
+      setOrder((current) => current ? { ...current, tracking: nextTracking } : current);
+    } catch (err) {
+      showNotice(err?.message || "Chưa thể cập nhật trạng thái vận chuyển.");
+    } finally {
+      setActionLoading("");
+    }
+  };
 
   useEffect(() => {
     const shouldLoadPaymentState = !!orderId && bankTransferPayment && !paymentPaid;
@@ -833,7 +876,7 @@ export default function OrderDetailPage() {
       if (result?.review) {
         setReviews((current) => [result.review, ...current]);
       }
-      showNotice("Đã gửi đánh giá sản phẩm.");
+      showNotice("Đánh giá đã được gửi và đang chờ duyệt.");
     } catch (err) {
       showNotice(err?.message || "Không thể gửi đánh giá.");
     } finally {
@@ -841,7 +884,10 @@ export default function OrderDetailPage() {
     }
   };
 
-  const canCancel = ["pending", "waiting_bank_transfer", "confirmed", "processing"].includes(status);
+  const canCancel =
+    ["pending", "waiting_bank_transfer", "confirmed", "processing"].includes(status) &&
+    !paymentPaid &&
+    !order?.tracking_code;
 
   if (loading) {
     return (
@@ -966,7 +1012,12 @@ export default function OrderDetailPage() {
           </section>
 
           {(order?.tracking_code || tracking) && (
-            <OrderTrackingTimeline order={order} tracking={tracking} />
+            <OrderTrackingTimeline
+              order={order}
+              tracking={tracking}
+              onRefresh={refreshTracking}
+              refreshing={actionLoading === "tracking"}
+            />
           )}
 
           <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -1020,7 +1071,10 @@ export default function OrderDetailPage() {
           </section>
 
           {status === "completed" && items.length > 0 && (
-            <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+            <section
+              id="reviews"
+              className="scroll-mt-28 rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm"
+            >
               <div className="mb-5">
                 <h2 className="text-lg font-black text-slate-950">
                   Đánh giá sản phẩm
