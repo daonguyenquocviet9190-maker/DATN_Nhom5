@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Models\Voucher;
 use App\Services\ShippingService;
+use App\Services\VoucherService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,10 @@ use Illuminate\Support\Str;
 
 class AdminSimpleController extends Controller
 {
-    public function __construct(private ShippingService $shipping) {}
+    public function __construct(
+        private ShippingService $shipping,
+        private VoucherService $vouchers,
+    ) {}
 
     private function checkAdmin(Request $request)
     {
@@ -1087,6 +1091,11 @@ class AdminSimpleController extends Controller
             'status' => ['required', 'in:pending,confirmed,shipping,completed,cancelled'],
             'shipping_provider' => ['nullable', 'in:ghn,shop_staff'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'customer_received' => ['nullable', 'boolean'],
+            'payment_collected' => ['nullable', 'boolean'],
+            'collected_amount' => ['nullable', 'numeric', 'min:0'],
+            'collection_method' => ['nullable', 'in:cash,bank_transfer'],
+            'collection_note' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $shipmentTrackingCode = null;
@@ -1183,6 +1192,51 @@ class AdminSimpleController extends Controller
                     'message' => 'Đơn GHN được hoàn tất tự động khi GHN xác nhận giao thành công.',
                 ], 422);
             }
+
+            if (!($validated['customer_received'] ?? false)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Phải xác nhận khách hàng đã nhận hàng trước khi hoàn thành đơn.',
+                ], 422);
+            }
+
+            $needsCodCollection = strtolower((string) ($preflightOrder->payment_method ?? '')) === 'cod'
+                && strtolower((string) ($preflightOrder->payment_status ?? 'unpaid')) !== 'paid';
+
+            if ($needsCodCollection) {
+                $expectedAmount = (float) (
+                    $preflightOrder->grand_total
+                    ?? $preflightOrder->total
+                    ?? $preflightOrder->total_price
+                    ?? $preflightOrder->subtotal
+                    ?? 0
+                );
+                $collectedAmount = array_key_exists('collected_amount', $validated)
+                    ? (float) $validated['collected_amount']
+                    : null;
+
+                if (!($validated['payment_collected'] ?? false)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Phải xác nhận đã thu tiền COD trước khi hoàn thành đơn.',
+                    ], 422);
+                }
+
+                if ($collectedAmount === null || abs($collectedAmount - $expectedAmount) > 0.01) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Số tiền COD thực thu phải bằng tổng tiền cần thu: ' . number_format($expectedAmount, 0, ',', '.') . 'đ.',
+                        'expected_amount' => $expectedAmount,
+                    ], 422);
+                }
+
+                if (empty($validated['collection_method'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Vui lòng chọn hình thức nhân viên đã nhận tiền.',
+                    ], 422);
+                }
+            }
         }
 
         try {
@@ -1227,6 +1281,47 @@ class AdminSimpleController extends Controller
                     ], 422);
                 }
 
+                $completingShopDelivery = $next === 'completed'
+                    && strtolower((string) ($order->shipping_provider ?? '')) === 'shop_staff';
+
+                if ($completingShopDelivery && !($validated['customer_received'] ?? false)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Phải xác nhận khách hàng đã nhận hàng trước khi hoàn thành đơn.',
+                    ], 422);
+                }
+
+                $collectingShopCod = $completingShopDelivery
+                    && strtolower((string) ($order->payment_method ?? '')) === 'cod'
+                    && strtolower((string) ($order->payment_status ?? 'unpaid')) !== 'paid';
+                $collectedAmount = $collectingShopCod
+                    ? (float) ($validated['collected_amount'] ?? 0)
+                    : 0.0;
+                $collectionMethod = $collectingShopCod
+                    ? strtolower((string) ($validated['collection_method'] ?? ''))
+                    : null;
+
+                if ($collectingShopCod) {
+                    $expectedAmount = (float) (
+                        $order->grand_total
+                        ?? $order->total
+                        ?? $order->total_price
+                        ?? $order->subtotal
+                        ?? 0
+                    );
+
+                    if (
+                        !($validated['payment_collected'] ?? false)
+                        || !in_array($collectionMethod, ['cash', 'bank_transfer'], true)
+                        || abs($collectedAmount - $expectedAmount) > 0.01
+                    ) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Thông tin xác nhận thu COD không hợp lệ hoặc số tiền thực thu không khớp.',
+                        ], 422);
+                    }
+                }
+
                 if ($next === 'cancelled') {
                     $mayRestore = $this->hasColumn('orders', 'stock_deducted_at')
                         && !empty($order->stock_deducted_at)
@@ -1251,15 +1346,18 @@ class AdminSimpleController extends Controller
                         }
                     }
 
-                    if ($this->hasTable('voucher_usages')) {
-                        $usage = DB::table('voucher_usages')->where('order_id', $id)->where('status', 'used')->lockForUpdate()->first();
-                        if ($usage) {
-                            DB::table('voucher_usages')->where('id', $usage->id)->update(['status' => 'cancelled', 'updated_at' => now()]);
-                            if ($this->hasTable('vouchers')) {
-                                $voucher = DB::table('vouchers')->where('id', $usage->voucher_id)->lockForUpdate()->first();
-                                if ($voucher && (int) ($voucher->used_count ?? 0) > 0) DB::table('vouchers')->where('id', $voucher->id)->decrement('used_count');
-                            }
-                        }
+                    $couponCode = $order->coupon
+                        ?? $order->voucher_code
+                        ?? $order->voucher
+                        ?? $order->coupon_code
+                        ?? null;
+                    $this->vouchers->releaseForCancelledOrder((int) $id, $couponCode);
+
+                    if ($this->hasTable('payment_transactions')) {
+                        DB::table('payment_transactions')
+                            ->where('order_id', $id)
+                            ->where('status', 'pending')
+                            ->update(['status' => 'cancelled', 'updated_at' => now()]);
                     }
                 }
 
@@ -1287,7 +1385,67 @@ class AdminSimpleController extends Controller
                 if ($savedStatus === 'completed' && ($order->payment_method ?? '') === 'cod' && $this->hasColumn('orders', 'payment_status')) {
                     $payload['payment_status'] = 'paid';
                 }
+                if ($savedStatus === 'completed' && $collectingShopCod) {
+                    if ($this->hasColumn('orders', 'cod_collected_amount')) {
+                        $payload['cod_collected_amount'] = $collectedAmount;
+                    }
+                    if ($this->hasColumn('orders', 'cod_collection_method')) {
+                        $payload['cod_collection_method'] = $collectionMethod;
+                    }
+                    if ($this->hasColumn('orders', 'cod_collected_at')) {
+                        $payload['cod_collected_at'] = now();
+                    }
+                    if ($this->hasColumn('orders', 'cod_collected_by')) {
+                        $payload['cod_collected_by'] = $request->user()->id;
+                    }
+                    if ($this->hasColumn('orders', 'cod_collection_note')) {
+                        $payload['cod_collection_note'] = $validated['collection_note'] ?? null;
+                    }
+                }
                 DB::table('orders')->where('id', $id)->update($payload);
+
+                if ($collectingShopCod && $this->hasTable('payment_transactions')) {
+                    $transactionRef = 'SHOPCOD-' . $order->id;
+                    $auditPayload = json_encode([
+                        'source' => 'shop_staff_delivery',
+                        'customer_received' => true,
+                        'collection_method' => $collectionMethod,
+                        'collection_note' => $validated['collection_note'] ?? null,
+                        'confirmed_by' => $request->user()->id,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $transactionData = [
+                        'provider' => 'shop_staff_cod',
+                        'amount' => $collectedAmount,
+                        'status' => 'paid',
+                    ];
+
+                    if ($this->hasColumn('payment_transactions', 'request_payload')) {
+                        $transactionData['request_payload'] = $auditPayload;
+                    }
+                    if ($this->hasColumn('payment_transactions', 'paid_at')) {
+                        $transactionData['paid_at'] = now();
+                    }
+                    if ($this->hasColumn('payment_transactions', 'updated_at')) {
+                        $transactionData['updated_at'] = now();
+                    }
+
+                    $existingTransaction = DB::table('payment_transactions')
+                        ->where('transaction_ref', $transactionRef)
+                        ->first();
+
+                    if ($existingTransaction) {
+                        DB::table('payment_transactions')
+                            ->where('id', $existingTransaction->id)
+                            ->update($transactionData);
+                    } else {
+                        $transactionData['order_id'] = $order->id;
+                        $transactionData['transaction_ref'] = $transactionRef;
+                        if ($this->hasColumn('payment_transactions', 'created_at')) {
+                            $transactionData['created_at'] = now();
+                        }
+                        DB::table('payment_transactions')->insert($transactionData);
+                    }
+                }
 
                 if ($next === 'shipping') {
                     try {
@@ -1297,13 +1455,32 @@ class AdminSimpleController extends Controller
                 }
 
                 if ($savedStatus !== $current && $this->hasTable('order_status_histories')) {
+                    $historyNote = $validated['note'] ?? null;
+                    if ($completingShopDelivery) {
+                        $historyNote = 'Khách hàng đã nhận hàng.';
+
+                        if ($collectingShopCod) {
+                            $methodLabel = $collectionMethod === 'bank_transfer'
+                                ? 'chuyển khoản khi giao hàng'
+                                : 'tiền mặt';
+                            $historyNote .= ' Đã xác nhận thu '
+                                . number_format($collectedAmount, 0, ',', '.')
+                                . 'đ bằng ' . $methodLabel . '.';
+                        }
+
+                        $completionNote = trim((string) ($validated['collection_note'] ?? $validated['note'] ?? ''));
+                        if ($completionNote !== '') {
+                            $historyNote .= ' Ghi chú: ' . $completionNote;
+                        }
+                    }
+
                     DB::table('order_status_histories')->insert([
                         'order_id' => $id,
                         'changed_by' => $request->user()->id,
                         'from_status' => $current,
                         'to_status' => $savedStatus,
                         'source' => 'admin',
-                        'note' => $validated['note'] ?? (
+                        'note' => $historyNote ?? (
                             $savedStatus === 'shipping' && $shippingProvider === 'shop_staff'
                                 ? 'Nhân viên shop bắt đầu giao hàng.'
                                 : null
@@ -1323,7 +1500,9 @@ class AdminSimpleController extends Controller
                         : ($next === 'shipping'
                             ? 'Đã bàn giao đơn cho nhân viên shop.'
                             : ($next === 'completed'
-                                ? 'Đã xác nhận giao hàng thành công.'
+                                ? ($collectingShopCod
+                                    ? 'Đã xác nhận giao hàng và thu tiền COD thành công.'
+                                    : 'Đã xác nhận giao hàng thành công.')
                                 : 'Cập nhật trạng thái đơn hàng thành công.'))),
                     'data' => $updated,
                     'order' => $updated,
@@ -1364,7 +1543,21 @@ class AdminSimpleController extends Controller
         if ($deny = $this->checkAdmin($request)) return $deny;
         if (!$this->hasTable('users')) return $this->emptyList('customers');
 
-        $items = DB::table('users')->orderByDesc('id')->limit((int) $request->input('per_page', 200))->get();
+        $query = DB::table('users');
+        if ($this->hasColumn('users', 'role_id') && $this->hasTable('roles')) {
+            $adminRoleIds = DB::table('roles')
+                ->whereRaw('LOWER(name) = ?', ['admin'])
+                ->pluck('id')
+                ->all();
+            if (!empty($adminRoleIds)) {
+                $query->whereNotIn('role_id', $adminRoleIds);
+            }
+        }
+
+        $items = $query
+            ->orderByDesc('id')
+            ->limit(min(200, max(1, (int) $request->input('per_page', 50))))
+            ->get();
 
         return $this->listResponse('customers', $items, count($items));
     }
@@ -1377,10 +1570,34 @@ class AdminSimpleController extends Controller
             return response()->json(['success' => false, 'message' => 'Bảng users chưa tồn tại.'], 404);
         }
 
+        $validated = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+        $customer = DB::table('users')->where('id', $id)->first();
+        if (!$customer) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy tài khoản khách hàng.'], 404);
+        }
+
+        $isActive = (bool) $validated['is_active'];
+        if ((int) $request->user()->id === (int) $id && !$isActive) {
+            return response()->json(['success' => false, 'message' => 'Bạn không thể tự khóa tài khoản quản trị của mình.'], 422);
+        }
+
+        if ($this->hasColumn('users', 'role_id') && $this->hasTable('roles')) {
+            $roleName = DB::table('roles')->where('id', $customer->role_id)->value('name');
+            if (strtolower((string) $roleName) === 'admin') {
+                return response()->json(['success' => false, 'message' => 'Không thể thay đổi trạng thái quản trị viên tại màn hình khách hàng.'], 422);
+            }
+        }
+
         $payload = [];
 
         if ($this->hasColumn('users', 'is_active')) {
-            $payload['is_active'] = $request->boolean('is_active') ? 1 : 0;
+            $payload['is_active'] = $isActive ? 1 : 0;
+        }
+
+        if ($this->hasColumn('users', 'status')) {
+            $payload['status'] = $isActive ? 'active' : 'blocked';
         }
 
         if ($this->hasColumn('users', 'updated_at')) {
@@ -1389,6 +1606,12 @@ class AdminSimpleController extends Controller
 
         if (!empty($payload)) {
             DB::table('users')->where('id', $id)->update($payload);
+        }
+
+        if (!$isActive && $this->hasTable('personal_access_tokens')) {
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $id)
+                ->delete();
         }
 
         return response()->json([

@@ -73,8 +73,25 @@ class VoucherController extends Controller
             return response()->json(['success' => true, 'data' => []]);
         }
 
-        $items = DB::table('vouchers')
+        $query = DB::table('vouchers')
             ->where('is_active', 1)
+            ->where(function ($builder) {
+                $builder->whereNull('start_date')->orWhere('start_date', '<=', now());
+            })
+            ->where(function ($builder) {
+                $builder->whereNull('end_date')->orWhere('end_date', '>=', now());
+            });
+
+        if (Schema::hasColumn('vouchers', 'usage_limit') && Schema::hasColumn('vouchers', 'used_count')) {
+            $query->where(function ($builder) {
+                $builder
+                    ->whereNull('usage_limit')
+                    ->orWhere('usage_limit', 0)
+                    ->orWhereColumn('used_count', '<', 'usage_limit');
+            });
+        }
+
+        $items = $query
             ->orderByDesc('id')
             ->get();
 

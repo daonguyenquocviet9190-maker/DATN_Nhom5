@@ -198,7 +198,7 @@ export default function ProductReviews({ productId, orderId = null }) {
     setSending(true);
     setError("");
 
-    const data = await createReview({
+    await createReview({
       product_id: productId,
       order_id: orderId || eligibility?.order_id || null,
       order_item_id: eligibility?.order_item_id || null,
@@ -206,40 +206,10 @@ export default function ProductReviews({ productId, orderId = null }) {
       content: text,
     });
 
-    const newReview = data?.review;
-
-    if (!newReview) {
-      throw new Error("Không nhận được dữ liệu đánh giá sau khi gửi.");
-    }
-
-    setReviews((prev) => {
-      const cleanPrev = prev.filter(
-        (item) => String(item.id) !== String(newReview.id)
-      );
-
-      return [newReview, ...cleanPrev];
-    });
-
-    if (data?.stats) {
-      setAverage(Number(data.stats.average || 0));
-      setTotal(Number(data.stats.total || 0));
-      setBreakdown(
-        data.stats.breakdown || {
-          5: 0,
-          4: 0,
-          3: 0,
-          2: 0,
-          1: 0,
-        }
-      );
-    } else {
-      setTotal((prev) => prev + 1);
-    }
-
     setContent("");
     setRating(5);
 
-    showNotice("Gửi đánh giá thành công.");
+    showNotice("Đánh giá đã được gửi và đang chờ duyệt.");
 
     setTimeout(() => {
       loadReviews();

@@ -259,9 +259,6 @@ export default function ProfilePage() {
       form.fullName,
       form.email,
       form.phone,
-      form.address,
-      form.province,
-      form.ward,
     ];
 
     return Math.round((fields.filter((item) => String(item || "").trim()).length / fields.length) * 100);
@@ -392,8 +389,12 @@ export default function ProfilePage() {
       return;
     }
 
-    if (passwordForm.password.length < 6) {
-      setError("Mật khẩu mới cần tối thiểu 6 ký tự.");
+    if (
+      passwordForm.password.length < 8 ||
+      !/[A-Za-z]/.test(passwordForm.password) ||
+      !/\d/.test(passwordForm.password)
+    ) {
+      setError("Mật khẩu mới cần ít nhất 8 ký tự, gồm chữ và số.");
       return;
     }
 
@@ -618,6 +619,14 @@ export default function ProfilePage() {
                       </button>
                     );
                   })}
+
+                  <Link
+                    href="/profile/addresses"
+                    className="flex w-full items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-left text-sm font-black text-slate-600 transition hover:bg-orange-50 hover:text-orange-600"
+                  >
+                    <MapPin size={17} />
+                    Sổ địa chỉ
+                  </Link>
                 </div>
 
                 <button
@@ -834,36 +843,27 @@ export default function ProfilePage() {
                     placeholder="0937 781 823"
                   />
 
-                  <Field
-                    label="Tỉnh / Thành phố"
-                    icon={MapPin}
-                    value={form.province}
-                    onChange={(event) =>
-                      updateField("province", event.target.value)
-                    }
-                    placeholder="Thành phố Hồ Chí Minh"
-                  />
-
-                  <Field
-                    label="Phường / Xã"
-                    icon={MapPin}
-                    value={form.ward}
-                    onChange={(event) =>
-                      updateField("ward", event.target.value)
-                    }
-                    placeholder="Phường Thủ Dầu Một"
-                  />
-
-                  <div className="md:col-span-2">
-                    <Field
-                      label="Địa chỉ chi tiết"
-                      icon={MapPin}
-                      value={form.address}
-                      onChange={(event) =>
-                        updateField("address", event.target.value)
-                      }
-                      placeholder="Số nhà, tên đường, khu phố..."
-                    />
+                  <div className="md:col-span-2 rounded-3xl border border-orange-100 bg-orange-50/70 p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
+                          <MapPin size={18} />
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-950">Địa chỉ giao hàng</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-600">
+                            Thêm nhiều địa chỉ, sửa, xóa và đặt địa chỉ mặc định trong Sổ địa chỉ.
+                          </p>
+                        </div>
+                      </div>
+                      <Link
+                        href="/profile/addresses"
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-orange-600 shadow-sm transition hover:bg-slate-950 hover:text-white"
+                      >
+                        <MapPin size={15} />
+                        Mở sổ địa chỉ
+                      </Link>
+                    </div>
                   </div>
                 </div>
 
@@ -944,7 +944,7 @@ export default function ProfilePage() {
                     onChange={(event) =>
                       updatePasswordField("password", event.target.value)
                     }
-                    placeholder="Tối thiểu 6 ký tự"
+                    placeholder="Tối thiểu 8 ký tự, gồm chữ và số"
                     rightSlot={
                       <button
                         type="button"

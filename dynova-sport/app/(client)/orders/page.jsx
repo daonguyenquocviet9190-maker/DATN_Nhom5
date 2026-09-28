@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Search,
   ShoppingBag,
+  Star,
   Truck,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ import {
   getMyOrders,
   reorderOrder,
 } from "@/services/order.service";
+import { getMyReviews } from "@/services/review.service";
 
 const CART_KEY = "dynova_cart";
 
@@ -685,11 +687,13 @@ function getCreatedDate(order) {
 
 function canCancelOrder(order) {
   const status = getDisplayStatus(order);
-  const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
-  const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
   const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
 
-  return ["pending", "waiting_bank_transfer", "confirmed"].includes(status) && !(bankPayment && paymentPaid);
+  return (
+    ["pending", "waiting_bank_transfer", "confirmed"].includes(status) &&
+    !paymentPaid &&
+    !order?.tracking_code
+  );
 }
 
 function getStepDone(order, stepKey) {
@@ -833,10 +837,29 @@ function EmptyState({ hasFilter }) {
   );
 }
 
-function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
-  const statusMeta = getStatusMeta(getDisplayStatus(order));
+function OrderCard({
+  order,
+  onCancel,
+  onReorder,
+  loading,
+  catalogMaps,
+  reviewedOrderItemIds,
+}) {
+  const displayStatus = getDisplayStatus(order);
+  const statusMeta = getStatusMeta(displayStatus);
   const StatusIcon = statusMeta.icon;
   const items = getOrderItems(order);
+  const canReorder = ["completed", "cancelled"].includes(displayStatus);
+  const pendingReviewCount =
+    displayStatus === "completed"
+      ? items.filter((item) => {
+          const orderItemId = item?.id;
+          return (
+            !orderItemId ||
+            !reviewedOrderItemIds.has(String(orderItemId))
+          );
+        }).length
+      : 0;
 
   return (
     <article
@@ -961,14 +984,26 @@ function OrderCard({ order, onCancel, onReorder, loading, catalogMaps }) {
               Chi tiết
             </Link>
 
-            <button
-              onClick={() => onReorder(order)}
-              disabled={loading || items.length === 0}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20 disabled:opacity-60"
-            >
-              <RotateCcw size={15} />
-              Mua lại
-            </button>
+            {pendingReviewCount > 0 && (
+              <Link
+                href={`/orders/${order.id}#reviews`}
+                className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-600"
+              >
+                <Star size={15} />
+                Đánh giá{pendingReviewCount > 1 ? ` (${pendingReviewCount})` : ""}
+              </Link>
+            )}
+
+            {canReorder && (
+              <button
+                onClick={() => onReorder(order)}
+                disabled={loading || items.length === 0}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20 disabled:opacity-60"
+              >
+                <RotateCcw size={15} />
+                Mua lại
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1017,6 +1052,9 @@ export default function OrdersPage() {
   const [error, setError] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [reviewedOrderItemIds, setReviewedOrderItemIds] = useState(
+    () => new Set()
+  );
   const [catalogMaps, setCatalogMaps] = useState({
     productMap: {},
     variantMap: {},
@@ -1080,16 +1118,24 @@ export default function OrdersPage() {
     setError("");
 
     try {
-      const [data, nextCatalogMaps] = await Promise.all([
+      const [data, nextCatalogMaps, reviewResult] = await Promise.all([
         getMyOrders(),
         loadCatalogMaps(),
+        getMyReviews().catch(() => ({ reviews: [] })),
       ]);
 
       const nextOrders = extractItems(data, ["orders", "items"]);
+      const nextReviewedOrderItemIds = new Set(
+        (reviewResult?.reviews || [])
+          .map((review) => review?.order_item_id)
+          .filter((id) => id !== null && id !== undefined && id !== "")
+          .map(String)
+      );
 
       setCatalogMaps(nextCatalogMaps);
       setOrders(Array.isArray(nextOrders) ? nextOrders : []);
       setStats(data?.stats || data?.data?.stats || {});
+      setReviewedOrderItemIds(nextReviewedOrderItemIds);
     } catch (err) {
       setError(
         err?.message ||
@@ -1350,6 +1396,7 @@ export default function OrdersPage() {
                 onReorder={handleReorder}
                 loading={actionLoading}
                 catalogMaps={catalogMaps}
+                reviewedOrderItemIds={reviewedOrderItemIds}
               />
             ))}
           </div>

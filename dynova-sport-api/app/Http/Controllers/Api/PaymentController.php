@@ -92,9 +92,15 @@ class PaymentController extends Controller
     public function vietQrStatus(Request $request, $id): JsonResponse { return $this->sepayStatus($request, $id); }
     public function refreshVietQr(Request $request, $id): JsonResponse { return $this->refreshSepay($request, $id); }
 
-    /** QR demo: quét mã -> xác nhận thanh toán demo, không chuyển tiền thật. */
     public function sepayScan($id, $token)
     {
+        abort_unless(
+            app()->environment(['local', 'testing'])
+                && config('services.sepay.environment') === 'test'
+                && config('services.sepay.test_scan_enabled', false),
+            404
+        );
+
         try {
             $state = $this->vietQr->confirmTestScan((int) $id, (string) $token);
             return response()->view('payments.success', ['payment' => $state]);
@@ -176,6 +182,9 @@ class PaymentController extends Controller
             if (!$txn) return ['success' => false, 'code' => '01', 'message' => 'Không tìm thấy giao dịch.'];
             $order = DB::table('orders')->where('id', $txn->order_id)->lockForUpdate()->first();
             if (!$order) return ['success' => false, 'code' => '01', 'message' => 'Không tìm thấy đơn hàng.'];
+            if (strtolower((string) ($order->status ?? '')) === 'cancelled') {
+                return ['success' => false, 'code' => '02', 'message' => 'Đơn hàng đã hủy; giao dịch cần được đối soát hoàn tiền.', 'order_id' => $order->id];
+            }
             $receivedAmount = ((int) $request->query('vnp_Amount', 0)) / 100;
             if (abs($receivedAmount - (float) $txn->amount) > 0.01) return ['success' => false, 'code' => '04', 'message' => 'Số tiền giao dịch không khớp.', 'order_id' => $order->id];
             if (($txn->status ?? '') === 'paid') return ['success' => true, 'code' => '00', 'message' => 'Giao dịch đã được ghi nhận.', 'order_id' => $order->id];

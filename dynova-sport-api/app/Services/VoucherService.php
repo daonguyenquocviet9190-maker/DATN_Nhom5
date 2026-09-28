@@ -115,20 +115,26 @@ class VoucherService
         }
     }
 
-    public function releaseForCancelledOrder(int $orderId): void
+    public function releaseForCancelledOrder(int $orderId, ?string $legacyCode = null): bool
     {
-        if (!Schema::hasTable('voucher_usages')) {
-            return;
-        }
-
-        $usage = DB::table('voucher_usages')
-            ->where('order_id', $orderId)
-            ->where('status', 'used')
-            ->lockForUpdate()
-            ->first();
+        $usage = Schema::hasTable('voucher_usages')
+            ? DB::table('voucher_usages')
+                ->where('order_id', $orderId)
+                ->where('status', 'used')
+                ->lockForUpdate()
+                ->first()
+            : null;
 
         if (!$usage) {
-            return;
+            $cleanCode = strtoupper(trim((string) $legacyCode));
+            if ($cleanCode !== '' && Schema::hasTable('vouchers') && Schema::hasColumn('vouchers', 'used_count')) {
+                return DB::table('vouchers')
+                    ->whereRaw('UPPER(code) = ?', [$cleanCode])
+                    ->where('used_count', '>', 0)
+                    ->decrement('used_count') > 0;
+            }
+
+            return false;
         }
 
         DB::table('voucher_usages')->where('id', $usage->id)->update([
@@ -142,5 +148,7 @@ class VoucherService
                 ->where('used_count', '>', 0)
                 ->decrement('used_count');
         }
+
+        return true;
     }
 }

@@ -89,11 +89,13 @@ class CompletedOrderReviewTest extends TestCase
         $this->postJson('/api/reviews', $payload)
             ->assertCreated()
             ->assertJsonPath('data.review.verified_purchase', true)
-            ->assertJsonPath('data.review.order_item_id', 20);
+            ->assertJsonPath('data.review.order_item_id', 20)
+            ->assertJsonPath('data.review.status', 'pending');
 
         $this->postJson('/api/reviews', $payload)
             ->assertUnprocessable();
 
         $this->assertDatabaseCount('reviews', 1);
+        $this->assertDatabaseHas('reviews', ['order_item_id' => 20, 'status' => 'pending']);
     }
 }

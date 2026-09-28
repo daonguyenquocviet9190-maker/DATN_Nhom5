@@ -21,7 +21,10 @@ class AdminMiddleware
             ], 401);
         }
 
-        if (isset($user->status) && in_array(strtolower((string) $user->status), ['inactive', 'blocked'], true)) {
+        if (
+            (isset($user->is_active) && !(bool) $user->is_active)
+            || (isset($user->status) && in_array(strtolower((string) $user->status), ['inactive', 'blocked', 'locked'], true))
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'Tài khoản của bạn hiện không được phép truy cập.',

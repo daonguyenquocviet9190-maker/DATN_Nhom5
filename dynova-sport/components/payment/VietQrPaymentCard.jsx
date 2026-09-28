@@ -149,7 +149,7 @@ export default function VietQrPaymentCard({ orderId, onPaid, className = "" }) {
   }
 
   const paid = payment?.payment_status === "paid";
-  const scanMode = payment?.payment_mode === "scan";
+  const scanMode = payment?.payment_mode === "test_scan";
 
   if (paid) {
     return (
