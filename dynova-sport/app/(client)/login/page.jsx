@@ -18,6 +18,7 @@ import {
   loginWithApi,
   normalizeAuthRole,
 } from "@/services/auth.service";
+import { syncCartAfterLogin } from "@/utils/shopStorage";
 
 function isSafeInternalPath(value) {
   if (typeof value !== "string") return false;
@@ -169,6 +170,15 @@ export default function LoginPage() {
       });
 
       const role = normalizeAuthRole(auth?.user);
+
+      if (role !== "admin") {
+        try {
+          await syncCartAfterLogin();
+        } catch (cartError) {
+          console.warn("Không thể đồng bộ giỏ ngay sau đăng nhập:", cartError);
+        }
+      }
+
       const nextPath = resolveRedirectPath(role, redirectUrl);
 
       setSuccessText(
@@ -358,7 +368,11 @@ export default function LoginPage() {
             <p className="mt-6 text-center text-sm text-slate-500">
               Chưa có tài khoản?{" "}
               <Link
-                href="/register"
+                href={
+                  redirectUrl
+                    ? `/register?redirect=${encodeURIComponent(redirectUrl)}`
+                    : "/register"
+                }
                 className="font-black text-orange-600 transition hover:text-orange-700"
               >
                 Đăng ký ngay

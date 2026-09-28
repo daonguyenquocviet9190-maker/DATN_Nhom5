@@ -691,10 +691,10 @@ export default function AdminOrderDetailPage() {
                   <div className="rounded-3xl border border-indigo-400/20 bg-indigo-500/10 p-4">
                     <div className="flex items-start gap-3">
                       <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
-                      <div>
+                      {/* <div>
                         <p className="text-sm font-black text-white">Đã tạo vận đơn GHN</p>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Đang chờ GHN lấy hàng. Trạng thái sẽ tự chuyển sang “Đang giao” sau khi GHN nhận kiện.</p>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                   <button

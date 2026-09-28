@@ -364,9 +364,9 @@ export default function AddressBookPage() {
             <h1 className="mt-2 text-4xl font-black tracking-[-0.04em] text-slate-950">
               Sổ địa chỉ
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
-              Lưu nhiều địa chỉ nhận hàng và chọn địa chỉ mặc định để checkout nhanh hơn.
-            </p>
+              {/* <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">
+                Lưu nhiều địa chỉ nhận hàng và chọn địa chỉ mặc định để checkout nhanh hơn.
+              </p> */}
           </div>
 
           <button

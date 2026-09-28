@@ -1140,7 +1140,17 @@ export default function ProductDetailClient({
         );
 
         saveBuyNowItems([buyNowItem]);
-        router.push("/checkout?mode=buy_now");
+
+        const buyNowCheckout = "/checkout?mode=buy_now";
+
+        if (!getAuthToken()) {
+          router.push(
+            `/login?redirect=${encodeURIComponent(buyNowCheckout)}`
+          );
+          return;
+        }
+
+        router.push(buyNowCheckout);
         return;
       }
 
