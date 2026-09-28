@@ -6351,3 +6351,5 @@
 >>>>>>> c8a0fc92857799ba64db09947a3729117a14888e
 >>>>>>> a69e303d8133d274acc952cfe729d294999fd793
 >>>>>>> fe92cc48ea56b9fcb766bda72aa3a124f2718ff5
+[2026-09-28 12:50:12] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/detail-by-client-code","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Lỗi gọi API: corev2_tenant_order_detail_by_client_order_code - Đơn hàng không tồn tại","data":null} 
+[2026-09-28 12:50:29] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/create","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Post \"https://dev-online-gateway.ghn.vn/tenant/api/v2/shipping-order/create\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)","data":null} 
