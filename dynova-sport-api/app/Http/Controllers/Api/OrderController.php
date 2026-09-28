@@ -4,16 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\ShippingService;
+use App\Services\VoucherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Carbon\Carbon;
 
 class OrderController extends Controller
 {
-    public function __construct(private ShippingService $shipping) {}
+    public function __construct(
+        private ShippingService $shipping,
+        private VoucherService $vouchers,
+    ) {}
 
     private function onlyExistingOrderColumns(array $data): array
     {
@@ -48,64 +51,6 @@ class OrderController extends Controller
         }
 
         return is_numeric($value) ? (int) $value : null;
-    }
-
-    private function voucherValidationError($voucher, float $subtotal): ?string
-    {
-        if (!$voucher) {
-            return 'Mã giảm giá không tồn tại.';
-        }
-
-        if (isset($voucher->is_active) && !(bool) $voucher->is_active) {
-            return 'Mã giảm giá hiện không hoạt động.';
-        }
-
-        $now = now();
-
-        if (!empty($voucher->start_date) && Carbon::parse($voucher->start_date)->gt($now)) {
-            return 'Mã giảm giá chưa đến thời gian sử dụng.';
-        }
-
-        if (!empty($voucher->end_date) && Carbon::parse($voucher->end_date)->lt($now)) {
-            return 'Mã giảm giá đã hết hạn.';
-        }
-
-        $usageLimit = (int) ($voucher->usage_limit ?? 0);
-        $usedCount = (int) ($voucher->used_count ?? 0);
-
-        if ($usageLimit > 0 && $usedCount >= $usageLimit) {
-            return 'Mã giảm giá đã hết lượt sử dụng.';
-        }
-
-        $minOrderValue = max(0, (float) ($voucher->min_order_value ?? 0));
-
-        if ($subtotal < $minOrderValue) {
-            return 'Đơn hàng chưa đạt giá trị tối thiểu để sử dụng mã này.';
-        }
-
-        if ((float) ($voucher->discount_value ?? $voucher->value ?? 0) <= 0) {
-            return 'Mã giảm giá không có giá trị hợp lệ.';
-        }
-
-        return null;
-    }
-
-    private function calculateVoucherDiscount($voucher, float $subtotal): float
-    {
-        $discountType = strtolower((string) ($voucher->discount_type ?? 'fixed'));
-        $discountValue = max(0, (float) ($voucher->discount_value ?? $voucher->value ?? 0));
-
-        $discount = in_array($discountType, ['percent', 'percentage', '%'], true)
-            ? $subtotal * min($discountValue, 100) / 100
-            : $discountValue;
-
-        $maxDiscount = max(0, (float) ($voucher->max_discount ?? 0));
-
-        if ($maxDiscount > 0) {
-            $discount = min($discount, $maxDiscount);
-        }
-
-        return round(min($subtotal, max(0, $discount)), 2);
     }
 
     private function getOrderByColumn(): string
@@ -280,6 +225,7 @@ class OrderController extends Controller
             'items.*.variant_id' => ['nullable', 'integer'],
             'items.*.variantId' => ['nullable', 'integer'],
             'items.*.quantity' => ['nullable', 'integer', 'min:1', 'max:99'],
+            'checkoutMode' => ['nullable', 'string', 'in:cart,buy_now'],
             'paymentMethod' => ['required', 'string', 'in:COD,BANK,BANK_TRANSFER,cod,bank,bank_transfer'],
 
             'subtotal' => ['required', 'numeric'],
@@ -298,6 +244,7 @@ class OrderController extends Controller
 
         $paymentStatus = 'unpaid';
         $orderStatus = 'pending';
+        $checkoutMode = strtolower((string) ($validated['checkoutMode'] ?? 'cart'));
         $orderCode = 'DNV' . now()->format('ymdHis') . strtoupper(Str::random(3));
 
         $orderId = DB::transaction(function () use (
@@ -307,7 +254,8 @@ class OrderController extends Controller
             $orderCode,
             $paymentMethod,
             $paymentStatus,
-            $orderStatus
+            $orderStatus,
+            $checkoutMode
         ) {
             $customerName = data_get($validated, 'customer.fullName');
             $customerEmail = data_get($validated, 'customer.email');
@@ -378,10 +326,11 @@ class OrderController extends Controller
                 : collect();
 
             // Nếu người dùng đã chọn một phần sản phẩm trên checkout, ưu tiên subset đó
-            // thay vì dùng tất cả cart_items trong database.
+            // thay vì dùng tất cả cart_items trong database. Với mua ngay, tuyệt đối
+            // không fallback sang giỏ hàng server nếu request bị thiếu items.
             $sourceItems = $requestedItems;
 
-            if (empty($sourceItems)) {
+            if (empty($sourceItems) && $checkoutMode === 'cart') {
                 // Dọn các dòng cart lỗi/di sản không có product_id. Các dòng này có thể
                 // không hiện trên UI (do cart API JOIN products) nhưng trước đây vẫn làm
                 // checkout fail 422 "Không xác định được sản phẩm trong giỏ hàng".
@@ -434,8 +383,12 @@ class OrderController extends Controller
             }
 
             if (empty($sourceItems)) {
+                $message = $checkoutMode === 'buy_now'
+                    ? 'Không xác định được sản phẩm mua ngay. Vui lòng quay lại sản phẩm và thử lại.'
+                    : 'Giỏ hàng đang trống hoặc đã thay đổi. Vui lòng quay lại giỏ hàng và thử lại.';
+
                 throw ValidationException::withMessages([
-                    'cart' => ['Giỏ hàng đang trống hoặc đã thay đổi. Vui lòng quay lại giỏ hàng và thử lại.'],
+                    'cart' => [$message],
                 ]);
             }
 
@@ -597,45 +550,32 @@ class OrderController extends Controller
             }
 
             $shippingFee = max(0, (float) ($shippingQuote['fee'] ?? 0));
+            $freeShipping = (bool) ($shippingQuote['free_shipping'] ?? false);
+
+            // Endpoint tính phí đã chặn trường hợp GHN trả 0đ bất thường; tạo đơn cũng
+            // phải kiểm tra lại để frontend không thể gửi thẳng request với phí sai.
+            if ($shippingFee <= 0 && !$freeShipping) {
+                throw ValidationException::withMessages([
+                    'shippingAddress' => ['GHN trả về phí vận chuyển 0 nhưng chưa xác nhận miễn phí vận chuyển.'],
+                ]);
+            }
+
             $couponCode = !empty($validated['coupon']) ? strtoupper(trim($validated['coupon'])) : null;
             $discount = 0.0;
             $voucher = null;
 
-            /*
-             * Không tin discount do frontend gửi lên. Nếu có voucher, backend
-             * khóa dòng voucher, kiểm tra điều kiện và tự tính lại số tiền giảm
-             * dựa trên subtotal đã được tính từ giá sản phẩm trong database.
-             */
             if ($couponCode) {
-                if (!Schema::hasTable('vouchers')) {
-                    throw ValidationException::withMessages([
-                        'coupon' => ['Hệ thống mã giảm giá hiện chưa sẵn sàng.'],
-                    ]);
-                }
-
-                $voucher = DB::table('vouchers')
-                    ->whereRaw('UPPER(code) = ?', [$couponCode])
-                    ->lockForUpdate()
-                    ->first();
-
-                $voucherError = $this->voucherValidationError($voucher, $serverSubtotal);
-
-                if ($voucherError) {
-                    throw ValidationException::withMessages([
-                        'coupon' => [$voucherError],
-                    ]);
-                }
-
-                $discount = $this->calculateVoucherDiscount($voucher, $serverSubtotal);
+                $voucherResult = $this->vouchers->validateAndCalculate(
+                    $couponCode,
+                    $serverSubtotal,
+                    (int) $user->id,
+                    true,
+                );
+                $voucher = $voucherResult['voucher'];
+                $discount = $voucherResult['discount'];
             }
 
             $serverTotal = max(0, $serverSubtotal - $discount) + $shippingFee;
-
-            if ($voucher && Schema::hasColumn('vouchers', 'used_count')) {
-                DB::table('vouchers')
-                    ->where('id', $voucher->id)
-                    ->increment('used_count');
-            }
 
             $orderPayload = $this->onlyExistingOrderColumns([
                 'user_id' => $user->id,
@@ -664,6 +604,8 @@ class OrderController extends Controller
                 'payment_method' => $paymentMethod,
                 'payment_status' => $paymentStatus,
                 'status' => $orderStatus,
+                'stock_deducted_at' => now(),
+                'stock_restored_at' => null,
                 'coupon' => $couponCode,
                 'voucher_code' => $couponCode,
                 'voucher' => $couponCode,
@@ -680,6 +622,15 @@ class OrderController extends Controller
             ]);
 
             $orderId = DB::table('orders')->insertGetId($orderPayload);
+
+            if ($voucher) {
+                $this->vouchers->consume(
+                    $voucher,
+                    (int) $user->id,
+                    (int) $orderId,
+                    $discount,
+                );
+            }
 
             if (Schema::hasTable('order_items')) {
                 foreach ($preparedItems as $item) {
@@ -735,7 +686,7 @@ class OrderController extends Controller
 
             // Chỉ xóa những item thực sự đã được thanh toán trong đơn hiện tại.
             // Điều này giữ lại các sản phẩm còn lại trong giỏ khi người dùng chọn subset.
-            if (Schema::hasTable('cart_items') && !empty($sourceItems)) {
+            if ($checkoutMode === 'cart' && Schema::hasTable('cart_items') && !empty($sourceItems)) {
                 foreach ($sourceItems as $item) {
                     $productId = $this->toNullableInt($item['product_id'] ?? null);
                     if (!$productId) {
@@ -926,6 +877,68 @@ class OrderController extends Controller
         ]);
     }
 
+    public function tracking(Request $request, $id)
+    {
+        $order = DB::table('orders')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không tìm thấy đơn hàng.',
+            ], 404);
+        }
+
+        if (empty($order->tracking_code)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Đơn hàng chưa có mã vận đơn.',
+                'data' => null,
+            ]);
+        }
+
+        try {
+            $tracking = $this->shipping->syncOrderTracking((int) $order->id);
+        } catch (\Throwable $exception) {
+            report($exception);
+            $logs = Schema::hasTable('shipping_status_histories')
+                ? DB::table('shipping_status_histories')
+                    ->where('order_id', $order->id)
+                    ->orderBy('occurred_at')
+                    ->orderBy('id')
+                    ->get()
+                    ->map(fn ($row) => [
+                        'status' => $row->status ?? null,
+                        'status_label' => $this->shipping->statusLabel($row->status ?? null),
+                        'description' => $row->description ?? null,
+                        'updated_date' => $row->occurred_at ?? $row->created_at ?? null,
+                        'source' => $row->source ?? null,
+                        'location' => $row->location ?? null,
+                    ])
+                    ->values()
+                    ->all()
+                : [];
+
+            $tracking = [
+                'order_code' => $order->tracking_code,
+                'status' => $order->ghn_status ?? 'ready_to_pick',
+                'status_label' => $this->shipping->statusLabel($order->ghn_status ?? 'ready_to_pick'),
+                'leadtime' => $order->ghn_expected_delivery_at ?? null,
+                'updated_date' => $order->ghn_last_synced_at ?? null,
+                'logs' => $logs,
+                'sync_error' => true,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đã cập nhật trạng thái vận chuyển.',
+            'data' => $tracking,
+        ]);
+    }
+
     public function cancel(Request $request, $id)
     {
         $user = $request->user();
@@ -966,13 +979,28 @@ class OrderController extends Controller
                     ]);
                 }
 
+                if (strtolower((string) ($order->payment_status ?? 'unpaid')) === 'paid') {
+                    throw ValidationException::withMessages([
+                        'order' => ['Đơn hàng đã thanh toán. Vui lòng liên hệ shop để được hỗ trợ hủy và hoàn tiền.'],
+                    ]);
+                }
+
+                if (!empty($order->tracking_code)) {
+                    throw ValidationException::withMessages([
+                        'order' => ['Đơn hàng đã được tạo vận đơn. Vui lòng liên hệ shop để được hỗ trợ hủy.'],
+                    ]);
+                }
+
                 /*
                  * Checkout đã trừ kho khi tạo đơn, vì vậy hủy đơn hợp lệ phải
                  * hoàn lại đúng lượng hàng đã giữ. Toàn bộ thao tác nằm trong
                  * transaction + lock order để hai request hủy đồng thời không
                  * thể hoàn kho hai lần.
                  */
-                if (Schema::hasTable('order_items') && Schema::hasColumn('order_items', 'order_id')) {
+                $stockAlreadyRestored = Schema::hasColumn('orders', 'stock_restored_at')
+                    && !empty($order->stock_restored_at);
+
+                if (!$stockAlreadyRestored && Schema::hasTable('order_items') && Schema::hasColumn('order_items', 'order_id')) {
                     $orderItems = DB::table('order_items')
                         ->where('order_id', $order->id)
                         ->get();
@@ -1005,6 +1033,14 @@ class OrderController extends Controller
                     $updates['status'] = 'cancelled';
                 }
 
+                if (Schema::hasColumn('orders', 'cancelled_at')) {
+                    $updates['cancelled_at'] = now();
+                }
+
+                if (Schema::hasColumn('orders', 'stock_restored_at') && !$stockAlreadyRestored) {
+                    $updates['stock_restored_at'] = now();
+                }
+
                 if (Schema::hasColumn('orders', 'updated_at')) {
                     $updates['updated_at'] = now();
                 }
@@ -1015,18 +1051,36 @@ class OrderController extends Controller
                         ->update($updates);
                 }
 
+                if (Schema::hasTable('payment_transactions')) {
+                    DB::table('payment_transactions')
+                        ->where('order_id', $order->id)
+                        ->where('status', 'pending')
+                        ->update([
+                            'status' => 'cancelled',
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                if (Schema::hasTable('order_status_histories')) {
+                    DB::table('order_status_histories')->insert([
+                        'order_id' => $order->id,
+                        'changed_by' => $user->id,
+                        'from_status' => $status,
+                        'to_status' => 'cancelled',
+                        'source' => 'customer',
+                        'note' => 'Khách hàng hủy đơn.',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
                 $couponCode = $order->coupon
                     ?? $order->voucher_code
                     ?? $order->voucher
                     ?? $order->coupon_code
                     ?? null;
 
-                if ($couponCode && Schema::hasTable('vouchers') && Schema::hasColumn('vouchers', 'used_count')) {
-                    DB::table('vouchers')
-                        ->whereRaw('UPPER(code) = ?', [strtoupper(trim((string) $couponCode))])
-                        ->where('used_count', '>', 0)
-                        ->decrement('used_count');
-                }
+                $this->vouchers->releaseForCancelledOrder((int) $order->id, $couponCode);
             });
         } catch (ValidationException $e) {
             $message = collect($e->errors())->flatten()->first() ?: 'Không thể hủy đơn hàng.';

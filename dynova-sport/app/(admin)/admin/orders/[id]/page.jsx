@@ -28,7 +28,6 @@ import {
   updateAdminOrderStatus,
 } from "@/services/admin.service";
 import { getShippingStatus } from "@/services/address.service";
-import GhnDevSimulator from "@/components/admin/GhnDevSimulator";
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"
@@ -178,6 +177,13 @@ function getCreatedAt(order) {
   }
 }
 
+function formatDateTime(value) {
+  if (!value) return "--";
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("vi-VN");
+}
+
 function getItemName(item) {
   return item?.product_name || item?.name || item?.product?.name || "Sản phẩm";
 }
@@ -235,12 +241,20 @@ export default function AdminOrderDetailPage() {
   const [shippingConfig, setShippingConfig] = useState(null);
   const [shippingAction, setShippingAction] = useState("");
   const [deliveryProvider, setDeliveryProvider] = useState("shop_staff");
+  const [deliveryConfirmationOpen, setDeliveryConfirmationOpen] = useState(false);
+  const [collectionForm, setCollectionForm] = useState({
+    customerReceived: false,
+    amount: "",
+    method: "cash",
+    note: "",
+  });
 
   const items = useMemo(() => getOrderItems(order), [order]);
   const status = normalizeStatus(order?.status || "pending");
   const paymentMethod = String(order?.payment_method || order?.paymentMethod || "").toLowerCase();
   const bankPayment = ["bank", "bank_transfer", "vietqr"].includes(paymentMethod);
   const paymentPaid = String(order?.payment_status || order?.paymentStatus || "").toLowerCase() === "paid";
+  const codCollectionRequired = paymentMethod === "cod" && !paymentPaid;
   const bankUnpaid = bankPayment && !paymentPaid && status !== "cancelled";
   const displayStatus = bankUnpaid ? "waiting_bank_transfer" : status;
   const statusMeta = getStatusMeta(displayStatus);
@@ -283,13 +297,6 @@ export default function AdminOrderDetailPage() {
   }, [ghnAvailable, order?.id, order?.tracking_code, status]);
 
   useEffect(() => {
-    const running = Boolean(order?.tracking?.delivery_map?.simulation?.running);
-    if (!running || !order?.id) return undefined;
-    const timer = window.setInterval(() => loadOrder({ silent: true }), 2500);
-    return () => window.clearInterval(timer);
-  }, [order?.id, order?.tracking?.delivery_map?.simulation?.running]);
-
-  useEffect(() => {
     if (!bankUnpaid || !order?.id) return undefined;
     const timer = window.setInterval(() => loadOrder({ silent: true }), 2500);
     return () => window.clearInterval(timer);
@@ -315,8 +322,10 @@ export default function AdminOrderDetailPage() {
       setOrder({ ...order, ...updatedOrder, status: savedStatus });
       showNotice(response?.message || "Đã cập nhật trạng thái đơn hàng.");
       await loadOrder();
+      return true;
     } catch (err) {
       setError(getApiErrorMessage(err) || "Không thể cập nhật trạng thái đơn hàng.");
+      return false;
     } finally {
       setSaving(false);
       setSavingAction("");
@@ -330,8 +339,46 @@ export default function AdminOrderDetailPage() {
   };
 
   const handleCompleteShopDelivery = () => {
-    if (window.confirm("Xác nhận khách đã nhận hàng thành công? Đơn COD sẽ được ghi nhận đã thanh toán.")) {
-      handleUpdateStatus("completed");
+    setError("");
+    setCollectionForm({
+      customerReceived: false,
+      amount: String(Math.round(getTotal(order))),
+      method: "cash",
+      note: "",
+    });
+    setDeliveryConfirmationOpen(true);
+  };
+
+  const submitShopDeliveryConfirmation = async (event) => {
+    event.preventDefault();
+
+    const collectedAmount = Number(collectionForm.amount);
+    const expectedAmount = getTotal(order);
+
+    if (!collectionForm.customerReceived) {
+      setError("Vui lòng xác nhận khách hàng đã nhận hàng trước khi hoàn tất đơn.");
+      return;
+    }
+
+    if (
+      codCollectionRequired &&
+      (!Number.isFinite(collectedAmount) || Math.abs(collectedAmount - expectedAmount) > 0.01)
+    ) {
+      setError(`Số tiền thực thu phải bằng ${formatCurrency(expectedAmount)}.`);
+      return;
+    }
+
+    const success = await handleUpdateStatus("completed", {
+      customer_received: true,
+      payment_collected: codCollectionRequired ? true : undefined,
+      collected_amount: codCollectionRequired ? collectedAmount : undefined,
+      collection_method: codCollectionRequired ? collectionForm.method : undefined,
+      collection_note: collectionForm.note.trim() || undefined,
+      note: collectionForm.note.trim() || undefined,
+    });
+
+    if (success) {
+      setDeliveryConfirmationOpen(false);
     }
   };
 
@@ -376,6 +423,125 @@ export default function AdminOrderDetailPage() {
         </div>
       )}
 
+      {deliveryConfirmationOpen && (
+        <div className="fixed inset-0 z-[150] grid place-items-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={submitShopDeliveryConfirmation}
+            className="w-full max-w-lg rounded-[32px] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/50"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300">
+                <CheckCircle2 size={23} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-white">
+                  {codCollectionRequired
+                    ? "Xác nhận giao hàng và thu COD"
+                    : "Xác nhận giao hàng thành công"}
+                </h3>
+                <p className="mt-1 text-sm font-semibold leading-6 text-slate-400">
+                  {codCollectionRequired
+                    ? "Chỉ xác nhận sau khi khách đã nhận hàng và nhân viên đã thu đủ tiền."
+                    : "Đơn đã thanh toán trước, thao tác này chỉ xác nhận khách đã nhận hàng."}
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+              <input
+                type="checkbox"
+                checked={collectionForm.customerReceived}
+                onChange={(event) =>
+                  setCollectionForm((current) => ({ ...current, customerReceived: event.target.checked }))
+                }
+                className="mt-1 h-5 w-5 shrink-0 accent-emerald-500"
+              />
+              <span>
+                <span className="block text-sm font-black text-white">Khách hàng đã nhận hàng</span>
+                <span className="mt-1 block text-xs font-semibold leading-5 text-slate-400">
+                  Chỉ tích sau khi shop xác nhận hàng đã được giao đến khách thành công.
+                </span>
+              </span>
+            </label>
+
+            {codCollectionRequired && (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-3xl border border-orange-400/20 bg-orange-500/10 p-4">
+                  <p className="text-xs font-black uppercase tracking-wider text-orange-300">Số tiền phải thu</p>
+                  <p className="mt-1 text-2xl font-black text-white">{formatCurrency(getTotal(order))}</p>
+                </div>
+
+                <label className="block">
+                  <span className="text-sm font-black text-slate-200">Số tiền thực thu</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={collectionForm.amount}
+                    onChange={(event) =>
+                      setCollectionForm((current) => ({ ...current, amount: event.target.value }))
+                    }
+                    className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 font-black text-white outline-none transition focus:border-orange-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-black text-slate-200">Hình thức đã nhận tiền</span>
+                  <select
+                    value={collectionForm.method}
+                    onChange={(event) =>
+                      setCollectionForm((current) => ({ ...current, method: event.target.value }))
+                    }
+                    className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-slate-800 px-4 font-bold text-white outline-none transition focus:border-orange-400"
+                  >
+                    <option value="cash">Tiền mặt</option>
+                    <option value="bank_transfer">Chuyển khoản khi giao hàng</option>
+                  </select>
+                </label>
+              </div>
+            )}
+
+            <label className="mt-4 block">
+              <span className="text-sm font-black text-slate-200">Ghi chú giao hàng</span>
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={collectionForm.note}
+                onChange={(event) =>
+                  setCollectionForm((current) => ({ ...current, note: event.target.value }))
+                }
+                placeholder="Ví dụ: khách đã kiểm tra hàng và thanh toán đủ..."
+                className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-600 focus:border-orange-400"
+              />
+            </label>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setDeliveryConfirmationOpen(false)}
+                disabled={saving}
+                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-black text-slate-300 transition hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                Quay lại
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !collectionForm.customerReceived}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingAction === "completed" ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={17} />
+                )}
+                {codCollectionRequired ? "Xác nhận đã giao và thu đủ" : "Xác nhận đã giao"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
         <Link href="/admin/orders" className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-black text-slate-200 transition hover:bg-white/[0.1] hover:text-white">
           <ArrowLeft size={16} />
@@ -411,7 +577,7 @@ export default function AdminOrderDetailPage() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-white">Tiến trình đơn hàng</h3>
-                <p className="mt-1 text-sm font-semibold text-slate-500">GHN tự cập nhật sau khi lấy hàng; đơn nội bộ do nhân viên shop xác nhận theo từng bước.</p>
+                {/* <p className="mt-1 text-sm font-semibold text-slate-500">GHN tự cập nhật sau khi lấy hàng; đơn nội bộ do nhân viên shop xác nhận theo từng bước.</p> */}
               </div>
               <ShieldCheck className="text-orange-300" size={24} />
             </div>
@@ -488,7 +654,7 @@ export default function AdminOrderDetailPage() {
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Xử lý đơn hàng</h3>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Chỉ hiển thị thao tác hợp lệ ở bước hiện tại.</p>
+            {/* <p className="mt-1 text-sm font-semibold text-slate-500">Chỉ hiển thị thao tác hợp lệ ở bước hiện tại.</p> */}
 
             <div className="mt-5 space-y-4">
               {paymentLocked ? (
@@ -525,10 +691,10 @@ export default function AdminOrderDetailPage() {
                   <div className="rounded-3xl border border-indigo-400/20 bg-indigo-500/10 p-4">
                     <div className="flex items-start gap-3">
                       <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
-                      <div>
+                      {/* <div>
                         <p className="text-sm font-black text-white">Đã tạo vận đơn GHN</p>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Đang chờ GHN lấy hàng. Trạng thái sẽ tự chuyển sang “Đang giao” sau khi GHN nhận kiện.</p>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                   <button
@@ -549,7 +715,7 @@ export default function AdminOrderDetailPage() {
                 <>
                   <div>
                     <p className="text-sm font-black text-white">Chọn đơn vị giao hàng</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">Lựa chọn được lưu khi bạn bắt đầu bàn giao đơn.</p>
+                    {/* <p className="mt-1 text-xs font-semibold text-slate-500">Lựa chọn được lưu khi bạn bắt đầu bàn giao đơn.</p> */}
                   </div>
 
                   <button
@@ -562,7 +728,7 @@ export default function AdminOrderDetailPage() {
                       <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
                       <span>
                         <span className="block text-sm font-black text-white">Giao Hàng Nhanh (GHN)</span>
-                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{ghnAvailable ? "Tạo vận đơn và tự đồng bộ hành trình giao hàng." : "GHN chưa được cấu hình hoặc hiện không khả dụng."}</span>
+                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{ghnAvailable ? "" : "GHN chưa được cấu hình hoặc hiện không khả dụng."}</span>
                       </span>
                     </span>
                   </button>
@@ -577,7 +743,7 @@ export default function AdminOrderDetailPage() {
                       <Store className="mt-0.5 shrink-0 text-orange-300" size={20} />
                       <span>
                         <span className="block text-sm font-black text-white">Nhân viên shop giao</span>
-                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">Không cần mã vận đơn; shop tự giao và xác nhận khi khách đã nhận hàng.</span>
+                        {/* <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">Không cần mã vận đơn; shop tự giao và xác nhận khi khách đã nhận hàng.</span> */}
                       </span>
                     </span>
                   </button>
@@ -691,15 +857,6 @@ export default function AdminOrderDetailPage() {
             </section>
           )}
 
-          {hasGhnShipment && (
-            <GhnDevSimulator
-              order={order}
-              environment={shippingConfig?.environment}
-              busy={shippingAction}
-              onSync={handleShippingSync}
-            />
-          )}
-
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Thanh toán</h3>
             <div className="mt-5 space-y-3 text-sm">
@@ -712,6 +869,19 @@ export default function AdminOrderDetailPage() {
                 <span className="text-slate-500">Trạng thái</span>
                 <span className="font-black text-orange-300">{paymentPaid ? "Đã thanh toán" : bankPayment ? "Chờ thanh toán" : "Chưa thanh toán"}</span>
               </div>
+
+              {order?.cod_collected_at && (
+                <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-300">Xác nhận thu COD</p>
+                  <div className="mt-3 space-y-2 text-xs font-semibold text-slate-300">
+                    <p>Số tiền: <b className="text-white">{formatCurrency(Number(order?.cod_collected_amount || 0))}</b></p>
+                    <p>Hình thức: <b className="text-white">{order?.cod_collection_method === "bank_transfer" ? "Chuyển khoản khi giao" : "Tiền mặt"}</b></p>
+                    <p>Thời gian: <b className="text-white">{formatDateTime(order?.cod_collected_at)}</b></p>
+                    {order?.cod_collected_by && <p>Người xác nhận: <b className="text-white">Tài khoản #{order.cod_collected_by}</b></p>}
+                    {order?.cod_collection_note && <p className="leading-5">Ghi chú: <b className="text-white">{order.cod_collection_note}</b></p>}
+                  </div>
+                </div>
+              )}
 
               <div className="my-4 border-t border-white/10" />
 

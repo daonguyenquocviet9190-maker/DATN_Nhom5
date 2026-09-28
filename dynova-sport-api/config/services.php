@@ -46,7 +46,7 @@ return [
         'environment' => strtolower(
             (string) env(
                 'GHN_ENV',
-                'staging'
+                'production'
             )
         ),
 
@@ -153,7 +153,7 @@ return [
         'simulation_auto_start' => filter_var(
             env(
                 'GHN_SIMULATION_AUTO_START',
-                true
+                false
             ),
             FILTER_VALIDATE_BOOL
         ),
@@ -179,37 +179,13 @@ return [
         'environment' => strtolower(
             (string) env(
                 'VIETQR_ENV',
-                'development'
+                'production'
             )
         ),
 
         'image_base_url' => env(
             'VIETQR_IMAGE_BASE_URL',
             'https://img.vietqr.io/image'
-        ),
-
-        'demo_confirmation_enabled' => filter_var(
-            env(
-                'VIETQR_DEMO_CONFIRMATION_ENABLED',
-                false
-            ),
-            FILTER_VALIDATE_BOOL
-        ),
-
-        'dev_auto_confirm' => filter_var(
-            env(
-                'VIETQR_DEV_AUTO_CONFIRM',
-                false
-            ),
-            FILTER_VALIDATE_BOOL
-        ),
-
-        'dev_auto_confirm_seconds' => max(
-            3,
-            (int) env(
-                'VIETQR_DEV_AUTO_CONFIRM_SECONDS',
-                8
-            )
         ),
 
         'webhook_secret' => env(
@@ -236,7 +212,7 @@ return [
 
         'url' => env(
             'VNPAY_URL',
-            'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'
+            'https://pay.vnpay.vn/vpcpay.html'
         ),
 
         'return_url' => env(
@@ -259,7 +235,7 @@ return [
         'enabled' => filter_var(
             env(
                 'SEPAY_ENABLED',
-                true
+                false
             ),
             FILTER_VALIDATE_BOOL
         ),
@@ -267,11 +243,10 @@ return [
         'environment' => strtolower(
             (string) env(
                 'SEPAY_ENV',
-                'test'
+                'production'
             )
         ),
 
-        // URL public để điện thoại quét QR truy cập được.
         'public_url' => env(
             'SEPAY_PUBLIC_URL',
             env('APP_URL')
@@ -283,28 +258,28 @@ return [
         ),
 
         'bank_name' => env(
-            'SEPAY_TEST_BANK_NAME',
-            ''
+            'SEPAY_BANK_NAME',
+            env('SEPAY_TEST_BANK_NAME', '')
         ),
 
         'bank_code' => env(
-            'SEPAY_TEST_BANK_CODE',
-            ''
+            'SEPAY_BANK_CODE',
+            env('SEPAY_TEST_BANK_CODE', '')
         ),
 
         'account_number' => env(
-            'SEPAY_TEST_ACCOUNT',
-            ''
+            'SEPAY_ACCOUNT_NUMBER',
+            env('SEPAY_TEST_ACCOUNT', '')
         ),
 
         'account_name' => env(
-            'SEPAY_TEST_ACCOUNT_NAME',
-            ''
+            'SEPAY_ACCOUNT_NAME',
+            env('SEPAY_TEST_ACCOUNT_NAME', '')
         ),
 
         'branch' => env(
-            'SEPAY_TEST_BRANCH',
-            ''
+            'SEPAY_BANK_BRANCH',
+            env('SEPAY_TEST_BRANCH', '')
         ),
 
         'payment_code_prefix' => env(
@@ -333,7 +308,15 @@ return [
         'webhook_allow_no_auth' => filter_var(
             env(
                 'SEPAY_WEBHOOK_ALLOW_NO_AUTH',
-                true
+                false
+            ),
+            FILTER_VALIDATE_BOOL
+        ),
+
+        'test_scan_enabled' => filter_var(
+            env(
+                'SEPAY_TEST_SCAN_QR',
+                false
             ),
             FILTER_VALIDATE_BOOL
         ),

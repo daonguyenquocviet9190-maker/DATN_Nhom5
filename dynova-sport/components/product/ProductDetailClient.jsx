@@ -1095,8 +1095,8 @@ export default function ProductDetailClient({
 
       showNotice(
         remaining > 0
-          ? `Bạn chỉ có thể thêm tối đa ${remaining} sản phẩm nữa. Biến thể này còn ${stock} sản phẩm.`
-          : `Biến thể này chỉ còn ${stock} sản phẩm trong kho.`
+          ? `Bạn chỉ có thể thêm tối đa ${remaining} sản phẩm nữa. Sản phẩm này còn ${stock} sản phẩm.`
+          : `Sản phẩm này chỉ còn ${stock} sản phẩm trong kho.`
       );
       return;
     }
@@ -1162,7 +1162,7 @@ export default function ProductDetailClient({
         return;
       }
 
-      showNotice("Đã thêm đúng biến thể vào giỏ hàng.");
+      showNotice("Đã thêm sản phẩm vào giỏ hàng.");
     } finally {
       cartSubmitLock.current = false;
       setCartSubmitting(false);

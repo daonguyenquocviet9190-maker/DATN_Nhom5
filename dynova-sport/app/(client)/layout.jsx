@@ -723,7 +723,7 @@ export default function ClientLayout({ children }) {
               <div className="mt-6 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">
                   <BadgeCheck size={14} className="text-orange-400" />
-                  Chính hãng demo
+                  Sản phẩm chính hãng
                 </span>
 
                 <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">
@@ -733,7 +733,7 @@ export default function ClientLayout({ children }) {
 
                 <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">
                   <Sparkles size={14} className="text-orange-400" />
-                  UI mượt, hiện đại
+                  Mua sắm thuận tiện
                 </span>
               </div>
             </div>

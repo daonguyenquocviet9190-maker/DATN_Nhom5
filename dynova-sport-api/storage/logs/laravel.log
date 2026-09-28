@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [2026-09-04 13:59:02] local.ERROR: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: dynova_sport, SQL: select * from `banners` where `position` = home_hero and `is_active` = 1 order by `sort_order` asc, `id` asc) {"exception":"[object] (Illuminate\\Database\\QueryException(code: 2002): SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: dynova_sport, SQL: select * from `banners` where `position` = home_hero and `is_active` = 1 order by `sort_order` asc, `id` asc) at F:/My-Front-end/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connection.php:838)
 [stacktrace]
 #0 F:/My-Front-end/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connection.php(999): Illuminate/Database/Connection->runQueryCallback('select * from `...', Array, Object(Closure))
@@ -5222,3 +5223,5 @@
 #64 C:/Users/ASUS/Documents/GitHub/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('C://Users//ASUS//D...')
 #65 {main}
 "} 
+=======
+>>>>>>> c8a0fc92857799ba64db09947a3729117a14888e

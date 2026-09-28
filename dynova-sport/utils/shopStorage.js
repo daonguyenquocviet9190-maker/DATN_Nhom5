@@ -2148,28 +2148,7 @@ export function getUsers() {
     return saved;
   }
 
-  return [
-    {
-      id: "USR001",
-      fullName: "Admin Dynova",
-      email: "admin@dynova.vn",
-      phone: "0866347730",
-      password: "123456",
-      role: "admin",
-      status: "Hoạt động",
-      address: "TP. Hồ Chí Minh",
-    },
-    {
-      id: "USR002",
-      fullName: "Khách hàng mẫu",
-      email: "demo@dynova.vn",
-      phone: "0909000000",
-      password: "123456",
-      role: "customer",
-      status: "Hoạt động",
-      address: "Hà Nội",
-    },
-  ];
+  return [];
 }
 
 export function saveUsers(users) {

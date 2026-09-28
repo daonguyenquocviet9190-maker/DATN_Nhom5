@@ -14,6 +14,7 @@ import {
 
 import {
   createReview,
+  getMyReviews,
   getProductReviews,
   getReviewEligibility,
 } from "@/services/review.service";
@@ -68,6 +69,7 @@ export default function ProductReviews({ productId, orderId = null }) {
   const router = useRouter();
 
   const [reviews, setReviews] = useState([]);
+  const [myPendingReviews, setMyPendingReviews] = useState([]);
   const [average, setAverage] = useState(0);
   const [total, setTotal] = useState(0);
   const [breakdown, setBreakdown] = useState({
@@ -99,6 +101,15 @@ export default function ProductReviews({ productId, orderId = null }) {
     return result;
   }, [breakdown, total]);
 
+  const visibleReviews = useMemo(() => {
+    const publicIds = new Set(reviews.map((review) => String(review?.id)));
+    const pendingOnly = myPendingReviews.filter(
+      (review) => !publicIds.has(String(review?.id))
+    );
+
+    return [...pendingOnly, ...reviews];
+  }, [myPendingReviews, reviews]);
+
   const loadReviews = async () => {
     if (!productId) return;
 
@@ -125,6 +136,27 @@ export default function ProductReviews({ productId, orderId = null }) {
     }
   };
 
+
+  const loadMyPendingReviews = async () => {
+    if (!productId || !getAuthToken()) {
+      setMyPendingReviews([]);
+      return;
+    }
+
+    try {
+      const result = await getMyReviews();
+      const pending = (result.reviews || []).filter(
+        (review) =>
+          String(review?.product_id) === String(productId) &&
+          String(review?.status || "").toLowerCase() === "pending"
+      );
+
+      setMyPendingReviews(pending);
+    } catch {
+      // Danh sách công khai vẫn hoạt động nếu request đánh giá cá nhân lỗi.
+      setMyPendingReviews([]);
+    }
+  };
 
   const loadEligibility = async () => {
     if (!productId) return;
@@ -161,6 +193,7 @@ export default function ProductReviews({ productId, orderId = null }) {
 
   useEffect(() => {
     loadReviews();
+    loadMyPendingReviews();
     loadEligibility();
   }, [productId]);
 
@@ -198,7 +231,7 @@ export default function ProductReviews({ productId, orderId = null }) {
     setSending(true);
     setError("");
 
-    const data = await createReview({
+    await createReview({
       product_id: productId,
       order_id: orderId || eligibility?.order_id || null,
       order_item_id: eligibility?.order_item_id || null,
@@ -206,43 +239,14 @@ export default function ProductReviews({ productId, orderId = null }) {
       content: text,
     });
 
-    const newReview = data?.review;
-
-    if (!newReview) {
-      throw new Error("Không nhận được dữ liệu đánh giá sau khi gửi.");
-    }
-
-    setReviews((prev) => {
-      const cleanPrev = prev.filter(
-        (item) => String(item.id) !== String(newReview.id)
-      );
-
-      return [newReview, ...cleanPrev];
-    });
-
-    if (data?.stats) {
-      setAverage(Number(data.stats.average || 0));
-      setTotal(Number(data.stats.total || 0));
-      setBreakdown(
-        data.stats.breakdown || {
-          5: 0,
-          4: 0,
-          3: 0,
-          2: 0,
-          1: 0,
-        }
-      );
-    } else {
-      setTotal((prev) => prev + 1);
-    }
-
     setContent("");
     setRating(5);
 
-    showNotice("Gửi đánh giá thành công.");
+    showNotice("Đánh giá đã được gửi và đang chờ duyệt.");
 
     setTimeout(() => {
       loadReviews();
+      loadMyPendingReviews();
       loadEligibility();
     }, 300);
   } catch (err) {
@@ -400,7 +404,7 @@ export default function ProductReviews({ productId, orderId = null }) {
                 Đang tải đánh giá...
               </p>
             </div>
-          ) : reviews.length === 0 ? (
+          ) : visibleReviews.length === 0 ? (
             <div className="rounded-3xl border border-slate-100 bg-slate-50 p-10 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-orange-500">
                 <MessageSquare size={30} />
@@ -416,7 +420,7 @@ export default function ProductReviews({ productId, orderId = null }) {
             </div>
           ) : (
             <div className="space-y-4">
-              {reviews.map((review) => (
+              {visibleReviews.map((review) => (
                 <article
                   key={review.id}
                   className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm"
@@ -451,7 +455,11 @@ export default function ProductReviews({ productId, orderId = null }) {
 
                       {review.status && review.status !== "approved" && (
                         <span className="mt-3 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-600">
-                          {review.status}
+                          {review.status === "pending"
+                            ? "Đánh giá của bạn · Đang chờ duyệt"
+                            : review.status === "hidden"
+                              ? "Đánh giá của bạn · Đã ẩn"
+                              : review.status}
                         </span>
                       )}
                     </div>

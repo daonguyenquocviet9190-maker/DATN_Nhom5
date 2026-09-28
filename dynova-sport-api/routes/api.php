@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
 use App\Http\Controllers\Api\Admin\AdminSettingsController;
 use App\Http\Controllers\Api\Admin\AdminSimpleController;
+use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BannerController;
 use App\Http\Controllers\Api\BrandController;
@@ -31,10 +32,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('auth')->group(function () {
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
@@ -65,7 +66,7 @@ Route::get('/banners', [BannerController::class, 'index']);
 
 Route::get('/settings', [SettingsController::class, 'show']);
 
-Route::post('/contact', [ContactController::class, 'store']);
+Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:5,1');
 
 Route::get('/reviews', [ReviewController::class, 'index']);
 
@@ -74,7 +75,7 @@ Route::get('/vouchers', [VoucherController::class, 'index']);
 Route::post(
     '/vouchers/apply',
     [VoucherController::class, 'applyVoucher']
-);
+)->middleware(['auth:sanctum', 'active', 'throttle:30,1']);
 
 /*
 |--------------------------------------------------------------------------
@@ -123,28 +124,21 @@ Route::post(
     [ShippingController::class, 'webhook']
 );
 
-/*
-|--------------------------------------------------------------------------
-| SePay
-|--------------------------------------------------------------------------
-|
-| Webhook: SePay -> Laravel
-| QR Demo: Điện thoại -> Laravel
-|
-| QR demo KHÔNG yêu cầu đăng nhập.
-| Không đặt route này vào auth/admin group.
-|
-*/
-
 Route::post(
     '/payments/sepay/webhook',
     [PaymentController::class, 'sepayWebhook']
 );
 
-Route::get(
-    '/payments/sepay/scan/{id}/{token}',
-    [PaymentController::class, 'sepayScan']
-);
+if (
+    app()->environment(['local', 'testing'])
+    && config('services.sepay.environment') === 'test'
+    && config('services.sepay.test_scan_enabled', false)
+) {
+    Route::get(
+        '/payments/sepay/scan/{id}/{token}',
+        [PaymentController::class, 'sepayScan']
+    );
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -169,7 +163,7 @@ Route::get(
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
@@ -196,6 +190,19 @@ Route::middleware('auth:sanctum')->group(function () {
         '/profile/avatar',
         [ProfileController::class, 'uploadAvatar']
     );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Address book
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/addresses', [AddressController::class, 'index']);
+    Route::post('/addresses', [AddressController::class, 'store']);
+    Route::put('/addresses/{address}', [AddressController::class, 'update'])->whereNumber('address');
+    Route::delete('/addresses/{address}', [AddressController::class, 'destroy'])->whereNumber('address');
+    Route::patch('/addresses/{address}/default', [AddressController::class, 'setDefault'])->whereNumber('address');
 
     /*
     |--------------------------------------------------------------------------
@@ -327,7 +334,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post(
         '/reviews',
         [ReviewController::class, 'store']
-    );
+    )->middleware('throttle:10,1');
 
     Route::get(
         '/my-reviews',
@@ -384,6 +391,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware([
     'auth:sanctum',
+    'active',
     'admin',
 ])->prefix('admin')->group(function () {
 

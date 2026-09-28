@@ -1,7 +1,6 @@
 "use client";
 
 import { CheckCircle2, Clock3, MapPin, PackageCheck, RefreshCcw, Truck } from "lucide-react";
-import OrderDeliveryMap from "@/components/orders/OrderDeliveryMap";
 
 const LABELS = {
   ready_to_pick: "Đã tạo vận đơn",
@@ -117,7 +116,6 @@ export default function OrderTrackingTimeline({
   const current = String(
     tracking?.status ||
       order?.ghn_status ||
-      tracking?.delivery_map?.simulation?.current_status ||
       events?.[0]?.status ||
       "ready_to_pick"
   ).toLowerCase();
@@ -140,12 +138,6 @@ export default function OrderTrackingTimeline({
     tracking?.updated_date ||
     order?.ghn_last_synced_at ||
     events?.[0]?.time;
-
-  const canShowDeliveryMap = Boolean(
-    order?.tracking_code ||
-      tracking?.order_code ||
-      tracking?.delivery_map
-  );
 
   return (
     <div className="mt-6 overflow-hidden rounded-[30px] border border-indigo-100 bg-white shadow-sm">
@@ -263,28 +255,6 @@ export default function OrderTrackingTimeline({
             );
           })}
         </div>
-
-        {canShowDeliveryMap && (
-          <section className="mt-7 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 md:px-5">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-indigo-500">
-                  Bản đồ giao hàng
-                </p>
-                <p className="mt-1 text-sm font-bold text-slate-600">
-                  {current === "delivering" || current === "money_collect_delivering"
-                    ? "Shipper đang trên đường giao hàng."
-                    : "Theo dõi vị trí và hành trình đơn hàng."}
-                </p>
-              </div>
-              <MapPin className="shrink-0 text-indigo-600" size={20} />
-            </div>
-
-            <div className="min-h-[280px] bg-slate-50">
-              <OrderDeliveryMap order={order} tracking={tracking} />
-            </div>
-          </section>
-        )}
 
         <div className="mt-7 border-t border-slate-100 pt-5">
           <div className="flex items-center justify-between gap-3">
