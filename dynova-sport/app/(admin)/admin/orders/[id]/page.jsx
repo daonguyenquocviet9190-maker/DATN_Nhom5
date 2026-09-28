@@ -302,6 +302,24 @@ export default function AdminOrderDetailPage() {
     return () => window.clearInterval(timer);
   }, [bankUnpaid, order?.id]);
 
+  // Chỉ ở GHN staging/demo: refresh trang để tick mô phỏng LOCAL.
+  // Backend staging không gọi GHN tracking thật ở mỗi lần refresh nên có thể
+  // cập nhật nhanh mà không gặp rate-limit của GHN. Production vẫn dùng GHN thật.
+  useEffect(() => {
+    const isGhnDemo =
+      shippingConfig?.environment === "staging" &&
+      hasGhnShipment &&
+      ["confirmed", "shipping"].includes(status);
+
+    if (!isGhnDemo || !order?.id) return undefined;
+
+    const timer = window.setInterval(() => {
+      loadOrder({ silent: true });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [shippingConfig?.environment, hasGhnShipment, status, order?.id]);
+
   const showNotice = (message) => {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 1800);
@@ -577,7 +595,7 @@ export default function AdminOrderDetailPage() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-white">Tiến trình đơn hàng</h3>
-                {/* <p className="mt-1 text-sm font-semibold text-slate-500">GHN tự cập nhật sau khi lấy hàng; đơn nội bộ do nhân viên shop xác nhận theo từng bước.</p> */}
+                <p className="mt-1 text-sm font-semibold text-slate-500">GHN tự cập nhật sau khi lấy hàng; đơn nội bộ do nhân viên shop xác nhận theo từng bước.</p>
               </div>
               <ShieldCheck className="text-orange-300" size={24} />
             </div>
@@ -654,7 +672,7 @@ export default function AdminOrderDetailPage() {
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl">
             <h3 className="text-lg font-black text-white">Xử lý đơn hàng</h3>
-            {/* <p className="mt-1 text-sm font-semibold text-slate-500">Chỉ hiển thị thao tác hợp lệ ở bước hiện tại.</p> */}
+            <p className="mt-1 text-sm font-semibold text-slate-500">Chỉ hiển thị thao tác hợp lệ ở bước hiện tại.</p>
 
             <div className="mt-5 space-y-4">
               {paymentLocked ? (
@@ -691,10 +709,10 @@ export default function AdminOrderDetailPage() {
                   <div className="rounded-3xl border border-indigo-400/20 bg-indigo-500/10 p-4">
                     <div className="flex items-start gap-3">
                       <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
-                      {/* <div>
+                      <div>
                         <p className="text-sm font-black text-white">Đã tạo vận đơn GHN</p>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Đang chờ GHN lấy hàng. Trạng thái sẽ tự chuyển sang “Đang giao” sau khi GHN nhận kiện.</p>
-                      </div> */}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -715,7 +733,7 @@ export default function AdminOrderDetailPage() {
                 <>
                   <div>
                     <p className="text-sm font-black text-white">Chọn đơn vị giao hàng</p>
-                    {/* <p className="mt-1 text-xs font-semibold text-slate-500">Lựa chọn được lưu khi bạn bắt đầu bàn giao đơn.</p> */}
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Lựa chọn được lưu khi bạn bắt đầu bàn giao đơn.</p>
                   </div>
 
                   <button
@@ -728,7 +746,7 @@ export default function AdminOrderDetailPage() {
                       <Truck className="mt-0.5 shrink-0 text-indigo-300" size={20} />
                       <span>
                         <span className="block text-sm font-black text-white">Giao Hàng Nhanh (GHN)</span>
-                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{ghnAvailable ? "" : "GHN chưa được cấu hình hoặc hiện không khả dụng."}</span>
+                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{ghnAvailable ? "Tạo vận đơn và tự đồng bộ hành trình giao hàng." : "GHN chưa được cấu hình hoặc hiện không khả dụng."}</span>
                       </span>
                     </span>
                   </button>
@@ -743,7 +761,7 @@ export default function AdminOrderDetailPage() {
                       <Store className="mt-0.5 shrink-0 text-orange-300" size={20} />
                       <span>
                         <span className="block text-sm font-black text-white">Nhân viên shop giao</span>
-                        {/* <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">Không cần mã vận đơn; shop tự giao và xác nhận khi khách đã nhận hàng.</span> */}
+                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">Không cần mã vận đơn; shop tự giao và xác nhận khi khách đã nhận hàng.</span>
                       </span>
                     </span>
                   </button>

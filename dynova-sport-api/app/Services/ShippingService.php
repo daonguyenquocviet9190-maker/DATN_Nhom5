@@ -79,8 +79,8 @@ class ShippingService
             'webhook_configured' => filled(config('services.ghn.webhook_secret')),
             'dev_simulation_enabled' => $this->environment() === 'staging',
             'simulation_auto_start' => (bool) config('services.ghn.simulation_auto_start', true),
-            'simulation_duration_seconds' => (int) config('services.ghn.simulation_duration_seconds', 240),
-            'simulation_speed' => (float) config('services.ghn.simulation_speed', 1),
+            'simulation_duration_seconds' => (int) config('services.ghn.simulation_duration_seconds', 60),
+            'simulation_speed' => (float) config('services.ghn.simulation_speed', 8),
         ];
     }
 
@@ -192,6 +192,42 @@ class ShippingService
 
     public function createOrderForOrder(int $orderId): array
     {
+        // Chặn double-click / hai request đồng thời tạo cùng một vận đơn.
+        // GHN có thể trả "Too many request. This request is processing" nếu
+        // cùng client_order_code bị gửi lặp trong lúc request trước chưa xong.
+        $lock = Cache::lock('ghn:create-order:' . $orderId, 20);
+
+        if (!$lock->get()) {
+            $order = DB::table('orders')->where('id', $orderId)->first();
+
+            // Nếu request đầu đã kịp lưu tracking_code thì trả dữ liệu hiện có,
+            // không gửi thêm một Create Order lên GHN.
+            if ($order && !empty($order->tracking_code)) {
+                if ($this->environment() === 'staging') {
+                    return $this->localTrackingForOrder($orderId, $order);
+                }
+
+                $tracking = $this->tracking((string) $order->tracking_code);
+                if ($tracking) {
+                    $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
+                    return $tracking;
+                }
+            }
+
+            throw new RuntimeException(
+                'Yêu cầu tạo vận đơn GHN đang được xử lý. Vui lòng chờ vài giây, không bấm tạo vận đơn liên tục.'
+            );
+        }
+
+        try {
+            return $this->createOrderForOrderUnlocked($orderId);
+        } finally {
+            optional($lock)->release();
+        }
+    }
+
+    private function createOrderForOrderUnlocked(int $orderId): array
+    {
         $this->assertConfigured();
         $this->assertMutationAllowed('tạo vận đơn');
 
@@ -201,13 +237,20 @@ class ShippingService
         }
 
         if (!empty($order->tracking_code)) {
+            if ($this->environment() === 'staging') {
+                return $this->localTrackingForOrder($orderId, $order);
+            }
+
             $tracking = $this->tracking((string) $order->tracking_code);
             if ($tracking) {
-                        $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
+                $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
                 return $tracking;
             }
         }
 
+        // Kiểm tra client_order_code một lần trước khi tạo để phục hồi trường hợp
+        // request cũ đã tạo thành công bên GHN nhưng app chưa kịp lưu tracking_code.
+        // Đây là một request có chủ đích, khác với polling tracking liên tục.
         $existing = $this->findByClientOrderCode((string) $order->order_code);
         if ($existing && !empty($existing['order_code'])) {
             $this->persistTracking($orderId, $existing, null);
@@ -249,8 +292,21 @@ class ShippingService
         $codAmount = 0;
         if (($order->payment_method ?? '') === 'cod' && ($order->payment_status ?? '') !== 'paid') {
             $codAmount = max(0, (int) round((float) ($order->grand_total ?? 0)));
-            if ($codAmount > 10000000) {
-                throw new RuntimeException('GHN chỉ hỗ trợ COD tối đa 10.000.000đ cho cấu hình này. Vui lòng chọn thanh toán online/chuyển khoản.');
+
+            // Không hard-code 10 triệu nữa. Endpoint Create Order của GHN hiện công bố
+            // cod_amount tối đa 50 triệu. Vẫn để qua config để dễ hạ giới hạn nếu
+            // tài khoản GHN cụ thể có chính sách riêng.
+            $maxCodAmount = max(
+                0,
+                min(50000000, (int) config('services.ghn.max_cod_amount', 50000000))
+            );
+
+            if ($codAmount > $maxCodAmount) {
+                throw new RuntimeException(
+                    'Đơn COD vượt giới hạn GHN hiện cấu hình ('
+                    . number_format($maxCodAmount, 0, ',', '.')
+                    . 'đ). Với đơn giá trị cao hơn, vui lòng chọn chuyển khoản/ngân hàng.'
+                );
             }
         }
 
@@ -292,7 +348,31 @@ class ShippingService
             $payload['service_type_id'] = (int) ($service['service_type_id'] ?: 2);
         }
 
-        $json = $this->request('POST', '/shiip/public-api/v2/shipping-order/create', $payload, true);
+        try {
+            $json = $this->request('POST', '/shiip/public-api/v2/shipping-order/create', $payload, true);
+        } catch (RuntimeException $e) {
+            if (!$this->isGhnProcessingError($e)) {
+                throw $e;
+            }
+
+            // GHN báo request trước còn xử lý: đợi ngắn rồi tìm theo
+            // client_order_code thay vì gửi Create Order lần nữa.
+            usleep(900000);
+            $recovered = $this->findByClientOrderCode((string) $order->order_code);
+
+            if ($recovered && !empty($recovered['order_code'])) {
+                $this->persistTracking($orderId, $recovered, null);
+                $recovered['delivery_map'] = $this->deliveryMapForOrder($orderId, $recovered);
+                return $recovered;
+            }
+
+            throw new RuntimeException(
+                'GHN đang xử lý yêu cầu tạo vận đơn trước đó. Vui lòng chờ 2-3 giây rồi tải lại đơn; không cần bấm tạo lại liên tục.',
+                0,
+                $e
+            );
+        }
+
         $data = (array) data_get($json, 'data', []);
         $trackingCode = (string) ($data['order_code'] ?? '');
 
@@ -345,9 +425,11 @@ class ShippingService
         $order = DB::table('orders')->where('id', $orderId)->first();
         if (!$order || empty($order->tracking_code)) return null;
 
+        // QUAN TRỌNG: staging/demo không gọi /shipping-order/detail mỗi lần
+        // frontend refresh. Bộ mô phỏng local tự tick và trả tracking từ DB.
+        // Nhờ vậy có thể refresh 1 giây/lần mà không spam GHN.
         if ($this->environment() === 'staging') {
-            $this->simulation->state($orderId, true);
-            $order = DB::table('orders')->where('id', $orderId)->first() ?? $order;
+            return $this->localTrackingForOrder($orderId, $order);
         }
 
         $remoteTracking = $this->tracking((string) $order->tracking_code);
@@ -378,6 +460,63 @@ class ShippingService
         return $tracking;
     }
 
+    private function localTrackingForOrder(int $orderId, ?object $order = null): array
+    {
+        // Tick duy nhất bộ mô phỏng local; không có HTTP request sang GHN.
+        $simulation = $this->simulation->state($orderId, true);
+        $order = DB::table('orders')->where('id', $orderId)->first() ?? $order;
+
+        if (!$order) {
+            throw new RuntimeException('Không tìm thấy đơn hàng để đồng bộ trạng thái GHN.');
+        }
+
+        $status = strtolower(trim((string) (
+            $simulation['current_status']
+            ?? $order->ghn_status
+            ?? 'ready_to_pick'
+        )));
+
+        $logs = [];
+        if (Schema::hasTable('shipping_status_histories')) {
+            $logs = DB::table('shipping_status_histories')
+                ->where('order_id', $orderId)
+                ->orderBy('occurred_at')
+                ->orderBy('id')
+                ->get()
+                ->map(function ($row) {
+                    return [
+                        'status' => $row->status ?? null,
+                        'status_label' => $this->statusLabel($row->status ?? null),
+                        'description' => $row->description ?? null,
+                        'updated_date' => $row->occurred_at ?? $row->created_at ?? null,
+                        'source' => $row->source ?? 'ghn_auto_simulator',
+                        'location' => $row->location ?? null,
+                        'is_simulated' => (bool) ($row->is_simulated ?? true),
+                    ];
+                })
+                ->values()
+                ->all();
+        }
+
+        $tracking = [
+            'order_code' => (string) ($order->tracking_code ?? ''),
+            'status' => $status ?: 'ready_to_pick',
+            'status_label' => $this->statusLabel($status ?: 'ready_to_pick'),
+            'leadtime' => $order->ghn_expected_delivery_at ?? null,
+            'expected_delivery_time' => $order->ghn_expected_delivery_at ?? null,
+            'finish_date' => $order->completed_at ?? null,
+            'updated_date' => $order->ghn_last_synced_at ?? $order->updated_at ?? null,
+            'logs' => $logs,
+            'simulated' => true,
+            'simulation' => $simulation,
+            'raw' => [],
+        ];
+
+        $tracking['delivery_map'] = $this->deliveryMapForOrder($orderId, $tracking);
+
+        return $tracking;
+    }
+
     public function deliverySimulationState(int $orderId): array
     {
         return $this->simulation->state($orderId, true);
@@ -401,7 +540,7 @@ class ShippingService
         }
 
         $simulation = $this->environment() === 'staging'
-            ? $this->simulation->state($orderId, true)
+            ? $this->simulation->state($orderId, false)
             : null;
 
         $simulationActive = is_array($simulation)
@@ -738,14 +877,11 @@ class ShippingService
                 ->asJson()
                 ->connectTimeout($connectTimeout)
                 ->timeout($timeout)
-                ->retry(2, 350, function ($exception) {
-                    if ($exception instanceof ConnectionException) {
-                        return true;
-                    }
-
-                    return $exception instanceof RequestException
-                        && $exception->response
-                        && $exception->response->serverError();
+                // Chỉ retry lỗi kết nối mạng. Không retry 5xx của GHN vì
+                // Create Order có thể vẫn đang xử lý; retry ngay sẽ tự tạo
+                // chính lỗi "Too many request. This request is processing".
+                ->retry(2, 450, function ($exception) {
+                    return $exception instanceof ConnectionException;
                 }, false);
 
             if (!$verifySsl) {
@@ -813,6 +949,15 @@ class ShippingService
         }
 
         return $json;
+    }
+
+    private function isGhnProcessingError(\Throwable $e): bool
+    {
+        $message = mb_strtolower((string) $e->getMessage());
+
+        return str_contains($message, 'too many request')
+            || str_contains($message, 'this request is processing')
+            || (str_contains($message, 'request') && str_contains($message, 'processing'));
     }
 
     private function connectionErrorMessage(\Throwable $e): string
