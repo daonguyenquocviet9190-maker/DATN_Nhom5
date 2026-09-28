@@ -46,6 +46,7 @@ import {
 import { getProfile } from "@/services/profile.service";
 import { getSavedAddresses } from "@/services/saved-address.service";
 import { apiFetch } from "@/services/api";
+import { getAuthToken } from "@/services/auth.service";
 const paymentMethods = [
   {
     id: "COD",
@@ -170,6 +171,17 @@ function CheckoutContent() {
       0
     );
   }, [items]);
+
+  useEffect(() => {
+    if (getAuthToken()) return;
+
+    const query = searchParams ? searchParams.toString() : "";
+    const redirectTarget = `/checkout${query ? `?${query}` : ""}`;
+
+    router.replace(
+      `/login?redirect=${encodeURIComponent(redirectTarget)}`
+    );
+  }, [router, searchParams]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -1064,9 +1076,9 @@ function CheckoutContent() {
                   {showSavedAddresses && (
                     <div className="border-t border-slate-200 bg-white p-4">
                       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        {/* <p className="text-xs font-bold text-slate-500">
+                        <p className="text-xs font-bold text-slate-500">
                           Chọn một địa chỉ, hệ thống sẽ tự điền thông tin và tính lại phí GHN.
-                        </p> */}
+                        </p>
                         <Link
                           href="/profile/addresses"
                           className="inline-flex shrink-0 items-center gap-2 text-xs font-black uppercase tracking-wider text-orange-600 transition hover:text-orange-700"
