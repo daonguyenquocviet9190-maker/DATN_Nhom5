@@ -87,11 +87,11 @@ const sections = [
         href: "/admin/ratings",
         icon: BarChart3,
       },
-      {
-        name: "Chat khách hàng",
-        href: "/admin/chat",
-        icon: MessageCircle,
-      },
+      // {
+      //   name: "Chat khách hàng",
+      //   href: "/admin/chat",
+      //   icon: MessageCircle,
+      // },
     ],
   },
   {

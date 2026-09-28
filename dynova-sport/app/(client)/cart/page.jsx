@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { formatCurrency } from "@/data/shop";
+import { getAuthToken } from "@/services/auth.service";
 import {
   getCart,
   getSelectedCartKeys,
@@ -26,6 +28,7 @@ import {
 } from "@/services/settings.service";
 
 export default function CartPage() {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [selectedKeys, setSelectedKeys] = useState([]);
   const [notice, setNotice] = useState("");
@@ -482,6 +485,15 @@ export default function CartPage() {
                   if (selectedItems.length === 0) {
                     event.preventDefault();
                     showNotice("Vui lòng chọn ít nhất một sản phẩm để thanh toán.");
+                    return;
+                  }
+
+                  if (!getAuthToken()) {
+                    event.preventDefault();
+                    const redirectTarget = "/checkout";
+                    router.push(
+                      `/login?redirect=${encodeURIComponent(redirectTarget)}`
+                    );
                   }
                 }}
                 className={`mt-6 block rounded-2xl py-4 text-center text-xs font-black uppercase tracking-wider text-white transition ${

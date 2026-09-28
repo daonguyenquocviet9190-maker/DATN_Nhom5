@@ -1,4 +1,6 @@
-<<<<<<< HEAD
+
+[2026-09-28 12:27:12] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/detail-by-client-code","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Lỗi gọi API: corev2_tenant_order_detail_by_client_order_code - Đơn hàng không tồn tại","data":null} 
+[2026-09-28 12:27:24] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/detail-by-client-code","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Lỗi gọi API: corev2_tenant_order_detail_by_client_order_code - Đơn hàng không tồn tại","data":null} 
 [2026-09-04 13:59:02] local.ERROR: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: dynova_sport, SQL: select * from `banners` where `position` = home_hero and `is_active` = 1 order by `sort_order` asc, `id` asc) {"exception":"[object] (Illuminate\\Database\\QueryException(code: 2002): SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: dynova_sport, SQL: select * from `banners` where `position` = home_hero and `is_active` = 1 order by `sort_order` asc, `id` asc) at F:/My-Front-end/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connection.php:838)
 [stacktrace]
 #0 F:/My-Front-end/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connection.php(999): Illuminate/Database/Connection->runQueryCallback('select * from `...', Array, Object(Closure))
@@ -6348,6 +6350,7 @@
 =======
 >>>>>>> c8a0fc92857799ba64db09947a3729117a14888e
 >>>>>>> a69e303d8133d274acc952cfe729d294999fd793
+<<<<<<< HEAD
 [2026-09-28 12:16:25] local.ERROR: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'dynova_sport.addresses' doesn't exist (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: dynova_sport, SQL: select * from `addresses` where `user_id` = 4 order by `is_default` desc, `updated_at` desc) {"userId":4,"exception":"[object] (Illuminate\\Database\\QueryException(code: 42S02): SQLSTATE[42S02]: Base table or view not found: 1146 Table 'dynova_sport.addresses' doesn't exist (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: dynova_sport, SQL: select * from `addresses` where `user_id` = 4 order by `is_default` desc, `updated_at` desc) at C:/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connection.php:838)
 [stacktrace]
 #0 C:/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Database/Connection.php(794): Illuminate/Database/Connection->runQueryCallback('select * from `...', Array, Object(Closure))
@@ -6796,3 +6799,8 @@
 #52 C:/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('C://DATN_Nhom5//d...')
 #53 {main}
 "} 
+=======
+>>>>>>> fe92cc48ea56b9fcb766bda72aa3a124f2718ff5
+[2026-09-28 12:50:12] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/detail-by-client-code","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Lỗi gọi API: corev2_tenant_order_detail_by_client_order_code - Đơn hàng không tồn tại","data":null} 
+[2026-09-28 12:50:29] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/create","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Post \"https://dev-online-gateway.ghn.vn/tenant/api/v2/shipping-order/create\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)","data":null} 
+>>>>>>> 50e0cbd2267d42387807f42940ea6617b8e2c258

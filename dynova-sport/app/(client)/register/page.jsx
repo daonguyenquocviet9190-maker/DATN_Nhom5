@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Eye,
@@ -21,6 +21,21 @@ import {
   normalizeAuthRole,
   registerWithApi,
 } from "@/services/auth.service";
+import { syncCartAfterLogin } from "@/utils/shopStorage";
+
+
+function isSafeInternalPath(value) {
+  if (typeof value !== "string") return false;
+
+  const path = value.trim();
+
+  return (
+    path.startsWith("/") &&
+    !path.startsWith("//") &&
+    !path.includes("\\") &&
+    !path.startsWith("/admin")
+  );
+}
 
 function isEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -112,6 +127,7 @@ function Field({
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [redirectUrl, setRedirectUrl] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -128,6 +144,13 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [successText, setSuccessText] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get("redirect") || "";
+
+    setRedirectUrl(isSafeInternalPath(redirect) ? redirect : "");
+  }, []);
 
   const passwordStrength = useMemo(() => {
     let score = 0;
@@ -267,13 +290,27 @@ export default function RegisterPage() {
         return;
       }
 
+      if (auth?.token) {
+        try {
+          await syncCartAfterLogin();
+        } catch (cartError) {
+          console.warn("Không thể đồng bộ giỏ ngay sau đăng ký:", cartError);
+        }
+      }
+
       setSuccessText("Đăng ký thành công.");
+
+      const nextPath = redirectUrl || "/profile";
 
       window.setTimeout(() => {
         router.replace(
           auth?.token
-            ? "/profile"
-            : "/login?registered=1"
+            ? nextPath
+            : `/login?registered=1${
+                redirectUrl
+                  ? `&redirect=${encodeURIComponent(redirectUrl)}`
+                  : ""
+              }`
         );
         router.refresh();
       }, 500);
@@ -551,7 +588,11 @@ export default function RegisterPage() {
             <p className="mt-6 text-center text-sm text-slate-500">
               Đã có tài khoản?{" "}
               <Link
-                href="/login"
+                href={
+                  redirectUrl
+                    ? `/login?redirect=${encodeURIComponent(redirectUrl)}`
+                    : "/login"
+                }
                 className="font-black text-orange-600 transition hover:text-orange-700"
               >
                 Đăng nhập
