@@ -4628,3 +4628,4 @@
 #52 H:/Html/DATN_Nhom5/dynova-sport-api/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('H://Html//DATN_Nh...')
 #53 {main}
 "} 
+[2026-09-28 12:13:44] local.WARNING: GHN request failed {"path":"/shiip/public-api/v2/shipping-order/detail-by-client-code","status":400,"code":400,"code_message":null,"code_message_value":null,"message":"Lỗi gọi API: corev2_tenant_order_detail_by_client_order_code - Đơn hàng không tồn tại","data":null} 
